@@ -415,7 +415,13 @@ tr.thin td,.tk.thin{opacity:.5}
 .trc{padding:10px 12px}
 .trc.rev{border-color:var(--line-strong)}
 .trh{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;margin-bottom:4px}
-.trsym{font-size:15px}
+.trsym{font-size:15px;font-weight:700;background:none;border:0;padding:0;color:var(--ink);cursor:pointer}
+.trsym:hover{text-decoration:underline;color:var(--accent)}
+#trChart{position:fixed;inset:0;z-index:75;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center}
+#trChart .box{background:var(--surface);border:1px solid var(--line-strong);border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.35);width:min(1200px,94vw);height:min(760px,88vh);display:flex;flex-direction:column;padding:10px 12px}
+#trChart .top{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:6px}
+#trChart .area{flex:1;min-height:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center}
+#trChart svg{width:100%;height:100%;display:block}
 .trq{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:6px 0}
 .trq .lbl{min-width:100%;font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em}
 .trb{border:1px solid var(--line-strong);background:var(--surface);border-radius:6px;padding:2px 7px;font-size:12px;cursor:pointer;color:var(--ink-2)}
@@ -4610,7 +4616,7 @@ function trCard(sym, i){
     }
   }
   return `<div class="card trc ${rev ? "rev" : ""}">
-    <div class="trh"><span class="small">#${i + 1}</span> <b class="trsym">${esc(sym)}</b>${r ? ` <a href="${esc(tvURL(r))}" target="_blank" rel="noopener">Open in TradingView ↗</a>` : ""}${read ? "" : ` <span class="small">as of ${esc(set.asOf)}</span>`}</div>
+    <div class="trh"><span class="small">#${i + 1}</span> <button class="trsym" data-trchart="${esc(sym)}" title="Open the chart here">${esc(sym)}</button>${r ? ` <a href="${esc(tvURL(r))}" target="_blank" rel="noopener">Open in TradingView ↗</a>` : ""}${read ? "" : ` <span class="small">as of ${esc(set.asOf)}</span>`}</div>
     <div class="trq"><span class="lbl">State${read ? "" : " then"}</span>${trBtns(sym, "state", TR_ST().map(([k, l]) => [k, l]), T, rev)}</div>
     <div class="trq"><span class="lbl">Volatility${read ? "" : " then"}</span>${vol}</div>
     <div class="trq"><span class="lbl">${read ? "On my A-list tonight?" : "Would I have taken it?"}</span>${trBtns(sym, read ? "alist" : "take", yn, read ? T : null, rev)}</div>
@@ -4665,13 +4671,65 @@ function renderTrain(){
   const set = TR.set;
   if (!set || !set.cards.length) { el.innerHTML = bar + `<div class="card"><div class="bd"><div class="empty">Not enough names to make a set from this file${c.game === "run" ? " and history" : ""}.</div></div></div>`; return; }
   const how = set.game === "read"
-    ? `Open each name on your own chart, pick your answers, then reveal. The board's answers use today's file and ${esc(zoneStamp())}. ${c.diff === "hard" ? "Hard: every name is within 0.25 ADR of a line that would change its state." : "Easy: every name is well clear of the lines that would change its state (0.5 ADR, or a third of the band for names in the zone or just above it)."} ${esc(set.note || "")}`
-    : `Use TradingView bar replay to <b>${esc(set.asOf)}</b> (the close ${set.back} sessions ago) and judge each chart as it looked then. Half of these are the best performers since that close among ${set.liq} liquid names in your file that your filters show (price $5+, $20M+ a day); the rest were flat or down. The board's answers are rebuilt from Massive bars up to that date.`;
+    ? `Click a ticker to open its chart here (or use "Open in TradingView"), pick your answers, then reveal. The board's answers use today's file and ${esc(zoneStamp())}. ${c.diff === "hard" ? "Hard: every name is within 0.25 ADR of a line that would change its state." : "Easy: every name is well clear of the lines that would change its state (0.5 ADR, or a third of the band for names in the zone or just above it)."} ${esc(set.note || "")}`
+    : `Use TradingView bar replay to <b>${esc(set.asOf)}</b> (the close ${set.back} sessions ago) and judge each chart as it looked then — or click a ticker for a chart that stops at that close. Half of these are the best performers since that close among ${set.liq} liquid names in your file that your filters show (price $5+, $20M+ a day); the rest were flat or down. The board's answers are rebuilt from Massive bars up to that date.`;
   el.innerHTML = bar + `<div class="card"><div class="hd"><h2>${set.game === "read" ? "Read it" : "Before the run"}</h2><span class="sub">${how}</span></div>
     <div class="bd"><div class="trscore">${trScoreLine()}</div></div></div>
     <div class="trgrid">${set.cards.map(trCard).join("")}</div>
     <div class="card"><div class="hd"><h2>Your score history</h2><span class="sub">kept in this browser · each card counts once, the first time it is revealed</span><span class="spacer"></span><button class="btn sm" data-ta="reset">Reset score history</button></div><div class="bd">${trHistHTML()}</div></div>`;
 }
+// ---- chart popup: click a card's ticker. Shows only the chart, never the board's answers.
+// Read it: the TradingView embed. Before the run: until the card is revealed, a chart drawn from the stored Massive
+// daily bars that stops at the as-of session (the embed would show the run itself); after the reveal, both.
+function trBarsSVG(sym, tA){
+  const s = series(sym, null); if (!s) return `<div class="empty">No stored bars for ${esc(sym)}.</div>`;
+  const c = s.c, h = s.h, l = s.l, v = s.v;
+  const e9 = [], e21 = [], s50 = []; let a9 = null, a21 = null; const q = []; let qs = 0;
+  for (let t = 0; t <= tA; t++) {
+    if (c[t] > 0) { a9 = a9 == null ? c[t] : a9 + (c[t] - a9) * 0.2; a21 = a21 == null ? c[t] : a21 + (c[t] - a21) * (2 / 22); q.push(c[t]); qs += c[t]; if (q.length > 50) qs -= q.shift(); }
+    e9[t] = a9; e21[t] = a21; s50[t] = q.length === 50 ? qs / 50 : null;
+  }
+  const t0 = Math.max(0, tA - 129), idx = []; for (let t = t0; t <= tA; t++) if (c[t] > 0 && h[t] > 0 && l[t] > 0) idx.push(t);
+  if (idx.length < 5) return `<div class="empty">Not enough stored bars for ${esc(sym)} before ${esc(TR.set.asOf)}.</div>`;
+  let lo = Infinity, hi = -Infinity, vm = 0;
+  for (const t of idx) { lo = Math.min(lo, l[t], s50[t] ?? Infinity); hi = Math.max(hi, h[t], s50[t] ?? -Infinity); if (isFinite(v[t])) vm = Math.max(vm, v[t]); }
+  const W = 1160, H = 660, padR = 64, padT = 10, pH = 500, vTop = 530, vH = 110, n = idx.length, bw = (W - padR) / n;
+  const X = i => i * bw + bw / 2, Y = p => padT + (hi - p) / (hi - lo || 1) * pH;
+  let g = "";
+  for (let k = 0; k <= 4; k++) { const p = lo + (hi - lo) * k / 4, y = Y(p); g += `<line x1="0" x2="${W - padR}" y1="${y}" y2="${y}" stroke="var(--line)"/><text x="${W - padR + 6}" y="${y + 4}" font-size="12" fill="var(--ink-3)">${p.toFixed(2)}</text>`; }
+  let bars = "", vol = "";
+  idx.forEach((t, i) => {
+    const up = i === 0 || c[t] >= c[idx[i - 1]], col = up ? "var(--st1)" : "var(--down)", x = X(i);
+    bars += `<line x1="${x}" x2="${x}" y1="${Y(h[t])}" y2="${Y(l[t])}" stroke="${col}" stroke-width="${Math.max(1, bw * 0.35)}"/><line x1="${x}" x2="${x + bw * 0.45}" y1="${Y(c[t])}" y2="${Y(c[t])}" stroke="${col}" stroke-width="1.5"/>`;
+    if (vm && isFinite(v[t])) { const vh = v[t] / vm * vH; vol += `<rect x="${x - bw * 0.35}" y="${vTop + vH - vh}" width="${bw * 0.7}" height="${vh}" fill="${col}" opacity=".45"/>`; }
+  });
+  const line = (arr, col) => { const pts = idx.map((t, i) => arr[t] != null ? `${X(i).toFixed(1)},${Y(arr[t]).toFixed(1)}` : null).filter(Boolean); return pts.length > 1 ? `<polyline points="${pts.join(" ")}" fill="none" stroke="${col}" stroke-width="1.5"/>` : ""; };
+  const d0 = HIST.dates[idx[0]], d1 = HIST.dates[tA];
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${g}${bars}${line(e9, "var(--st2)")}${line(e21, "var(--st3)")}${line(s50, "var(--st4)")}${vol}
+    <text x="6" y="${H - 4}" font-size="12" fill="var(--ink-3)">${esc(d0)}</text><text x="${W - padR - 6}" y="${H - 4}" font-size="12" fill="var(--ink-3)" text-anchor="end">${esc(d1)}</text></svg>`;
+}
+function trChartOpen(sym, view){
+  const set = TR.set, r = S.rowBySym.get(sym); if (!set || !r) return;
+  const run = set.game === "run", rev = !!set.rev[sym], v = view || (run ? "bars" : "tv");
+  let el = $("trChart"); if (!el) { el = document.createElement("div"); el.id = "trChart"; document.body.appendChild(el); }
+  const views = run && rev ? `<span class="seg"><button data-trv="bars" class="${v === "bars" ? "on" : ""}">Up to ${esc(set.asOf)}</button><button data-trv="tv" class="${v === "tv" ? "on" : ""}">TradingView (today)</button></span>` : "";
+  const note = v === "bars" ? `<span class="small">Daily bars from Massive up to the ${esc(set.asOf)} close — nothing after it. High–low bar with a close tick (opens aren't stored). <span style="color:var(--st2)">9 EMA</span> · <span style="color:var(--st3)">21 EMA</span> · <span style="color:var(--st4)">50 SMA</span>.</span>`
+    : `<span class="small">9 / 21 EMA and 50 / 200 SMA, as in the ticker panel.</span>`;
+  el.innerHTML = `<div class="box"><div class="top"><b style="font-size:16px">${esc(sym)}</b><a href="${esc(tvURL(r))}" target="_blank" rel="noopener">Open in TradingView ↗</a>${views}${note}<span class="spacer"></span><button class="btn sm" data-trx>✕</button></div><div class="area" id="trChartArea"></div></div>`;
+  el.classList.remove("hidden");
+  const area = $("trChartArea");
+  if (v === "bars") area.innerHTML = trBarsSVG(sym, set.tA);
+  else if (!CFG.embed) area.innerHTML = `<span class="small">Chart embed is off — turn it on in Settings, or use the link above.</span>`;
+  else {
+    area.innerHTML = `<div id="trTvc" style="width:100%;height:100%"></div>`;
+    loadTV().then(() => { try { new TradingView.widget({container_id: "trTvc", autosize: true, symbol: tvSym(r), interval: CFG.tvInterval, timezone: "America/New_York", theme: isDark() ? "dark" : "light", style: "1", locale: "en", hide_side_toolbar: true, allow_symbol_change: false, withdateranges: true, save_image: false,
+      studies: [{id: "MAExp@tv-basicstudies", inputs: {length: 9}}, {id: "MAExp@tv-basicstudies", inputs: {length: 21}}, {id: "MASimple@tv-basicstudies", inputs: {length: 50}}, {id: "MASimple@tv-basicstudies", inputs: {length: 200}}]}); } catch (e) { area.innerHTML = "Couldn't start the chart."; } })
+      .catch(() => { if ($("trChartArea") === area) area.innerHTML = `<span class="small" style="padding:20px;text-align:center">Couldn't load the TradingView chart here (offline, or the page is blocked from loading it). The "Open in TradingView" link still works.</span>`; });
+  }
+  el.onclick = e => { if (e.target === el || e.target.closest("[data-trx]")) { trChartClose(); return; } const b = e.target.closest("[data-trv]"); if (b) trChartOpen(sym, b.dataset.trv); };
+}
+function trChartClose(){ const el = $("trChart"); if (el) { el.classList.add("hidden"); el.innerHTML = ""; } }
+document.addEventListener("keydown", e => { if (e.key === "Escape") trChartClose(); });
 $("tabs").insertAdjacentHTML("beforeend", `<button data-tab="train">Training</button>`);
 $("foot").insertAdjacentHTML("beforebegin", `<section class="tab" id="tab-train"><p class="lede">Train your eye: read state and volatility from your own chart, then check against the board. Cards come from the liquid names your filter bar shows (Everything = the whole file). Nothing here changes the board's rankings, states or plan.</p><div id="trainBody"></div></section>`);
 const _renderTab0 = renderTab;
@@ -4680,6 +4738,7 @@ $("tab-train").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b || !TR.cfg) return;
   if (b.dataset.tc) { const k = b.dataset.tc, v = b.dataset.tcv; TR.cfg[k] = ["n", "back"].includes(k) ? +v : v; store.set("adrb.trainCfg", TR.cfg); if (k !== "game") TR.set = null; renderTrain(); return; }
   if (b.dataset.tq) { const s = b.dataset.tsym, a = TR.set.ans[s] = TR.set.ans[s] || {}; a[b.dataset.tq] = a[b.dataset.tq] === b.dataset.tv ? null : b.dataset.tv; if (a[b.dataset.tq] == null) delete a[b.dataset.tq]; trSaveSet(); renderTrain(); return; }
+  if (b.dataset.trchart) { trChartOpen(b.dataset.trchart); return; }
   if (b.dataset.trrev) { const s = b.dataset.trrev; TR.set.rev[s] = true; trCount(s); trSaveSet(); renderTrain(); return; }
   const a = b.dataset.ta; if (!a) return;
   if (a === "new") { TR.set = null; renderTrain(); }
