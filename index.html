@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Deep Space Board</title>
+<script>
+// colour theme: dark unless you picked light with the ◐ button (remembered in this browser, adrb.theme)
+(function(){ let t = "dark"; try { const v = JSON.parse(localStorage.getItem("adrb.theme")); if (v === "light" || v === "dark") t = v; } catch (e) {} document.documentElement.setAttribute("data-theme", t); })();
+</script>
 <style>
 :root{
   --page:#f6f6f3; --surface:#fcfcfb; --surface-2:#f1f0ec; --surface-3:#e9e8e3; --line:#e3e2dd; --line-strong:#cfcec8;
@@ -4391,6 +4395,7 @@ async function openSnapshot(file){
   filesSaveSoon();
   restoreBar(`Opened snapshot <b>${esc(file.name)}</b>${o.savedAt ? ` · saved ${esc(fmtWhen(Date.parse(o.savedAt)))}` : ""} · ${esc(rawNames(o.files).join(" + "))}`);
 }
+$("themeBtn").addEventListener("click", () => store.set("adrb.theme", document.documentElement.getAttribute("data-theme")));   // runs after the toggle
 $("snapBtn").onclick = () => saveSnapshot();
 $("snapOpenBtn").onclick = () => $("fileSnap").click();
 $("fileSnap").onchange = e => { const f = e.target.files[0]; if (f) openSnapshot(f); e.target.value = ""; };
