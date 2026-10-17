@@ -4616,7 +4616,7 @@ function trCard(sym, i){
     }
   }
   return `<div class="card trc ${rev ? "rev" : ""}">
-    <div class="trh"><span class="small">#${i + 1}</span> <button class="trsym" data-trchart="${esc(sym)}" title="Open the chart here">${esc(sym)}</button>${r ? ` <a href="${esc(tvURL(r))}" target="_blank" rel="noopener">Open in TradingView ↗</a>` : ""}${read ? "" : ` <span class="small">as of ${esc(set.asOf)}</span>`}</div>
+    <div class="trh"><span class="small">#${i + 1}</span> <button class="trsym" data-trchart="${esc(sym)}" title="${rev ? "Open the ticker panel (chart and all the board's data)" : "Open the chart (the full ticker panel opens after you reveal)"}">${esc(sym)}</button>${r ? ` <a href="${esc(tvURL(r))}" target="_blank" rel="noopener">Open in TradingView ↗</a>` : ""}${read ? "" : ` <span class="small">as of ${esc(set.asOf)}</span>`}</div>
     <div class="trq"><span class="lbl">State${read ? "" : " then"}</span>${trBtns(sym, "state", TR_ST().map(([k, l]) => [k, l]), T, rev)}</div>
     <div class="trq"><span class="lbl">Volatility${read ? "" : " then"}</span>${vol}</div>
     <div class="trq"><span class="lbl">${read ? "On my A-list tonight?" : "Would I have taken it?"}</span>${trBtns(sym, read ? "alist" : "take", yn, read ? T : null, rev)}</div>
@@ -4671,8 +4671,8 @@ function renderTrain(){
   const set = TR.set;
   if (!set || !set.cards.length) { el.innerHTML = bar + `<div class="card"><div class="bd"><div class="empty">Not enough names to make a set from this file${c.game === "run" ? " and history" : ""}.</div></div></div>`; return; }
   const how = set.game === "read"
-    ? `Click a ticker to open its chart here (or use "Open in TradingView"), pick your answers, then reveal. The board's answers use today's file and ${esc(zoneStamp())}. ${c.diff === "hard" ? "Hard: every name is within 0.25 ADR of a line that would change its state." : "Easy: every name is well clear of the lines that would change its state (0.5 ADR, or a third of the band for names in the zone or just above it)."} ${esc(set.note || "")}`
-    : `Use TradingView bar replay to <b>${esc(set.asOf)}</b> (the close ${set.back} sessions ago) and judge each chart as it looked then — or click a ticker for a chart that stops at that close. Half of these are the best performers since that close among ${set.liq} liquid names in your file that your filters show (price $5+, $20M+ a day); the rest were flat or down. The board's answers are rebuilt from Massive bars up to that date.`;
+    ? `Click a ticker to open its chart (or use "Open in TradingView"), pick your answers, then reveal. After the reveal, clicking the ticker opens the full ticker panel. The board's answers use today's file and ${esc(zoneStamp())}. ${c.diff === "hard" ? "Hard: every name is within 0.25 ADR of a line that would change its state." : "Easy: every name is well clear of the lines that would change its state (0.5 ADR, or a third of the band for names in the zone or just above it)."} ${esc(set.note || "")}`
+    : `Use TradingView bar replay to <b>${esc(set.asOf)}</b> (the close ${set.back} sessions ago) and judge each chart as it looked then — or click a ticker for a chart that stops at that close. After the reveal, the ticker opens the full ticker panel (today's data). Half of these are the best performers since that close among ${set.liq} liquid names in your file that your filters show (price $5+, $20M+ a day); the rest were flat or down. The board's answers are rebuilt from Massive bars up to that date.`;
   el.innerHTML = bar + `<div class="card"><div class="hd"><h2>${set.game === "read" ? "Read it" : "Before the run"}</h2><span class="sub">${how}</span></div>
     <div class="bd"><div class="trscore">${trScoreLine()}</div></div></div>
     <div class="trgrid">${set.cards.map(trCard).join("")}</div>
@@ -4738,7 +4738,7 @@ $("tab-train").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b || !TR.cfg) return;
   if (b.dataset.tc) { const k = b.dataset.tc, v = b.dataset.tcv; TR.cfg[k] = ["n", "back"].includes(k) ? +v : v; store.set("adrb.trainCfg", TR.cfg); if (k !== "game") TR.set = null; renderTrain(); return; }
   if (b.dataset.tq) { const s = b.dataset.tsym, a = TR.set.ans[s] = TR.set.ans[s] || {}; a[b.dataset.tq] = a[b.dataset.tq] === b.dataset.tv ? null : b.dataset.tv; if (a[b.dataset.tq] == null) delete a[b.dataset.tq]; trSaveSet(); renderTrain(); return; }
-  if (b.dataset.trchart) { trChartOpen(b.dataset.trchart); return; }
+  if (b.dataset.trchart) { const s = b.dataset.trchart; if (TR.set.rev[s]) openDrawer(s); else trChartOpen(s); return; }   // revealed → the full ticker panel
   if (b.dataset.trrev) { const s = b.dataset.trrev; TR.set.rev[s] = true; trCount(s); trSaveSet(); renderTrain(); return; }
   const a = b.dataset.ta; if (!a) return;
   if (a === "new") { TR.set = null; renderTrain(); }
