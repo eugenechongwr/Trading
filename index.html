@@ -436,7 +436,193 @@ tr.thin td,.tk.thin{opacity:.5}
 .trhist{display:grid;gap:4px;font-size:12px}
 .trconf{border-collapse:collapse;font-size:12px;margin:4px 0}
 .trconf td,.trconf th{padding:3px 10px 3px 0;text-align:left;border-bottom:1px solid var(--line)}
+/* ---------------- self-check + compact ticker-panel notes ---------------- */
+.scv{display:flex;flex-direction:column;gap:3px;border-radius:9px;padding:10px 12px;margin-bottom:10px;border-left:4px solid}
+.scv b{font-size:16px}.scv span{font-size:12px;color:var(--ink-2)}
+.scv.ok{background:var(--good-soft);border-color:var(--st1)}.scv.no{background:var(--down-soft);border-color:var(--crit)}
+.scgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:10px}
+@media (max-width:900px){.scgrid{grid-template-columns:1fr}}
+.scs{font-size:12px;padding:2px 0}
+.tkt{border:1px solid var(--line);border-radius:10px;margin:2px 0 10px;overflow:hidden}
+.tkt-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));background:var(--surface-2)}
+.tkt-row > div,.tkt-row > span > div{padding:7px 10px;border-right:1px solid var(--line);display:flex;flex-direction:column;min-width:0}
+.tkt-row i{font-style:normal;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);white-space:nowrap}
+.tkt-row b{font-size:14px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tkt-row small{font-size:10.5px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tkt-row .s b{color:var(--down)}.tkt-row .t b{color:var(--up)}
+.tkt .work{padding:6px 10px;border-top:1px solid var(--line);font-size:12px}
+.tkt .work summary{cursor:pointer;color:var(--ink-2)}
+.tkt .work ol{margin:6px 0 6px 18px;padding:0;line-height:1.7;font-variant-numeric:tabular-nums}
+.okc{color:var(--good);font-weight:600;margin-left:6px}.noc{color:var(--crit);font-weight:700;margin-left:6px}
+.tp-rsel{display:inline-flex;border:1px solid var(--line-strong);border-radius:6px;overflow:hidden;margin-left:auto}
+.tp-lv .tp-rsel{padding:0;background:none}
+.tp-rsel button{border:0;background:var(--surface);color:var(--ink-2);font-size:11px;padding:2px 7px;cursor:pointer}
+.tp-rsel button.on{background:var(--accent);color:#fff}
+.tgtc{display:contents}
+.tp-fold{margin:8px 0;font-size:12px}
+.tp-fold > summary{cursor:pointer;color:var(--ink-3);font-size:11.5px;padding:3px 0}
+.tp-fold > summary:hover{color:var(--accent)}
+#drawer.tp .tp-pane .note{font-size:12px;padding:6px 10px;border-left:3px solid var(--line-strong);border-radius:6px;margin:6px 0}
+.hx-h{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:650;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-2);margin:12px 0 6px}
+.hx-h:first-child{margin-top:4px}
+.hx-h small{font-weight:400;text-transform:none;letter-spacing:0;color:var(--ink-3)}
+.hx-h .pill{text-transform:none;letter-spacing:0}
+.hxtiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:6px}
+.hxt{background:var(--surface-2);border-radius:8px;padding:6px 9px;display:flex;flex-direction:column;min-width:0}
+.hxt i{font-style:normal;font-size:10.5px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hxt b{font-size:15px;font-variant-numeric:tabular-nums}
+.hxt small{font-size:10.5px;color:var(--ink-3)}
+.hxt.bad b{color:var(--down)}
+.hxt .zstrip{max-width:100%;overflow:hidden}
+.hxbars{display:grid;gap:4px}
+.hxb{display:grid;grid-template-columns:34px minmax(0,1fr) 54px;gap:8px;align-items:center;font-size:12px}
+.hxb span{color:var(--ink-3)}.hxb b{text-align:right;font-variant-numeric:tabular-nums}
+.hxd{font-size:11.5px;color:var(--ink-3);margin:-2px 0 6px}
+.rmv{display:grid;grid-template-columns:minmax(0,1fr) 64px;gap:8px;align-items:center;margin-bottom:6px}
+.rmvb{position:relative;height:8px;border-radius:4px;background:var(--surface-3)}
+.rmvb i{position:absolute;left:0;top:0;bottom:0;border-radius:4px;background:linear-gradient(90deg,var(--st1),var(--warn) 50%,var(--crit))}
+.rmvb u{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink-2)}
+.rmv b{font-size:12px;text-align:right}
+.hxchips{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-bottom:5px}
+.hxc{font-size:11px;padding:1px 7px;border-radius:999px;background:var(--surface-2);color:var(--ink-2);white-space:nowrap}
+.hxc.ok{background:var(--good-soft);color:var(--ink)}.hxc.no{background:var(--surface-2);color:var(--ink-3)}
+.hxc.weak{background:var(--down-soft);color:var(--ink);font-weight:600}.hxc.fine{color:var(--ink-3)}.hxc.na{border:1px dashed var(--line-strong);background:none;color:var(--ink-3)}
+/* ---------------- workspace layout: left sidebar, sticky context bar, wide ticker panel (html.ws; classic = no class) ---------------- */
+.tksearch,#side,.nb{display:none}
+.nb{margin-left:4px}
+#tabs .nb{display:inline-block;font-size:10.5px;font-weight:650;padding:0 6px;border-radius:999px;background:var(--chip);color:var(--ink-2);vertical-align:1px}
+#tabs .nb.g{background:var(--st1);color:#fff}#tabs .nb.a{background:var(--warn);color:#111}#tabs .nb.r{background:var(--crit);color:#fff}
+#tabs .nb.sh{background:var(--down-soft);color:var(--ink)}
+html.ws{--sbw:232px;--tbh:50px}
+html.ws.sbmin{--sbw:58px}
+html.ws .wrap{max-width:none;margin:0 0 0 var(--sbw);padding:0 18px 60px}
+html.ws #side{display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;width:var(--sbw);background:var(--surface);border-right:1px solid var(--line);z-index:40;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin}
+.sb-brand{display:flex;align-items:center;gap:9px;padding:12px 12px 8px 14px;min-height:var(--tbh)}
+.sb-logo{width:24px;height:24px;border-radius:7px;flex:none;background:radial-gradient(circle at 32% 30%,#9cc4ff 0,#3b82f6 32%,#1e3a8a 70%,#0b1430 100%);box-shadow:0 0 0 1px rgba(255,255,255,.08) inset,0 2px 6px rgba(30,58,138,.35)}
+.sb-brand b{font-size:14px;font-weight:700;letter-spacing:-.01em;white-space:nowrap}
+.sb-tools{display:flex;gap:6px}
+.sb-ic{margin-left:auto;border:0;background:transparent;color:var(--ink-3);cursor:pointer;border-radius:6px;padding:3px 6px;font-size:13px}
+.sb-ic:hover{background:var(--surface-2);color:var(--ink)}
+.sb-file{padding:0 14px 8px;font-size:11px;color:var(--ink-3);line-height:1.35;word-break:break-word}
+.sb-file #fileInfo{font-size:11px;color:var(--ink-3)}
+html.ws #tabs{display:flex;flex-direction:column;gap:1px;border:0;margin:0;padding:2px 8px 6px;overflow:visible}
+html.ws body:not(.has-snap) #tabs{display:none}
+#tabs .nvh{font-size:10px;text-transform:uppercase;letter-spacing:.09em;color:var(--ink-3);padding:12px 8px 4px;font-weight:650;white-space:nowrap}
+#tabs .nvh span{display:inline-block;min-width:15px;color:var(--accent)}
+html.ws #tabs button{display:grid;grid-template-columns:22px minmax(0,1fr) auto;align-items:center;column-gap:8px;text-align:left;padding:6px 8px;border:0;border-radius:8px;color:var(--ink-2);font-weight:550;border-bottom:0;line-height:1.25;white-space:nowrap}
+html.ws #tabs button::before{content:"";grid-column:1;grid-row:1/3;width:18px;height:18px;background:currentColor;-webkit-mask:var(--ic) center/18px no-repeat;mask:var(--ic) center/18px no-repeat;opacity:.85}
+html.ws #tabs button::after{content:attr(data-sub);grid-column:2/4;font-size:10.5px;font-weight:400;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis}
+html.ws #tabs button:hover{background:var(--surface-2);color:var(--ink)}
+html.ws #tabs button.on{background:var(--up-soft);color:var(--ink);box-shadow:inset 3px 0 0 var(--accent)}
+html.ws #tabs button.on::before{opacity:1;background:var(--accent)}
+html.ws #tabs button .cnt{grid-column:3;grid-row:1;font-size:10.5px;font-weight:650;padding:0 6px;border-radius:999px;background:var(--accent);color:#fff;margin:0}
+html.ws #tabs button .nb{grid-column:3;grid-row:1;margin:0}
+.nvsec{display:flex;flex-direction:column;margin:2px 0 6px 19px;padding-left:10px;border-left:1px solid var(--line)}
+.nvsec a{display:block;font-size:11.5px;color:var(--ink-3);text-decoration:none;padding:3px 6px;border-radius:5px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nvsec a:hover{color:var(--ink);background:var(--surface-2)}
+.nvsec a.on{color:var(--accent);font-weight:600}
+.nvsec a.col{opacity:.6}
+.sb-blk{padding:10px 12px;border-top:1px solid var(--line)}
+.sb-blk .lbl{display:block;margin-bottom:6px}
+.sb-files{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.sb-files .btn{padding:4px 6px;font-size:11.5px;text-align:center;overflow:hidden;text-overflow:ellipsis;border-radius:7px}
+.sb-files .chip{grid-column:1/-1;justify-content:flex-start;overflow:hidden;text-overflow:ellipsis;font-size:11px;white-space:normal}
+.sb-files .btn.full,.sb-files #snapOpenBtn{grid-column:1/-1}
+.sb-keys{font-size:10.5px;color:var(--ink-3);line-height:1.6}
+.sb-keys kbd{font-family:var(--mono);font-size:10px;background:var(--surface-2);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.sb-foot{margin-top:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+html.ws.sbmin #side .sb-brand b,html.ws.sbmin .sb-file,html.ws.sbmin .nvsec,html.ws.sbmin #tabs .nvh,html.ws.sbmin .sb-blk{display:none}
+html.ws.sbmin .sb-brand{flex-direction:column;padding:12px 0 8px}
+html.ws.sbmin .sb-tools{flex-direction:column}
+html.ws.sbmin .sb-foot{display:flex;padding:10px 6px;justify-content:center}
+html.ws.sbmin .sb-foot .sb-keys,html.ws.sbmin #wsClassic,html.ws.sbmin #setBtn .t{display:none}
+html.ws.sbmin .sb-ic{margin:0}
+html.ws.sbmin #tabs button{grid-template-columns:1fr;padding:8px 0;justify-items:center;font-size:0;position:relative}
+html.ws.sbmin #tabs button::after{display:none}
+html.ws.sbmin #tabs button::before{grid-row:1}
+html.ws.sbmin #tabs button .cnt,html.ws.sbmin #tabs button .nb{position:absolute;top:2px;right:4px;font-size:9px;padding:0 4px}
+html.ws.sbmin #tabs .nvh{display:block;font-size:0;padding:6px 0;border-top:1px solid var(--line);margin:4px 6px 0}
+/* top context bar */
+html.ws header.top{position:sticky;top:0;z-index:35;min-height:var(--tbh);margin:0 -18px 12px;padding:7px 18px;gap:6px 8px;flex-wrap:wrap;background:color-mix(in oklab,var(--page) 88%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+html.ws header.top h1,html.ws header.top > span[style*="flex-basis"],html.ws header.top > .spacer ~ .spacer{display:none}
+.pg{display:flex;flex-direction:column;min-width:0;margin-right:6px}
+.pg b{font-size:15px;font-weight:700;letter-spacing:-.01em;white-space:nowrap}
+.pg span{font-size:11px;color:var(--ink-3);white-space:nowrap}
+html.ws header.top .chip{font-size:11.5px;padding:3px 8px}
+html.ws .tksearch{display:inline-flex;align-items:center;position:relative}
+.tksearch input{width:150px;padding:4px 26px 4px 8px;border-radius:8px;font-family:var(--mono);font-size:12px}
+.tksearch kbd{position:absolute;right:7px;font-family:var(--mono);font-size:10px;color:var(--ink-3);border:1px solid var(--line);border-radius:4px;padding:0 4px;pointer-events:none}
+html.ws .gbar{top:var(--tbh)}
+/* page polish */
+html.ws .card{border-radius:10px;box-shadow:none}
+html.ws #app .card > .hd{border-bottom:1px solid var(--line);padding:9px 12px 8px;margin-bottom:6px}
+html.ws #app .card.collapsed > .hd{border-bottom:0;margin-bottom:0;padding-bottom:9px}
+html.ws #app .card > .hd h2{font-size:12px;text-transform:uppercase;letter-spacing:.05em;font-weight:650}
+html.ws .tablehd h2{font-size:12px;text-transform:uppercase;letter-spacing:.05em;font-weight:650}
+html.ws .kpi .v{font-size:20px}
+html.ws .lede{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;cursor:pointer;max-width:1100px;position:relative;padding-left:10px;border-left:2px solid var(--line-strong)}
+html.ws .lede:hover{border-left-color:var(--accent)}
+html.ws .lede.open{display:block}
+.secflash{animation:secfl 1.1s ease-out}
+@keyframes secfl{from{box-shadow:0 0 0 3px var(--accent)}to{box-shadow:0 0 0 0 transparent}}
+/* shorts page */
+.shgate{display:grid;grid-template-columns:240px minmax(0,1fr);gap:0}
+.shgate .verdict{padding:12px 14px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:6px}
+.shgate .word{font-size:24px;font-weight:700;letter-spacing:-.02em;line-height:1.05}
+.shgate .word.live{color:var(--crit)}.shgate .word.watch{color:var(--ink-2)}
+.shgate .rl{padding:10px 14px;font-size:12.5px}
+.shgate .rl ol{margin:6px 0 0 18px;padding:0}
+@media (max-width:900px){.shgate{grid-template-columns:minmax(0,1fr)}.shgate .verdict{border-right:0;border-bottom:1px solid var(--line)}}
+.shg{display:grid;grid-template-columns:minmax(130px,200px) 92px 56px minmax(0,1fr);gap:8px;align-items:center;padding:6px 0;border-bottom:1px dotted var(--line)}
+.shg .nm{font-weight:600;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.shg .nm:hover{color:var(--accent)}
+/* ticker panel (wide drawer) */
+html.ws #drawer.tp{width:min(1320px,96vw);padding:0;overflow:hidden;display:flex;flex-direction:column}
+#drawer.tp .tp-head{padding:12px 18px 10px;border-bottom:1px solid var(--line);position:relative;flex:none}
+#drawer.tp .tp-head > div{margin:4px 0!important}
+#drawer.tp .tp-head > .small:first-of-type{margin-top:0!important}
+#drawer.tp .tp-head .note{margin:6px 0!important}
+#drawer.tp .x{top:12px;right:14px}
+.tp-nav{position:absolute;top:12px;right:56px;display:flex;gap:4px;align-items:center}
+.tp-nav .small{min-width:44px;text-align:center}
+.tp-ctx{display:flex;flex-wrap:wrap;align-items:stretch;gap:0;margin:8px 0 6px!important;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--surface-2)}
+.tp-ctx .cx{flex:1 1 auto;display:flex;flex-direction:column;justify-content:center;padding:5px 12px;min-width:0;border-right:1px solid var(--line);background:var(--surface)}
+.tp-ctx .cx:last-child{border-right:0}
+.tp-ctx .cx i{font-style:normal;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3)}
+.tp-ctx .cx b{font-size:13px;white-space:nowrap}
+.tp-ctx .cx small{font-size:11px;color:var(--ink-2);white-space:nowrap}
+.tp-ctx .cx[data-gopen],.tp-ctx .cx[data-goto]{cursor:pointer}
+.tp-ctx .cx[data-gopen]:hover,.tp-ctx .cx[data-goto]:hover{background:var(--up-soft)}
+.tp-ctx .arr{display:flex;align-items:center;padding:0 2px;color:var(--ink-3);background:var(--surface-2);font-size:14px}
+.tp-ctx b.g{color:var(--st1)}.tp-ctx b.a{color:var(--med)}.tp-ctx b.r{color:var(--crit)}
+.tp-lv{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 0!important}
+.tp-lv span{font-size:11.5px;background:var(--surface-2);border-radius:6px;padding:2px 8px;font-variant-numeric:tabular-nums;color:var(--ink-2)}
+.tp-lv span b{color:var(--ink);font-weight:650}
+.tp-lv .s b{color:var(--down)}.tp-lv .t b{color:var(--up)}
+#drawer.tp .tp-body{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(400px,1fr)}
+#drawer.tp .tp-left{overflow:auto;padding:12px 16px 20px;border-right:1px solid var(--line)}
+#drawer.tp .tp-left #tvbox{height:min(60vh,600px);margin:0 0 6px}
+#drawer.tp .tp-right{display:flex;flex-direction:column;min-height:0}
+#drawer.tp .tp-tabs{display:flex;gap:2px;padding:8px 12px 0;border-bottom:1px solid var(--line);flex:none;overflow-x:auto}
+#drawer.tp .tp-tabs button{border:0;background:transparent;padding:7px 11px;cursor:pointer;color:var(--ink-2);border-bottom:2px solid transparent;white-space:nowrap;font-weight:550}
+#drawer.tp .tp-tabs button.on{color:var(--ink);border-bottom-color:var(--accent)}
+#drawer.tp .tp-tabs button:hover{color:var(--ink)}
+#drawer.tp .tp-pane{flex:1;overflow:auto;padding:8px 16px 24px;display:none}
+#drawer.tp .tp-pane.on{display:block}
+#drawer.tp .tp-pane > h4:first-child{margin-top:4px!important}
+@media (max-width:1000px){#drawer.tp .tp-body{display:block;overflow:auto}#drawer.tp .tp-left{border-right:0}#drawer.tp .tp-pane{overflow:visible}}
+#tabs button[data-tab="market"]{--ic:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 12h4l3-8 4 16 3-8h4'/></svg>")}
+#tabs button[data-tab="etfs"]{--ic:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 3l9 5-9 5-9-5z'/><path d='M3 13l9 5 9-5'/></svg>")}
+#tabs button[data-tab="themes"]{--ic:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='9'/><circle cx='12' cy='12' r='5'/><path d='M12 3v9l6 6'/></svg>")}
+#tabs button[data-tab="today"]{--ic:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M13 2L4 14h7l-1 8 9-12h-7z'/></svg>")}
+#tabs button[data-tab="map"]{--ic:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 4v16h16'/><circle cx='9' cy='14' r='1.5'/><circle cx='13' cy='9' r='1.5'/><circle cx='17' cy='12' r='1.5'/></svg>")}
+#tabs button[data-tab="screens"]{--ic:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 4h18l-7 8v6l-4 2v-8z'/></svg>")}
+#tabs button[data-tab="plan"]{--ic:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='9'/><circle cx='12' cy='12' r='5'/><circle cx='12' cy='12' r='1'/></svg>")}
+#tabs button[data-tab="shorts"]{--ic:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 7l6 6 4-4 8 8'/><path d='M21 11v6h-6'/></svg>")}
+#tabs button[data-tab="data"]{--ic:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><ellipse cx='12' cy='6' rx='8' ry='3'/><path d='M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6'/><path d='M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3'/></svg>")}
+#tabs button[data-tab="train"]{--ic:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z'/><circle cx='12' cy='12' r='3'/></svg>")}
 </style>
+<script>try{if(JSON.parse(localStorage.getItem("adrb.layout"))!=="classic")document.documentElement.classList.add("ws")}catch(e){document.documentElement.classList.add("ws")}</script>
 </head>
 <body>
 <div class="wrap">
@@ -3994,8 +4180,8 @@ document.addEventListener("click", e => {
 });
 
 /* ---------------- short watch (Setups) ---------------- */
-function renderShortWatch(){
-  const box = $("shortBox"); if (!box) return;
+function renderShortWatch(box = $("shortBox")){
+  if (!box) return;
   const tp = S.tape, mr = mapRegime();
   const live = tp && tp.bucket === "Defensive" && mr.v === "Defensive";
   const br = tp && tp.lines.find(l => l.k === "breadth"), vo = tp && tp.lines.find(l => l.k === "vol");
@@ -4006,7 +4192,7 @@ function renderShortWatch(){
   const shown = L.slice(0, 20);
   const dots = n => `<span class="sdots" title="${n} of 7 weakness signs">${[0, 1, 2, 3, 4, 5, 6].map(i => `<i class="${i < n ? "on" : ""}"></i>`).join("")}</span>`;
   box.innerHTML = `<div class="hd"><h2>Short watch — relative weakness</h2><span class="sub">${live ? `<b class="neg">Live</b> — the tape read and MAP both say Defensive. C size (0.1% NLV), tagged EXPERIMENT.` : `<b>Watch only</b> — shorts go live only when the tape read and MAP both say Defensive (tape: ${esc(tp ? tp.bucket : "no breadth file")}, MAP: ${esc(mr.v || "not set")}).`}</span>
-    <span class="spacer"></span><span class="small">Score ≥</span><input type="number" min="1" max="7" id="shMin" value="${min}" style="width:48px"></div>
+    <span class="spacer"></span><span class="small">Score ≥</span><input type="number" min="1" max="7" ${box.id === "shortBox" ? `id="shMin"` : ""} data-shmin value="${min}" style="width:48px"></div>
     <div class="bd">
     ${washed ? `<div class="note"><b>The market looks washed out</b> (breadth and volatility both weak). That is when short positions get hit by the sharpest rebounds — no new shorts on these readings.</div>` : ""}
     <div class="small" style="margin-bottom:6px">Seven weakness signs, one dot each: behind the benchmark over 2, 4 and 10 weeks · getting weaker faster · RS line new low before price · down while the benchmark is up · selling volume heavier than buying · 9 EMA under the 21 with price under the 21 · bottom quarter of its group. Entry only on a failed bounce: into a falling 21 EMA, up to the 50 SMA from below, or a rejection today. Stop half an ADR above, first trim at 2R.</div>
@@ -4015,7 +4201,7 @@ function renderShortWatch(){
       ${L.length > shown.length ? `<div class="small" style="margin-top:4px">${L.length - shown.length} more — Screens → Short watch lists them all.</div>` : ""}` : `<div class="empty">No liquid name scores ${min}+ of 7 right now.</div>`}
     </div>`;
   box.querySelector("tbody")?.addEventListener("click", e => { const tr = e.target.closest("tr[data-sym]"); if (tr) openDrawer(tr.dataset.sym); });
-  $("shMin").onchange = e => { CFG.shortMin = clamp(+e.target.value || 5, 1, 7); saveCfg(); renderShortWatch(); };
+  box.querySelector("[data-shmin]").onchange = e => { CFG.shortMin = clamp(+e.target.value || 5, 1, 7); saveCfg(); renderShortWatch(box); };
 }
 
 /* =====================================================================
@@ -4746,6 +4932,522 @@ $("tab-train").addEventListener("click", e => {
   else if (a === "all") { for (const s of TR.set.cards) if (!TR.set.rev[s]) { TR.set.rev[s] = true; trCount(s); } trSaveSet(); renderTrain(); }
   else if (a === "reset") { if (confirm("Reset your Training score history in this browser?")) { store.set("adrb.train", null); renderTrain(); } }
 });
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   WORKSPACE LAYOUT (18 Oct) — organisation only, no trading logic.
+   - Shorts tab (both layouts): short-side gate, short watch, weakest groups, weakness scans, inverse funds.
+   - Workspace layout (default; html.ws, localStorage adrb.layout = "ws" | "classic"):
+     left sidebar with the tabs in top-down order (environment → themes → stocks → decide) and a jump list of the
+     current page's sections, sticky context bar with ticker search, Market/Today cards reordered top-down,
+     two-column ticker panel (chart + numbers left, plan/checks · history/short · news · group tabs right) with a
+     Market › Group › Stock context line, back, and prev/next through the list it was opened from.
+   Classic layout = the v4 page untouched (switching reloads; saved files restore themselves).
+   ===================================================================== */
+const WS = document.documentElement.classList.contains("ws");
+const WSI = {list: [], restored: false, startTab: store.get("adrb.tab", null), secs: [], tpTab: store.get("adrb.tpTab", "plan") || "plan", hist: [], back: false};
+const setLayout = v => { store.set("adrb.layout", v); location.reload(); };
+
+/* ---------------- Shorts tab (both layouts) ---------------- */
+document.querySelector('#tabs button[data-tab="plan"]').insertAdjacentHTML("afterend", `<button data-tab="shorts">Shorts</button>`);
+$("foot").insertAdjacentHTML("beforebegin", `<section class="tab" id="tab-shorts">
+  <p class="lede">The short side in one place — the same short watch as on Setups, the weakest groups, the weakness scans and any inverse funds in your ETF file. Shorts are watch only: they're labelled live only when the tape read and MAP's call are both Defensive, at C size, and need a Codex backtest before any live use. Nothing here changes rankings, states or the plan.</p>
+  <div class="card g1" id="shGate"></div>
+  <div class="card g1" id="shortBox2"></div>
+  <div class="g2e"><div class="card" id="shGroups"></div><div class="card" id="shScreens"></div></div>
+  <div class="card g1" id="shEtf"></div>
+</section>`);
+const shortList = () => S.stocks.filter(r => r.ss && r.ss.n >= CFG.shortMin && !r.thin);
+function renderShorts(){
+  const tp = S.tape, mr = mapRegime(), live = tp && tp.bucket === "Defensive" && mr.v === "Defensive";
+  const br = tp && tp.lines.find(l => l.k === "breadth"), vo = tp && tp.lines.find(l => l.k === "vol");
+  const L = shortList(), fb = L.filter(r => r.sLoc && !r.sBlock.length);
+  $("shGate").innerHTML = `<div class="shgate"><div class="verdict">
+      <div class="small">Short side · tape read + MAP's call</div>
+      <div class="word ${live ? "live" : "watch"}">${live ? "Live · C size" : "Watch only"}</div>
+      <div class="small">Tape: <b>${esc(tp ? tp.bucket : "no breadth file")}</b> · MAP: <b>${esc(mr.v || "not set")}</b></div>
+      <div class="small">${S.has.hist ? `${L.length} liquid names score ${CFG.shortMin}+ of 7 · ${fb.length} at a failed bounce with no blocker` : "Load the price history (Screens) — the weakness score needs it."}</div>
+      <div><button class="btn sm" data-goto="market">Open the tape read</button></div></div>
+    <div class="rl"><b>Short rules on this board</b><ol>
+      <li>Watch only. Live only when the tape read <i>and</i> MAP's call are both Defensive — then C size (0.1% NLV), tagged EXPERIMENT.</li>
+      <li>Entry only on a failed bounce: into a falling 21 EMA, up to the 50 SMA from below, or a rejection today. Stop half an ADR above, first trim at 2R.</li>
+      <li>No new shorts when breadth and volatility are both weak — washed-out tapes give the sharpest rebounds.${br && vo && br.st === "r" && vo.st === "r" ? ` <b class="neg">That is the reading right now.</b>` : ""}</li>
+      <li>Codex backtest of the short archetypes is still required before any live use.</li></ol></div></div>`;
+  renderShortWatch($("shortBox2"));
+  // weakest groups — same group RS as the Themes tab, read from the bottom
+  const G = S.groups.filter(g => g.grs != null).sort((a, b) => a.grs - b.grs).slice(0, 10);
+  $("shGroups").innerHTML = `<div class="hd"><h2>Weakest groups</h2><span class="sub">bottom of the group RS table · click a group for its members · chips = its weakest liquid names with their weakness score</span></div><div class="bd">
+    ${G.length ? G.map(g => { const w = g.members.filter(r => !r.thin).sort((a, b) => (a.rs ?? 99) - (b.rs ?? 99)).slice(0, 6);
+      return `<div class="shg"><div class="nm" data-gopen="${esc(g.name)}" title="${esc(g.sector || "")}">${esc(g.name)}</div><div>${gStateHTML(g.state)}</div><div>${rsBadge(g.grs)}</div><div>${w.map(r => tkChip(r, r.ss ? r.ss.n + "/7" : (r.rs ?? ""), r.ss && r.ss.n >= CFG.shortMin ? "hi" : "")).join("") || `<span class="dim">no liquid names</span>`}</div></div>`; }).join("")
+      : `<div class="empty">No ranked groups.</div>`}</div>`;
+  // weakness scans — the Screens tab's "Weakness (shorts)" set
+  const base = (CFG.inclETF ? S.rows : S.stocks).filter(gOK);
+  const sc = SCREENS.filter(s => SC_CAT[s.k] === "Weakness (shorts)");
+  $("shScreens").innerHTML = `<div class="hd"><h2>Weakness scans</h2><span class="sub">the Screens tab's short-side scans on this snapshot · click one to list its names there</span></div><div class="bd"><div class="screens" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr));margin:0">
+    ${sc.map(s => { const miss = s.need.filter(k => !S.has[k]); const n = miss.length ? null : base.filter(s.f).length;
+      return `<div class="scr ${miss.length ? "off" : ""}" data-shscr="${s.k}"><div class="t"><span>${s.t}</span><span class="n">${n ?? "—"}</span></div><div class="d">${typeof s.d === "function" ? s.d() : s.d}</div></div>`; }).join("")}</div></div>`;
+  // inverse funds in the ETF file
+  const inv = S.etfs.filter(r => r.lev && /inverse|short|bear|ultrashort|\-\d(\.\d+)?x/i.test(r.desc || ""));
+  $("shEtf").innerHTML = `<div class="hd"><h2>Inverse funds in your ETF file</h2><span class="sub">listed, never ranked — read the underlying on the ETFs tab, then trade the wrapper</span></div><div class="bd">
+    ${inv.length ? inv.map(r => `<div style="margin-bottom:4px">${tkChip(r)} <span class="small">${esc(r.desc || "")}</span> <span class="small ${cls(r.todayRaw)}">${pc(r.todayRaw, 1)} today</span></div>`).join("") : `<div class="empty" style="padding:4px 0">${S.etfs.length ? "No inverse funds in your ETF file." : "No ETF file loaded."}</div>`}</div>`;
+}
+$("tab-shorts").addEventListener("click", e => {
+  const s = e.target.closest("[data-shscr]");
+  if (s && !s.classList.contains("off")) { S.ui.screen = s.dataset.shscr; goTab("screens"); setTimeout(() => { const t = $("tblScreen"); if (t) jumpTo(t); }, 60); }
+});
+const _renderTab1 = renderTab;
+renderTab = function(t){ if (t === "shorts") renderShorts(); else _renderTab1(t); afterTab(t); };
+function goTab(t){ const b = document.querySelector(`#tabs button[data-tab="${t}"]`); if (b) b.click(); }
+document.addEventListener("click", e => { const g = e.target.closest("[data-goto]"); if (!g) return; if ($("drawer").classList.contains("open")) closeDrawer(); goTab(g.dataset.goto); });
+
+/* ---------------- nav badges (both layouts) ---------------- */
+function navBadges(){
+  document.querySelectorAll("#tabs .nb").forEach(x => x.remove());
+  if (!S.snap) return;
+  const add = (t, txt, c, title) => { const b = document.querySelector(`#tabs button[data-tab="${t}"]`); if (b && txt !== "") b.insertAdjacentHTML("beforeend", `<span class="nb ${c}" title="${esc(title)}">${esc(String(txt))}</span>`); };
+  if (S.tape) add("market", S.tape.bucket, S.tape.cls, "Tape read from your breadth file");
+  if (S.has.hist) { const n = shortList().length; if (n) add("shorts", n, "sh", `${n} liquid names score ${CFG.shortMin}+ of 7 weakness signs`); }
+}
+const _renderAll1 = renderAll;
+renderAll = function(){
+  document.querySelectorAll("#tabs .nb").forEach(x => x.remove());   // renderAll rebuilds each tab label from its text
+  _renderAll1();
+  document.body.classList.toggle("has-snap", !!S.snap);
+  navBadges();
+  if (WS) wsAfterAll();
+};
+
+/* ---------------- workspace layout ---------------- */
+const NAV = [
+  ["Environment", [["market", "Tape, breadth, highs & lows"], ["etfs", "Sectors & themes as ETFs"]]],
+  ["Themes", [["themes", "Group strength & rotation"]]],
+  ["Stocks", [["today", "Movers, gaps, in play"], ["map", "Where each name sits"], ["screens", "Preset scans"]]],
+  ["Decide", [["plan", "The plan & on deck"], ["shorts", "Relative weakness watch"]]],
+  ["Tools", [["data", "Files & columns"], ["train", "Eye-training games"]]]
+];
+const SEC_NAMES = {tapeBox: "Tape read", mkTape: "Tape read", kpis: "Key numbers", mkKpis: "Key numbers", etfKpis: "Key numbers", spotlight: "Spotlight", shGate: "Short-side gate", listsBox: "MAP focus & held", focusBox: "MAP focus"};
+function afterTab(t){
+  if (!WS) return;
+  const b = document.querySelector(`#tabs button[data-tab="${t}"]`); if (!b) return;
+  $("pgT").textContent = [...b.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join("").trim();
+  $("pgS").textContent = b.dataset.sub || "";
+  store.set("adrb.tab", t);
+  buildSecs(t);
+}
+function secLabel(el){
+  if (SEC_NAMES[el.id]) return SEC_NAMES[el.id];
+  const h = el.querySelector(":scope > .hd h2, :scope > .tablehd h2, .hd h2, .tablehd h2");
+  return h ? h.textContent.trim() : "";
+}
+function buildSecs(t){
+  document.querySelectorAll("#tabs .nvsec").forEach(x => x.remove());
+  const tab = $("tab-" + t), b = document.querySelector(`#tabs button[data-tab="${t}"]`); if (!tab || !b) return;
+  const out = [];
+  const walk = el => { for (const c of el.children) {
+    if (c.classList.contains("hidden") || c.matches("p, .controls, #gbar")) continue;
+    if (c.matches(".card, .kpis, #spotlight")) { const l = secLabel(c) || (c.classList.contains("rules") ? "Trade rules" : ""); if (l && c.offsetParent !== null) out.push([c, l]); }
+    else if (c.matches("div, section")) walk(c);
+  } };
+  walk(tab);
+  WSI.secs = out; WSI.pin = null;
+  if (out.length < 2) return;
+  b.insertAdjacentHTML("afterend", `<div class="nvsec">${out.map(([c, l], i) => `<a data-sec="${i}" class="${c.classList.contains("collapsed") ? "col" : ""}" title="${esc(l)}">${esc(l)}</a>`).join("")}</div>`);
+  spy();
+}
+function stickyH(){ const g = $("gbar"), h = document.querySelector("header.top"); return (h ? h.getBoundingClientRect().height : 0) + (g && g.offsetParent ? g.getBoundingClientRect().height : 0) + 10; }
+function jumpTo(el){
+  if (el.classList.contains("collapsed")) { const h = el.querySelector(":scope > .hd h2"); if (h) h.click(); }
+  scrollTo({top: el.getBoundingClientRect().top + scrollY - stickyH(), behavior: "smooth"});
+  el.classList.remove("secflash"); void el.offsetWidth; el.classList.add("secflash");
+}
+function spy(){
+  const a = document.querySelectorAll("#tabs .nvsec a"); if (!a.length) return;
+  const y = stickyH() + 30; let k = 0;
+  WSI.secs.forEach(([c], i) => { if (c.getBoundingClientRect().top <= y) k = i; });
+  if (innerHeight + scrollY >= document.documentElement.scrollHeight - 4) k = WSI.pin != null && WSI.pin > k ? WSI.pin : WSI.pin != null ? k : WSI.secs.length - 1;   // bottom: keep the section just jumped to
+  a.forEach((x, i) => x.classList.toggle("on", i === k));
+}
+function wsAfterAll(){
+  const dl = $("tkList");
+  if (dl && dl._n !== S.rows.length + S.groups.length) { dl._n = S.rows.length + S.groups.length; dl.innerHTML = S.rows.map(r => `<option value="${esc(r.sym)}">${esc((r.desc || "").slice(0, 40))}</option>`).join("") + S.groups.map(g => `<option value="${esc(g.name)}">group</option>`).join(""); }
+  if (!WSI.restored) { WSI.restored = true; const t = WSI.startTab; if (t && t !== S.ui.tab && document.querySelector(`#tabs button[data-tab="${t}"]`)) setTimeout(() => goTab(t), 0); }
+}
+
+/* ---------------- ticker panel: back, prev/next, two columns ---------------- */
+// remember the list a ticker was clicked from, so the panel can step through it
+document.addEventListener("click", e => {
+  const el = e.target.closest("[data-sym],[data-psym]"); if (!el || el.closest("#drawer") || !S.rowBySym) return;
+  const box = el.closest(".card, .tab, #drawer") || document.body;
+  WSI.list = [...new Set([...box.querySelectorAll("[data-sym],[data-psym]")].map(x => x.dataset.sym || x.dataset.psym))].filter(s => S.rowBySym.has(s));
+}, true);
+const _openDrawer1 = openDrawer, _groupDrawer1 = groupDrawer, _closeDrawer1 = closeDrawer;
+function drHist(item){
+  const open = $("drawer").classList.contains("open");
+  if (!open) WSI.hist = [];
+  const last = WSI.hist[WSI.hist.length - 1];
+  if (!WSI.back && !(last && last.t === item.t && last.k === item.k)) WSI.hist.push(item);
+  WSI.back = false;
+}
+openDrawer = function(sym){
+  if (!WS) return _openDrawer1(sym);
+  const r = S.rows.find(x => x.sym === sym); if (!r) return;
+  drHist({t: "s", k: sym});
+  _openDrawer1(sym);
+  tpBuild(r);
+};
+groupDrawer = function(name){
+  if (!WS) return _groupDrawer1(name);
+  drHist({t: "g", k: name});
+  $("drawer").classList.remove("tp");
+  _groupDrawer1(name);
+  const dr = $("drawer"); if (!dr.classList.contains("open")) return;
+  if (WSI.hist.length > 1) dr.querySelector("#dx").insertAdjacentHTML("afterend", `<div class="tp-nav" style="right:56px"><button class="btn sm" data-tpb>← Back</button></div>`);
+};
+closeDrawer = function(){ WSI.hist = []; _closeDrawer1(); };
+function tpBack(){ if (WSI.hist.length < 2) return; WSI.hist.pop(); const p = WSI.hist[WSI.hist.length - 1]; WSI.back = true; p.t === "s" ? openDrawer(p.k) : groupDrawer(p.k); }
+function tpStep(d){
+  const cur = WSI.hist[WSI.hist.length - 1]; if (!cur || cur.t !== "s") return;
+  const i = WSI.list.indexOf(cur.k); if (i < 0) return;
+  const n = WSI.list[i + d]; if (!n) return;
+  WSI.back = true; WSI.hist[WSI.hist.length - 1] = {t: "s", k: n}; openDrawer(n);
+}
+function tpBuild(r){
+  const dr = $("drawer"); if (!dr.classList.contains("open")) return;
+  const B = {head: [], chart: [], rs: [], kv: [], plan: [], hist: [], news: [], checks: [], peers: []};
+  let cur = "head";
+  for (const el of [...dr.children]) {
+    if (el.id === "tvbox") cur = "chart";
+    else if (el.tagName === "H4") { const t = el.textContent.trim(); cur = /^RS by/.test(t) ? "rs" : /^Price history/.test(t) ? "hist" : /^News/.test(t) ? "news" : /^Entry checks/.test(t) ? "checks" : /^Group peers/.test(t) ? "peers" : cur; }
+    if (el.classList.contains("kv")) { B.kv.push(el); cur = "plan"; continue; }
+    B[cur].push(el);
+  }
+  dr.classList.add("tp");
+  const g = S.groupMap.get(r.group), tp = S.tape, mr = mapRegime();
+  const ranked = S.groups.filter(x => x.grs != null), gi = g ? ranked.indexOf(g) : -1;
+  const st = statusOf(r), z = r.zLo != null ? sizeGrade(r) : null, vs = vsOf(r);
+  const ctx = `<div class="tp-ctx">
+    <span class="cx" data-goto="market" title="Open the Market tab"><i>Market</i><b class="${tp ? tp.cls : ""}">${tp ? tp.bucket : "No breadth file"}</b><small>MAP: ${esc(mr.v || "not set")}</small></span><span class="arr">›</span>
+    <span class="cx"><i>Sector</i><b>${esc(r.sector || "—")}</b><small>${esc(r.etf ? "ETF" : "")}</small></span><span class="arr">›</span>
+    ${g ? `<span class="cx" data-gopen="${esc(g.name)}" title="Open the group"><i>Group</i><b>${esc(g.name)}</b><small>${gi >= 0 ? `#${gi + 1} of ${ranked.length} · RS ${g.grs} · ${esc(g.state)}` : `${g.n} names · not ranked`}</small></span><span class="arr">›</span>` : ""}
+    <span class="cx"><i>Stock</i><b>${r.gRank ? `#${r.gRank} of ${r.gN} in group` : esc(r.sym)}</b><small>RS ${r.rs ?? "—"}${r.etf ? "" : ` · ${esc(st.t)}`}</small></span></div>`;
+  const lv = r.zLo != null && !r.etf ? `<div class="tp-lv"><span>Zone <b>${f2(r.zLo)} – ${f2(r.zHi)}</b></span><span>Last <b>${f2(r.last)}</b></span><span class="s">Widest stop <b>${f2(r.stop)}</b></span><span class="tgtc" data-tgtc>${tgtChips(r)}</span>${z ? `<span>Grade <b>${z.g}</b>${z.step ? ` (SMA gate −${z.step})` : ""}</span>` : ""}<span>ADR <b>${f2(r.adr)}%</b></span>${vs ? `<span>Volatility <b>${VSL[vs.k].n}</b></span>` : ""}${r.ss ? `<span>Short score <b>${r.ss.n}/7</b></span>` : ""}${r.erIn != null ? `<span>Earnings <b>${r.erIn}d</b></span>` : ""}${tgtSeg()}</div>` : "";
+  const i = WSI.list.indexOf(r.sym);
+  const nav = `<div class="tp-nav">${WSI.hist.length > 1 ? `<button class="btn sm" data-tpb title="Back (Backspace)">← Back</button>` : ""}${i >= 0 && WSI.list.length > 1 ? `<button class="btn sm" data-tps="-1" ${i ? "" : "disabled"} title="Previous in the list (←)">‹</button><span class="small">${i + 1} / ${WSI.list.length}</span><button class="btn sm" data-tps="1" ${i < WSI.list.length - 1 ? "" : "disabled"} title="Next in the list (→)">›</button>` : ""}</div>`;
+  WSI.cur = r.sym;
+  const planEls = r.zLo != null && !r.etf ? [htmlEl(tpTicket(r)), ...B.plan.filter(el => !/^Plan:/.test(el.textContent.trim())), ...B.checks, ...foldEls(B.plan.filter(el => /^Plan:/.test(el.textContent.trim())), "Full plan note")] : [...B.plan, ...B.checks];
+  const histEls = B.hist.length && r.hx ? [htmlEl(tpHist(r)), ...foldEls(B.hist, "Full notes")] : B.hist;
+  const panes = [["plan", "Plan & checks", planEls], ["hist", "History · short score", histEls], ["news", "News", B.news], ["peers", "Group", B.peers]].filter(p => p[2].length);
+  if (!panes.some(p => p[0] === WSI.tpTab)) WSI.tpTab = panes.length ? panes[0][0] : "plan";
+  const head = document.createElement("div"); head.className = "tp-head";
+  const body = document.createElement("div"); body.className = "tp-body";
+  const left = document.createElement("div"); left.className = "tp-left";
+  const right = document.createElement("div"); right.className = "tp-right";
+  B.head.forEach(el => head.appendChild(el));
+  head.insertAdjacentHTML("beforeend", ctx + lv + nav);
+  [...B.chart, ...B.rs, ...B.kv].forEach(el => left.appendChild(el));
+  right.innerHTML = `<div class="tp-tabs">${panes.map(p => `<button data-tpt="${p[0]}" class="${p[0] === WSI.tpTab ? "on" : ""}">${p[1]}</button>`).join("")}</div>`;
+  panes.forEach(([k, , els]) => { const d = document.createElement("div"); d.className = "tp-pane" + (k === WSI.tpTab ? " on" : ""); d.dataset.p = k; els.forEach(el => d.appendChild(el)); right.appendChild(d); });
+  body.append(left, right);
+  dr.innerHTML = ""; dr.append(head, body);
+}
+/* ---------------- ticker panel: compact visuals (the full text stays one click away) ---------------- */
+function htmlEl(h){ const d = document.createElement("div"); d.innerHTML = h.trim(); return d.firstElementChild; }
+function foldEls(els, label){ if (!els.length) return []; const d = document.createElement("details"); d.className = "tp-fold"; d.innerHTML = `<summary>${esc(label)}</summary>`; els.forEach(el => d.appendChild(el)); return [d]; }
+// which targets the level chips and the ticket show — display only (adrb.tgtR: "2" | "3" | "both"); the board's 2R column and plan are unchanged
+const tgtMs = () => ({"2": [2], "3": [3], both: [2, 3]})[store.get("adrb.tgtR", "2")] || [2];
+const tgtOf = (r, m) => r.entry + m * (r.entry - r.stop);
+const tgtChips = r => tgtMs().map(m => `<span class="t" title="${m}R = entry + ${m} × (entry − widest stop)">${m}R <b>${f2(tgtOf(r, m))}</b></span>`).join("");
+const tgtSeg = () => { const k = store.get("adrb.tgtR", "2"); return `<span class="tp-rsel" title="Targets to show on these chips and the ticket. Display only — the plan's 2R column is unchanged.">${[["2", "2R"], ["3", "3R"], ["both", "Both"]].map(([v, l]) => `<button data-tgt="${v}" class="${k === v ? "on" : ""}">${l}</button>`).join("")}</span>`; };
+function tgtTiles(r){ const risk = r.entry - r.stop; return tgtMs().map(m => `<div class="t"><i>${m}R target</i><b>${f2(tgtOf(r, m))}</b><small>+${f2(m * risk)} · +${(m * risk / r.entry * 100).toFixed(1)}%</small></div>`).join(""); }
+function tpTicket(r){
+  const k = scRow(r), z = sizeFor(r), g = sizeGrade(r), risk = r.entry - r.stop, inZ = r.last >= r.zLo && r.last <= r.zHi;
+  const [lo, hi] = zr(), F = CFG.stopFrac, n2 = v => v == null ? "—" : v.toFixed(2);
+  const lineTxt = CFG.zMode === "e21" ? `21 EMA ${n2(r.e21)}` : CFG.zMode === "e9" ? `9 EMA ${n2(r.e9)}` : `higher of 9 EMA ${n2(r.e9)} and 21 EMA ${n2(r.e21)} = ${n2(k.line)}`;
+  const ok = !k.fails.length;
+  return `<div class="tkt">
+    <div class="tkt-row">
+      <div><i>Entry</i><b>${f2(r.entry)}</b><small>${inZ ? "last price, in the zone" : r.last > r.zHi ? "top of the zone" : "bottom of the zone"}</small></div>
+      <div><i>Buy zone</i><b>${f2(r.zLo)} – ${f2(r.zHi)}</b><small>mode ${zm().n} · ${zoneRange()}</small></div>
+      <div class="s"><i>Widest stop</i><b>${f2(r.stop)}</b><small>−${f2(risk)} · −${(risk / r.entry * 100).toFixed(1)}%</small></div>
+      <span data-tgtt style="display:contents">${tgtTiles(r)}</span>
+      <div><i>Size</i><b>${g.g}${g.step ? ` <span class="small">(−${g.step})</span>` : ""}</b><small>${z ? `${z.shares.toLocaleString()} sh · ${z.pct}% NLV` : "add NLV for shares"}</small></div>
+    </div>
+    <details class="work"><summary>Show the working <span class="${ok ? "okc" : "noc"}">${ok ? "✓ matches a separate recompute" : `✗ ${k.fails.length} mismatch${k.fails.length > 1 ? "es" : ""} — don't trust these levels`}</span></summary>
+      <ol>
+        <li>One ADR = last ${n2(k.P)} × ADR ${f2(r.adr)}% = <b>$${n2(k.D)}</b></li>
+        <li>Buy-zone line (mode ${zm().n}) = ${lineTxt}</li>
+        <li>Zone = ${n2(k.line)} ${lo < 0 ? "−" : "+"} ${Math.abs(lo)} × ${n2(k.D)} to ${n2(k.line)} + ${hi} × ${n2(k.D)} = <b>${n2(k.zLo)} – ${n2(k.zHi)}</b></li>
+        <li>Entry = ${inZ ? `last price ${n2(k.P)} (inside the zone)` : `nearest zone edge`} = <b>${n2(k.entry)}</b></li>
+        <li>Widest stop = ${n2(k.entry)} − ${F} × ${n2(k.D)} = <b>${n2(k.stop)}</b></li>
+        ${tgtMs().map(m => `<li>${m}R = ${n2(k.entry)} + ${m} × (${n2(k.entry)} − ${n2(k.stop)}) = <b>${n2(k.entry + m * (k.entry - k.stop))}</b></li>`).join("")}
+        <li>Size step: ${r.a50 === false ? "under the 50 SMA" : r.a200 === false ? "under the 200 SMA (above the 50)" : "above the 50 and 200 SMA"} → base grade ${esc(CFG.grade)} ${k.step ? `down ${k.step}` : "unchanged"} = <b>${g.g}</b>${z ? ` · ${CFG.nlv.toLocaleString()} × ${z.pct}% ÷ ${n2(risk)} = <b>${z.shares.toLocaleString()} shares</b>` : ""}</li>
+        <li>State: ${n2(((k.P - k.line) / k.D))} ADR from the line → <b>${esc(k.st ? ST[k.st].name : "—")}</b></li>
+      </ol>
+      ${ok ? "" : `<div class="note"><b>Mismatch:</b> ${k.fails.map(f => `${esc(f.what)} — board ${esc(String(f.board))}, recompute ${esc(String(f.mine))}`).join("; ")}</div>`}
+      <div class="small">Worked out again from the CSV inputs with a separate short copy of your written rules — not the board's own code. Redo any line on a calculator to check (shown rounded to cents, so the last digit can be one cent off).</div>
+    </details></div>`;
+}
+function tpHist(r){
+  const x = r.hx, v = vsOf(r), ss = r.ss, n = d => d == null ? "—" : d;
+  const tile = (k, val, sub = "", c = "") => `<div class="hxt ${c}"><i>${k}</i><b>${val}</b>${sub ? `<small>${sub}</small>` : ""}</div>`;
+  const pts = (l, d) => { if (d == null) return `<div class="hxb"><span>${l}</span><div class="dbar"><div class="axis"></div></div><b>—</b></div>`; const w = Math.min(Math.abs(d) / 20, 1) * 50; return `<div class="hxb"><span>${l}</span><div class="dbar"><div class="axis"></div><div class="f ${d >= 0 ? "pos" : "neg"}" style="width:${w}%"></div></div><b class="${cls(d)}">${sg(d, 1)}</b></div>`; };
+  let h = `<div class="hx">
+    <div class="hx-h">Price history <small>last complete session</small></div>
+    <div class="hxtiles">
+      ${tile("Closes in zone", `${n(x.cib)}<span class="small">/30</span>`, zStrip(r))}
+      ${tile(`Above the ${esc(zm().short)}`, x.daysAbove ? (x.aboveCapped ? "All history" : `${x.daysAbove}d`) : "Under", x.daysAbove ? "sessions in a row" : "", x.daysAbove ? "" : "bad")}
+      ${tile("No new 5-day low", `${n(x.hld)}d`, "sessions")}
+      ${tile("Last volume", x.volR != null ? x.volR.toFixed(1) + "×" : "—", "vs average")}
+      ${tile("Buy / sell volume", x.accum != null ? x.accum.toFixed(2) + "×" : "—", x.accum == null ? "" : x.accum >= 1 ? "buyers heavier" : "sellers heavier", x.accum != null && x.accum < 0.9 ? "bad" : "")}
+      ${tile("52-week high", x.dsh != null ? `${x.dsh}d ago` : "—")}
+      ${x.atr ? tile("ATR", "$" + f2(x.atr), `ADR $${f2(r.adrD)}`) : ""}
+    </div>
+    <div class="hx-h">vs benchmark <small>RS points</small></div>
+    <div class="hxbars">${pts("2W", x.rs2w)}${pts("4W", x.rs4w)}${pts("10W", x.rs10w)}</div>`;
+  if (v) {
+    const L = VSL[v.k], T = VS_T, ck = (ok, t, tip) => `<span class="hxc ${ok ? "ok" : "no"}" title="${esc(tip)}">${ok ? "✓" : "✗"} ${t}</span>`;
+    h += `<div class="hx-h">Volatility <span class="pill ${L.c}">${L.n}</span></div>
+      <div class="hxd">${esc(L.d)}</div>
+      <div class="rmv" title="RMV 0–100: where today's range sits against its own recent history. Gate 1 at ${T.g1}, quiet at ${T.g2}."><div class="rmvb"><i style="width:${Math.max(1, Math.min(100, v.rmv))}%"></i><u style="left:${T.g1}%"></u><u style="left:${T.g2}%"></u></div><b>RMV ${Math.round(v.rmv)}</b></div>
+      <div class="hxchips">${ck(v.g1, `Gate 1 · RMV ≤ ${T.g1}`, "Tight right now")}${ck(v.g2, `Gate 2 · ${v.cb}/${T.g2n} quiet bars`, `${v.cb} bars at RMV ${T.g2} or under; needs ${T.g2n}`)}</div>
+      <div class="hxchips"><span class="small" style="margin-right:2px">Confirmations ${v.conf}/4</span>${ck(v.dry, `volume dry ${v.vdu == null ? "—" : Math.round(v.vdu) + "%"}`, `Volume ${T.dry}% of normal or less`)}${ck(v.brT, `range ${Math.round(v.brr)}%`, `Bar range ${T.brT}% of normal or less`)}${ck(v.ctT, `closes ${Math.round(v.ct)}`, `Close tightness ${T.ct} or less`)}${ck(v.bwT, `base ${v.bw.toFixed(2)}×`, `Base width ${T.bw}× or less`)}</div>
+      <div class="small">Last 10 sessions: <b>${v.w10}</b> wide bar${v.w10 === 1 ? "" : "s"} (> ${T.wide} ADR) · <b>${v.g10}</b> open gap${v.g10 === 1 ? "" : "s"} (> ${T.gap} ADR)</div>`;
+  }
+  if (ss) {
+    const SHORT = ["Behind bench 2/4/10W", "Weakening faster", "RS new low first", "Down on an up day", "Selling > buying", "Trend down 9<21", "Bottom ¼ of group"];
+    h += `<div class="hx-h">Short score <b>${ss.n}/7</b> <span class="sdots">${ss.items.map(i => `<i class="${i.ok ? "on" : ""}"></i>`).join("")}</span></div>
+      <div class="hxchips">${ss.items.map((i, k) => `<span class="hxc ${i.ok == null ? "na" : i.ok ? "weak" : "fine"}" title="${esc(i.t)} — ${i.ok == null ? "no data" : i.ok ? "weak" : "fine"}">${esc(SHORT[k] || i.t)}</span>`).join("")}</div>
+      ${r.sLoc || (r.sBlock && r.sBlock.length) ? `<div class="small">${r.sLoc ? `Where: <b>${esc(r.sLoc)}</b>` : ""}${r.sBlock && r.sBlock.length ? `${r.sLoc ? " · " : ""}Blockers: ${esc(r.sBlock.join(", "))}` : ""}</div>` : ""}`;
+  }
+  return h + `</div>`;
+}
+$("drawer").addEventListener("click", e => {
+  const tg = e.target.closest("[data-tgt]");
+  if (tg) {
+    store.set("adrb.tgtR", tg.dataset.tgt); const dr = $("drawer"), r = S.rowBySym && S.rowBySym.get(WSI.cur); if (!r) return;
+    dr.querySelectorAll("[data-tgt]").forEach(b => b.classList.toggle("on", b === tg));
+    const c = dr.querySelector("[data-tgtc]"); if (c) c.innerHTML = tgtChips(r);
+    const old = dr.querySelector(".tkt"); if (old) { const open = old.querySelector("details").open, nw = htmlEl(tpTicket(r)); nw.querySelector("details").open = open; old.replaceWith(nw); }
+    return;
+  }
+  const t = e.target.closest("[data-tpt]");
+  if (t) { WSI.tpTab = t.dataset.tpt; store.set("adrb.tpTab", WSI.tpTab); $("drawer").querySelectorAll("[data-tpt]").forEach(x => x.classList.toggle("on", x === t)); $("drawer").querySelectorAll(".tp-pane").forEach(p => p.classList.toggle("on", p.dataset.p === WSI.tpTab)); return; }
+  if (e.target.closest("[data-tpb]")) { tpBack(); return; }
+  const s = e.target.closest("[data-tps]"); if (s) tpStep(+s.dataset.tps);
+});
+
+/* ---------------- build the workspace shell ---------------- */
+if (WS) {
+  const hdr = document.querySelector("header.top");
+  document.body.insertAdjacentHTML("afterbegin", `<aside id="side">
+    <div class="sb-brand"><span class="sb-logo"></span><b>Deep Space Board</b><button class="sb-ic" id="sbMin" title="Collapse / expand the sidebar">«</button></div>
+    <div class="sb-file" id="sbFile"></div>
+    <div id="sbNav"></div>
+    <div class="sb-blk"><span class="lbl">Files</span><div class="sb-files" id="sbFiles"></div></div>
+    <div class="sb-blk sb-foot"><div class="sb-keys"><kbd>/</kbd> ticker search · <kbd>1</kbd>–<kbd>9</kbd> pages<br><kbd>←</kbd> <kbd>→</kbd> step the list in the ticker panel · <kbd>Esc</kbd> close</div>
+      <span class="sb-tools" id="sbTools"></span><button class="btn sm" id="wsClassic" title="Back to the top-tab layout (the page reloads; your saved files come back)">Classic layout</button></div>
+  </aside>`);
+  $("sbFile").appendChild($("fileInfo"));
+  // tabs → sidebar, in decision order with headings
+  const tabs = $("tabs"); $("sbNav").appendChild(tabs);
+  NAV.forEach(([h, items], gi) => {
+    tabs.insertAdjacentHTML("beforeend", `<div class="nvh">${gi < 4 ? `<span>${gi + 1}</span>` : ""}${h}</div>`);
+    items.forEach(([t, sub]) => { const b = tabs.querySelector(`button[data-tab="${t}"]`); if (b) { b.dataset.sub = sub; b.title = sub; tabs.appendChild(b); } });
+  });
+  tabs.querySelectorAll("button[data-tab]").forEach(b => { if (!b.dataset.sub) tabs.appendChild(b); });   // anything added later stays reachable
+  // file actions → sidebar
+  ["loadBtn", "etfBtn", "brBtn", "addBtn", "baseBtn", "snapBtn", "snapOpenBtn", "etfChip", "brChip"].forEach(id => { const el = $(id); if (el) $("sbFiles").appendChild(el); });
+  $("loadBtn").classList.add("full");
+  $("sbTools").append($("setBtn"), $("themeBtn"));
+  $("setBtn").innerHTML = `⚙<span class="t"> Settings</span>`; $("setBtn").title = "Settings"; $("setBtn").classList.add("sm"); $("themeBtn").classList.add("sm");
+  // keep the sticky filter bar right under the context bar, whatever its height
+  try { new ResizeObserver(() => document.documentElement.style.setProperty("--tbh", Math.ceil(hdr.getBoundingClientRect().height) + "px")).observe(hdr); } catch (e) {}
+  // context bar: page title left, chips right, ticker search
+  hdr.insertAdjacentHTML("afterbegin", `<div class="pg"><b id="pgT">Load your files</b><span id="pgS">Drop TradingView screener CSVs anywhere on this page</span></div>`);
+  hdr.insertAdjacentHTML("beforeend", `<span class="tksearch" title="Type a ticker or a group name, then Enter"><input type="text" id="tkQ" list="tkList" placeholder="Ticker or group" autocomplete="off" spellcheck="false"><kbd>/</kbd><datalist id="tkList"></datalist></span>`);
+  // Today and Market read top-down: environment → sectors/groups → names
+  const re = (tab, els) => els.filter(Boolean).forEach(el => tab.appendChild(el));
+  { const t = $("tab-today"), up = $("sectors").closest(".g2e"), ip = $("ipBox").closest(".g2e"), nw = $("nwBox").closest(".card"), mv = $("movers").closest(".card");
+    re(t, [t.querySelector(".controls"), $("tapeBox"), $("kpis"), up, $("gapCard"), ip, nw, mv, $("tblToday")]); }
+  { const t = $("tab-market"), bf = $("mkBreadth").closest(".card"), bench = $("mkBench").closest(".g2e"), sec = $("mkSector").closest(".card");
+    re(t, [$("mkTape"), $("mkKpis"), bench, $("hlCard"), sec, bf]); }
+  // sidebar collapse
+  if (store.get("adrb.sbMin", false)) document.documentElement.classList.add("sbmin");
+  $("sbMin").onclick = () => { const on = document.documentElement.classList.toggle("sbmin"); store.set("adrb.sbMin", on); $("sbMin").textContent = on ? "»" : "«"; };
+  if (store.get("adrb.sbMin", false)) $("sbMin").textContent = "»";
+  $("wsClassic").onclick = () => setLayout("classic");
+  // tab switch → top of the page
+  tabs.addEventListener("click", e => {
+    const a = e.target.closest(".nvsec a[data-sec]");
+    if (a) { const s = WSI.secs[+a.dataset.sec]; if (s) { WSI.pin = +a.dataset.sec; jumpTo(s[0]); } return; }
+    if (e.target.closest("button[data-tab]")) scrollTo({top: 0});
+  });
+  addEventListener("scroll", () => { if (WSI._raf) return; WSI._raf = requestAnimationFrame(() => { WSI._raf = 0; spy(); }); }, {passive: true});
+  // folded intro text
+  document.addEventListener("click", e => { const l = e.target.closest("#app .lede"); if (l && !e.target.closest("a, button, input, select")) l.classList.toggle("open"); });
+  document.querySelectorAll("#app .lede").forEach(l => l.title = "Click to show or hide the full note");
+  // ticker search
+  const q = $("tkQ");
+  const go = () => {
+    const v = q.value.trim(); if (!v || !S.snap) return;
+    const sym = v.toUpperCase().replace(/^.*:/, "");
+    if (S.rowBySym && S.rowBySym.has(sym)) { WSI.list = []; openDrawer(sym); q.value = ""; q.blur(); return; }
+    const g = S.groups.find(x => x.name.toLowerCase() === v.toLowerCase()) || S.groups.find(x => x.name.toLowerCase().startsWith(v.toLowerCase()));
+    if (g) { groupDrawer(g.name); q.value = ""; q.blur(); return; }
+    toast(`${v} isn't in this file`);
+  };
+  q.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); go(); } if (e.key === "Escape") { q.value = ""; q.blur(); } });
+  q.addEventListener("change", () => { const v = q.value.trim().toUpperCase(); if (S.rowBySym && S.rowBySym.has(v)) go(); });
+  // keys
+  document.addEventListener("keydown", e => {
+    if (e.metaKey || e.ctrlKey || e.altKey || /input|textarea|select/i.test(document.activeElement.tagName)) return;
+    const dOpen = $("drawer").classList.contains("open");
+    if (e.key === "/") { e.preventDefault(); q.focus(); q.select(); return; }
+    if (dOpen && (e.key === "ArrowRight" || e.key === "ArrowLeft")) { e.preventDefault(); tpStep(e.key === "ArrowRight" ? 1 : -1); return; }
+    if (dOpen && e.key === "Backspace") { e.preventDefault(); tpBack(); return; }
+    if (!dOpen && !$("settings").classList.contains("open") && /^[1-9]$/.test(e.key) && S.snap) { const b = $("tabs").querySelectorAll("button[data-tab]")[+e.key - 1]; if (b) b.click(); }
+  });
+}
+
+/* ---------------- Settings: layout switch (both layouts) ---------------- */
+const _renderSettings1 = renderSettings;
+renderSettings = function(){
+  _renderSettings1();
+  const h = $("settings").querySelector("h3"); if (!h) return;
+  h.insertAdjacentHTML("afterend", `<h4>Layout</h4><div class="row"><div>Workspace layout<div class="d">Sidebar with the pages in top-down order, a jump list for the page you're on, ticker search, and the wide two-column ticker panel. Off = the classic top-tab layout. Switching reloads the page; your saved files come back on their own.</div></div><div><input type="checkbox" id="wsTog" ${WS ? "checked" : ""}></div></div>`);
+  $("wsTog").onchange = e => setLayout(e.target.checked ? "ws" : "classic");
+};
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   SELF-CHECK (18 Oct) — a second, separate pass over the board's numbers, so Eugene can trust or catch them
+   without an outside tester. scRow() recomputes ADR $, the buy-zone line, zone, entry, widest stop, 2R, state and
+   the SMA size step from the CSV inputs with its own short copy of the written rules (CLAUDE.md, trading rules) —
+   it never calls the board's compute code. selfCheck() runs it on every row, checks the plan/on-deck lists obey
+   their own filters, compares rule settings with the written spec and flags data problems. Shown on Data check
+   (both layouts) with a nav badge; the ticker panel's "Show the working" uses scRow() too. Read-only.
+   ===================================================================== */
+function scRow(r){
+  const fails = [], near = (a, b) => (a == null && b == null) || (a != null && b != null && Math.abs(a - b) <= 1e-6 * Math.max(1, Math.abs(b)));
+  const C = (ok, what, board, mine) => { k.n++; if (!ok) fails.push({sym: r.sym, what, board, mine}); };
+  const P = S.mode === "pm" ? (r.pmp ?? r.price) : r.price;
+  const adr = r.adr > 0 ? r.adr : null, D = adr && P != null ? P * adr / 100 : null;
+  const [lo, hi] = (CFG.zones && CFG.zones[CFG.zMode]) || DEFAULTS.zones[CFG.zMode], eps = 1e-9;
+  const k = {n: 0, P, D, fails, line: null, zLo: null, zHi: null, entry: null, stop: null, tgt: null, st: null, step: null};
+  C(near(r.last, P), "Last price", r.last, P);
+  C(near(r.adrD, D), "One ADR in dollars", f2(r.adrD), f2(D));
+  // SMA size step: one grade down under the 200, one more under the 50
+  const a50 = r.s50 != null && P != null ? P > r.s50 : null, a200 = r.s200 != null && P != null ? P > r.s200 : null;
+  k.step = (a50 === false ? 1 : 0) + (a200 === false ? 1 : 0);
+  C(r.smaStep === k.step, "SMA size step", r.smaStep, k.step);
+  if (r.e9 == null || r.e21 == null || !D) { C(r.zLo == null && r.state == null, "No zone without EMAs and ADR", r.zLo, null); return k; }
+  // line: mode 1 = 21 EMA, mode 2 = top of the 9/21 band, mode 3 = 9 EMA
+  k.line = CFG.zMode === "e21" ? r.e21 : CFG.zMode === "e9" ? r.e9 : Math.max(r.e9, r.e21);
+  k.zLo = k.line + lo * D; k.zHi = k.line + hi * D;
+  k.entry = P >= k.zLo && P <= k.zHi ? P : P > k.zHi ? k.zHi : k.zLo;
+  k.stop = k.entry - CFG.stopFrac * D;
+  k.tgt = k.entry + 2 * (k.entry - k.stop);
+  C(near(r.zLo, k.zLo) && near(r.zHi, k.zHi), "Buy zone", `${f2(r.zLo)}–${f2(r.zHi)}`, `${f2(k.zLo)}–${f2(k.zHi)}`);
+  C(near(r.entry, k.entry), "Entry", f2(r.entry), f2(k.entry));
+  C(near(r.stop, k.stop), "Widest stop", f2(r.stop), f2(k.stop));
+  C(near(r.target, k.tgt), "2R target", f2(r.target), f2(k.tgt));
+  C(r.stop < r.entry && r.entry < r.target, "Stop below entry below target", `${f2(r.stop)} / ${f2(r.entry)} / ${f2(r.target)}`, "stop < entry < 2R");
+  // state, best first: 7 broken, 6 under the 50, 5 under the zone, 4 extended, 1 in zone, 2 wait, 3 above
+  const x = (P - k.line) / D, lag = r.s50 != null && r.e9 < r.e21 && r.e21 < r.s50;
+  const ext = r.s50 && adr ? (P / r.s50 - 1) * 100 / adr : null;
+  let st = null;
+  if (a50 == null) st = null;
+  else if ((a50 === false && a200 === false) || (CFG.zMode === "band" && lag)) st = 7;
+  else if (a50 === false) st = 6;
+  else if (x < lo - eps) st = 5;
+  else if (!r.etf && ext != null && ext > CFG.extCap && !r.postER) st = 4;
+  else if (x <= hi + eps) st = 1;
+  else if (x <= hi + CFG.waitW + eps) st = 2;
+  else st = 3;
+  k.st = st;
+  C(r.state === st, "State", r.state ? ST[r.state].name : "—", st ? ST[st].name : "—");
+  return k;
+}
+function selfCheck(){
+  const R = {n: 0, fails: [], spec: [], warn: [], at: new Date()};
+  if (!S.snap) return R;
+  for (const r of S.rows) { const k = scRow(r); R.n += k.n; R.fails.push(...k.fails); }
+  // plan and on deck follow their own filters
+  const F = (ok, sym, what, board, mine) => { R.n++; if (!ok) R.fails.push({sym, what, board, mine}); };
+  const pl = S.plan.plan, deck = S.plan.deck.map(d => d.r), inPlan = new Set(pl.map(r => r.sym)), gc = {};
+  const wild = r => !!(r.hx && r.hx.vs && r.hx.vs.k === "wild");
+  pl.forEach((r, i) => {
+    gc[r.group] = (gc[r.group] || 0) + 1;
+    F(r.state === 1 || r.state === 2, r.sym, "Plan name in the zone or waiting", ST[r.state] ? ST[r.state].name : "—", "In the buy zone / Wait for a pullback");
+    F((r.rs ?? 0) >= CFG.rsMin, r.sym, `Plan name RS ≥ ${CFG.rsMin}`, r.rs, `≥ ${CFG.rsMin}`);
+    F(!(CFG.hideER && r.erSoon), r.sym, "Earnings hidden when 'Hide earnings' is on", `${r.erIn}d`, `> ${CFG.erDays}d`);
+    F(!(CFG.liqOnly && r.thin), r.sym, "Liquid only", "thin", "liquid");
+    F(S.ui.planOnly !== "buy" || r.state === 1, r.sym, "'Buy zone only' view", ST[r.state].name, ST[1].name);
+    F(!(CFG.wildDeck && wild(r)), r.sym, "Wild names on deck when the toggle is on", "in plan", "on deck");
+    if (i) F((pl[i - 1].rs ?? 0) >= (r.rs ?? 0), r.sym, "Plan ranked by RS", `RS ${r.rs} after ${pl[i - 1].rs}`, "highest first");
+  });
+  F(pl.length <= CFG.planN, "—", "Plan within the list size", pl.length, `≤ ${CFG.planN}`);
+  if (CFG.perGroup > 0) for (const g in gc) F(gc[g] <= CFG.perGroup, g, "Max per group", gc[g], `≤ ${CFG.perGroup}`);
+  deck.forEach(r => { F(!inPlan.has(r.sym), r.sym, "On deck and in the plan at once", "both", "one"); F(r.state != null && r.state < 6, r.sym, "On deck only above the 50 SMA", ST[r.state] ? ST[r.state].name : "—", "states 1–5"); });
+  // nobody left off without a reason (list full, group cap, Wild toggle, buy-only view)
+  const pool = (CFG.inclETF ? S.rows : S.stocks).filter(r => (!CFG.liqOnly || !r.thin) && gOK(r));
+  const minRs = pl.length ? Math.min(...pl.map(r => r.rs ?? 0)) : -1;
+  pool.filter(r => (r.state === 1 || r.state === 2) && (r.rs ?? 0) >= CFG.rsMin && !(CFG.hideER && r.erSoon) && !inPlan.has(r.sym)).forEach(r => {
+    if ((CFG.wildDeck && wild(r)) || (S.ui.planOnly === "buy" && r.state !== 1)) return;
+    const capped = CFG.perGroup > 0 && (gc[r.group] || 0) >= CFG.perGroup;
+    F(capped || (pl.length >= CFG.planN && (r.rs ?? 0) <= minRs), r.sym, "Left off the plan without a reason", `RS ${r.rs}, not listed`, "in the plan");
+  });
+  // rule settings vs the written spec (Chart & Entry Spec v6.0) — a change here is allowed, just visible
+  const sp = (l, ok, v, want) => R.spec.push({l, ok, v, want});
+  const zz = (CFG.zones && CFG.zones[CFG.zMode]) || DEFAULTS.zones[CFG.zMode];
+  sp("Buy zone", CFG.zMode === "band" && zz[0] === 0 && zz[1] === 0.5, `mode ${zm().n}, ${zoneRange()}`, "mode 2, 0 to +0.5 ADR above the 9/21 band");
+  sp("Widest stop", +CFG.stopFrac === 0.5, `${CFG.stopFrac} ADR`, "0.5 ADR");
+  sp("Extension cap", +CFG.extCap === 4, `${CFG.extCap} ADR from the 50 SMA`, "4 ADR");
+  sp("Wait band", +CFG.waitW === 1, `${CFG.waitW} ADR`, "1 ADR");
+  sp("Low-of-day cap", +CFG.lodCap === 0.6, `${CFG.lodCap} ADR`, "0.6 ADR");
+  // data problems worth knowing about
+  const st = S.stocks, noAdr = st.filter(r => !(r.adr > 0)).length, noEma = st.filter(r => r.e9 == null || r.e21 == null || r.s50 == null).length;
+  if (noAdr) R.warn.push(`${noAdr} of ${st.length} stocks have no ADR — no zone, stop or state for them.`);
+  if (noEma) R.warn.push(`${noEma} of ${st.length} stocks are missing the 9 / 21 EMA or 50 SMA.`);
+  const badRs = S.rows.filter(r => r.rs != null && (r.rs < 1 || r.rs > 99)).length; R.n++; if (badRs) R.fails.push({sym: "—", what: "RS outside 1–99", board: badRs + " names", mine: "1–99"});
+  const badPx = st.filter(r => !(r.last > 0)).length; if (badPx) R.warn.push(`${badPx} stocks have no price.`);
+  if (S.breadth && S.snap.asOf && S.breadth.asOf !== S.snap.asOf) R.warn.push(`Breadth file is dated ${S.breadth.asOf}, the stock file ${S.snap.asOf}.`);
+  if (S.has.hist && typeof HIST !== "undefined" && HIST.dates && HIST.dates.length) { const hd = HIST.dates[HIST.dates.length - 1]; if (S.snap.asOf && hd < S.snap.asOf && (new Date(S.snap.asOf) - new Date(hd)) / 864e5 > 4) R.warn.push(`Price history ends ${hd}, the stock file is ${S.snap.asOf} — refresh the history.`); }
+  return R;
+}
+function scReport(R){
+  return [`Deep Space Board self-check · ${S.snap ? S.snap.asOf : ""} · ${R.at.toLocaleString()}`, `${R.n.toLocaleString()} checks · ${R.fails.length} problems`,
+    ...R.fails.slice(0, 200).map(f => `PROBLEM ${f.sym} · ${f.what} · board ${f.board} · recompute ${f.mine}`),
+    ...R.spec.map(s => `${s.ok ? "spec ok" : "CHANGED"} · ${s.l}: ${s.v}${s.ok ? "" : ` (spec: ${s.want})`}`), ...R.warn.map(w => "NOTE " + w)].join("\n");
+}
+function renderSelfCheck(){
+  let box = $("scBox");
+  if (!box) { $("tab-data").querySelector(".lede").insertAdjacentHTML("afterend", `<div class="card g1" id="scBox"></div>`); box = $("scBox"); }
+  const R = SC.res = selfCheck(), ok = !R.fails.length, chg = R.spec.filter(s => !s.ok);
+  box.innerHTML = `<div class="hd"><h2>Self-check</h2><span class="sub">a separate second pass over the numbers on every load — if this is red, don't trust the levels until it's fixed</span><span class="spacer"></span><button class="btn sm" id="scCopy">Copy report</button><button class="btn sm" id="scRun">Run again</button></div>
+    <div class="bd"><div class="scv ${ok ? "ok" : "no"}"><b>${ok ? "✓ All " + R.n.toLocaleString() + " checks passed" : "✗ " + R.fails.length + " problem" + (R.fails.length > 1 ? "s" : "") + " found"}</b>
+      <span>Recomputed for all ${S.rows.length.toLocaleString()} tickers from the CSV inputs with a short separate copy of your rules: one ADR in dollars, buy-zone line and zone, entry, widest stop, 2R, state and the SMA size step. Then checked that the plan and on-deck lists obey their filters (RS, list size, group cap, earnings, liquidity) and that no qualifying name was left off.</span></div>
+      ${ok ? "" : `<div class="tscroll" style="max-height:320px"><table class="mini"><thead><tr><th class="l">Ticker</th><th class="l">Check</th><th class="l">Board says</th><th class="l">Recompute says</th></tr></thead><tbody>${R.fails.slice(0, 200).map(f => `<tr ${S.rowBySym && S.rowBySym.has(f.sym) ? `data-sym="${esc(f.sym)}"` : ""}><td class="l sym">${esc(f.sym)}</td><td class="l">${esc(f.what)}</td><td class="l">${esc(String(f.board))}</td><td class="l">${esc(String(f.mine))}</td></tr>`).join("")}</tbody></table></div>`}
+      <div class="scgrid"><div><div class="lbl">Rule settings vs your written spec</div>${R.spec.map(s => `<div class="scs"><span class="${s.ok ? "ok-t" : "neg"}">${s.ok ? "✓" : "≠"}</span> ${esc(s.l)}: <b>${esc(s.v)}</b>${s.ok ? "" : ` <span class="small">(spec ${esc(s.want)})</span>`}</div>`).join("")}${chg.length ? `<div class="small" style="margin-top:4px">Changed settings are allowed — the board just shows you're off the written rule.</div>` : ""}</div>
+      <div><div class="lbl">Data notes</div>${R.warn.length ? R.warn.map(w => `<div class="scs">· ${esc(w)}</div>`).join("") : `<div class="scs dim">Nothing unusual in the files.</div>`}</div></div>
+      <div class="small" style="margin-top:8px">Not covered: price-history signals (RS line, volatility state, short score) and live prices — spot-check those against TradingView. Every ticker panel has a "Show the working" box with the sums written out.</div></div>`;
+  $("scCopy").onclick = () => copyText(scReport(R), "Self-check report copied");
+  $("scRun").onclick = () => { renderSelfCheck(); navBadges(); toast(SC.res.fails.length ? `${SC.res.fails.length} problems` : "All checks passed"); };
+  box.querySelector("tbody")?.addEventListener("click", e => { const tr = e.target.closest("tr[data-sym]"); if (tr) openDrawer(tr.dataset.sym); });
+}
+const SC = {res: null};
+const _navBadges1 = navBadges;
+navBadges = function(){
+  _navBadges1();
+  if (!S.snap) return;
+  try { SC.res = selfCheck(); } catch (e) { SC.res = {n: 0, fails: [{sym: "—", what: "Self-check crashed: " + e.message, board: "", mine: ""}], spec: [], warn: [], at: new Date()}; }
+  const b = document.querySelector('#tabs button[data-tab="data"]'), n = SC.res.fails.length;
+  if (b) b.insertAdjacentHTML("beforeend", `<span class="nb ${n ? "r" : "g"}" title="${n ? n + " self-check problems — open Data check" : "Self-check: all " + SC.res.n + " checks passed"}">${n ? "✗ " + n : "✓"}</span>`);
+};
+const _renderTab2 = renderTab;
+renderTab = function(t){ if (t === "data" && S.snap) renderSelfCheck(); _renderTab2(t); };   // card first, so the jump list sees it
 </script>
 </body>
 </html>
