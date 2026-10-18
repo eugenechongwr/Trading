@@ -4288,7 +4288,7 @@ function volState(c, h, l, v, nc){
   return {k, rmv: R, cb, g1, g2, brr, vdu, dry, brT, ct, ctT, bw, bwT, conf, w10, g10, n10, n5};
 }
 const vsOf = r => (r.hx && r.hx.vs) || null;
-const vsPill = r => { const x = vsOf(r); if (!x) return `<span class="dim small">${S.has.hist ? "too new" : "load price history"}</span>`; const L = VSL[x.k]; return `<span class="pill ${L.c}" title="${esc(L.d)}">${L.n}</span> <span class="small" title="RMV (0–100) · RMV+ confirmations met · wide bars or open gaps in the last 10 sessions">RMV ${Math.round(x.rmv)} · ${x.conf}/4${x.n10 ? ` · ${x.n10} noisy` : ""}</span>`; };
+const vsPill = r => { if (typeof s61Live === "function" && s61Live()) { const p = s61VsPill(r); if (p) return p; } const x = vsOf(r); if (!x) return `<span class="dim small">${S.has.hist ? "too new" : "load price history"}</span>`; const L = VSL[x.k]; return `<span class="pill ${L.c}" title="${esc(L.d)}">${L.n}</span> <span class="small" title="RMV (0–100) · RMV+ confirmations met · wide bars or open gaps in the last 10 sessions">RMV ${Math.round(x.rmv)} · ${x.conf}/4${x.n10 ? ` · ${x.n10} noisy` : ""}</span>`; };
 function vsLine(r){
   const x = vsOf(r); if (!x) return "";
   const ck = (ok, t) => `<span class="${ok ? "pos" : "neg"}">${ok ? "✓" : "✗"} ${t}</span>`;
@@ -7569,7 +7569,7 @@ function dssCalc(b, reg){
   return {tier, fail, sq, zone, basis, loc, braid, stack: stack ? 1 : 0, ext, xr: xReset ? 1 : 0, smaG: smaGate, stopFit, chase, depth, doh, vdu, rmv, rmvS: rmvScore, dur,
     adr, dvM: dollarVol / 1e6, perf, dcr, wcr, rsC, lvl, trd, nh: nh ? 1 : 0, rs1w: rs1w[t], rs1m: rs1m[t], rs3m: rs3m[t], rs6m: rs6m[t], p1m: p1m[t], thrust, key,
     reg: reg.code, dataOk: 1, benchOk: reg.ok && fin(bc[t]) ? 1 : 0,
-    _: {liqOk, rsOk, dev, kAdr, kS50, dl},
+    _: {liqOk, rsOk, dev, kAdr, kS50, dl, rmvPass, leader},
     ra: {ok: raOk ? 1 : 0, st: raOk ? (c[t] > s50[t] ? 2 : 1) : 0, acc, r1, r3, r6, q1, q3, q6, off}};
 }
 // column registry: [header, key, decimals (null = integer)]
@@ -7597,7 +7597,7 @@ function dssKey(){ const ts = todaySource(); return HIST.nD + "|" + (HIST.dates[
 function dssOf(sym){
   const k = dssKey(); if (DSF.key !== k) { DSF.key = k; DSF.map = new Map(); DSF.reg = dssRegime(); }
   if (DSF.map.has(sym)) return DSF.map.get(sym);
-  let d = null; try { const b = dssBars(sym); d = b && b.n >= 2 ? dssCalc(b, DSF.reg) : null; if (d) { d.bars = b.n; d.today = b.today; d.to = b.dates[b.n - 1]; d.close = b.c[b.n - 1]; d.tas = tasCalc(b); d.pl = plCalc(b); } } catch (e) { d = null; }
+  let d = null; try { const b = dssBars(sym); d = b && b.n >= 2 ? dssCalc(b, DSF.reg) : null; if (d) { d.bars = b.n; d.today = b.today; d.to = b.dates[b.n - 1]; d.close = b.c[b.n - 1]; d.tas = tasCalc(b); d.pl = plCalc(b); d.s61 = typeof s61Calc === "function" ? s61Calc(b) : null; } } catch (e) { d = null; }
   DSF.map.set(sym, d); return d;
 }
 function dssTurnover(sym){
@@ -7731,12 +7731,14 @@ function feedRows(){
 const fv = (v, dp) => v == null || v === "" || (typeof v === "number" && !isFinite(v)) ? "" : typeof v === "boolean" ? (v ? 1 : 0) : typeof v === "number" ? (dp == null ? Math.round(v) : +v.toFixed(dp)) : v;
 function feedCSV(){
   const q = v => { const s = String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
-  const H = ["Symbol", "Description", "Sector", "Industry", "Price", ...DSS_COLS.map(c => c[0]), ...FEED_X.map(c => c[0]), ...FEED_RA.map(c => c[0]), ...FEED_TAS, ...FEED_PL, ...FEED_B];
+  const X = s61Live() ? [] : FEED_X, RA = FEED_RA.filter(c => !DSS5_COLS.some(d => d[0] === c[0]));   // RS Accel20 pp sits in the screener block now
+  const H = ["Symbol", "Description", "Sector", "Industry", "Price", ...DSS5_COLS.map(c => c[0]), ...X.map(c => c[0]), ...RA.map(c => c[0]), ...FEED_TAS, ...FEED_PL, ...FEED_B, ...FEED_61.map(c => c[0])];
   const L = [H.map(q).join(",")];
   for (const o of feedRows()) {
     const r = o.r, d = o.d, last = r ? r.last : (d ? d.close : null);
-    L.push([o.sym, r ? r.desc || "" : "", r ? r.sector || "" : "", r ? r.industry || "" : "", fv(last, 4), ...DSS_COLS.map(([, k, dp]) => d ? fv(d[k], dp) : ""), ...FEED_X.map(([, k, dp]) => fv(o.six[k], dp)),
-      ...FEED_RA.map(([, k, dp]) => d ? fv(d.ra[k], dp) : ""), ...tasCells(o.sym, d, o.th), ...PL_COLS.map(([, k, dp]) => d && d.pl ? fv(d.pl[k], dp) : ""), ...o.b.map(v => fv(v))].map(q).join(","));
+    const V = s61V(o.sym, r), s6 = r && !r.etf ? s61Of(r) : null;
+    L.push([o.sym, r ? r.desc || "" : "", r ? r.sector || "" : "", r ? r.industry || "" : "", fv(last, 4), ...DSS5_COLS.map(([, f, dp]) => V ? fv(f(V), dp) : ""), ...X.map(([, k, dp]) => fv(o.six[k], dp)),
+      ...RA.map(([, k, dp]) => d ? fv(d.ra[k], dp) : ""), ...tasCells(o.sym, d, o.th), ...PL_COLS.map(([, k, dp]) => d && d.pl ? fv(d.pl[k], dp) : ""), ...o.b.map(v => fv(v)), ...FEED_61.map(([, f]) => s6 ? fv(f(s6)) : "")].map(q).join(","));
   }
   return L.join("\n");
 }
@@ -7760,20 +7762,21 @@ function feedExport(){
 // TradingView writes ">" in plot titles as "&gt;" — decode before matching; an "Indicator name: " prefix is dropped.
 const dssNorm = s => String(s || "").replace(/&gt;/g, ">").replace(/&lt;/g, "<").replace(/&amp;/g, "&").toLowerCase().replace(/^.*?:\s*(?=[a-z$%])/, m => /screener|tas|reaccel|deep space/.test(m) ? "" : m).replace(/[^a-z0-9%$σ]+/g, "");
 const CMP_T = {
-  dss: {name: "Deep Space Screener", test: h => /p1 fail code/.test(h) && /setup quality/.test(h), cols: DSS_COLS.map(([h, k, dp]) => ({h, f: d => d[k], int: dp == null, key: k}))},
+  dss: {name: "Deep Space Screener v4.1", test: h => /p1 fail code \(0=ready\)/.test(h) && /setup quality/.test(h), cols: DSS_COLS.map(([h, k, dp]) => ({h, f: d => d[k], int: dp == null, key: k}))},
   tas: {name: "Thematic Acceleration Screener", test: h => /sort key/.test(h) && /accel/.test(h), cols: TAS_COLS.map(([h, k, dp]) => ({h, f: d => d.tas ? d.tas[k] : NaN, int: dp == null, key: k}))},
   ra: {name: "REACCEL", test: h => /rs accel20/.test(h), cols: [["REACCEL", "ok"], ["Structure (1 early / 2 >50S)", "st"], ["RS Accel20 pp", "acc", 3], ["Perf 1M %", "r1", 2], ["Perf 3M %", "r3", 2], ["Perf 6M %", "r6", 2],
     ["RS 1M pp", "q1", 3], ["RS 3M pp", "q3", 3], ["RS 6M pp", "q6", 3], ["Off 52W High %", "off", 2]].map(([h, k, dp]) => ({h, f: d => d.ra[k], int: dp == null, key: k}))}
 };
 const cmpType = text => { const h = String(text).replace(/^﻿/, "").split("\n")[0].replace(/&gt;/g, ">").toLowerCase(); return Object.keys(CMP_T).find(k => CMP_T[k].test(h)) || null; };
-const isDssFile = text => cmpType(text) === "dss";
+const isDss = t => t === "dss" || t === "dss5";
+const isDssFile = text => isDss(cmpType(text));
 function dssCompare(name, text){
   const type = cmpType(text) || "dss", T = CMP_T[type];
   const g = parseCSV(String(text).replace(/^﻿/, "")); if (g.length < 2) { toast(name + ": no rows"); return; }
   const H = g[0].map(dssNorm), symI = H.findIndex(h => h === "symbol" || h === "ticker");
   if (symI < 0) { toast(name + ": no Symbol column"); return; }
   const colI = T.cols.map(c => H.indexOf(dssNorm(c.h)));
-  const res = {type, kind: T.name, name, at: Date.now(), rows: 0, both: 0, cols: T.cols.map(c => ({...c, n: 0, same: 0, diffs: []})), tierDiff: [], tierN: 0, tierSame: 0, notHere: [], noHist: [], conf: {}, theme: null};
+  const res = {type, kind: T.name, name, at: Date.now(), rows: 0, both: 0, cols: T.cols.map(c => ({...c, n: 0, same: 0, diffs: []})), tierDiff: [], tierN: 0, tierSame: 0, notHere: [], noHist: [], conf: {}, theme: null, log: type === "dss5" ? [] : null};
   const thI = H.indexOf(dssNorm("Theme ID")); if (type === "tas" && thI >= 0) res.theme = {n: 0, same: 0, zeroTV: 0, zeroBoard: 0, diffs: []};
   for (const row of g.slice(1)) {
     let sym = String(row[symI] || "").trim(); if (!sym) continue; if (sym.includes(":")) sym = sym.split(":").pop();
@@ -7783,14 +7786,15 @@ function dssCompare(name, text){
     const d = dssOf(sym); if (!d) { res.noHist.push(sym); continue; }
     res.both++;
     res.cols.forEach((c, j) => {
-      if (colI[j] < 0) return; const raw = row[colI[j]], tv = raw === "" || raw == null ? null : num(raw), mine = c.f(d);
+      if (colI[j] < 0) return; const raw = row[colI[j]], tv = raw === "" || raw == null ? null : num(raw), mine = c.f(d, r);
       if (tv == null && !fin(mine)) return;
       c.n++;
-      const ok = c.int ? fin(mine) && tv != null && Math.round(mine) === Math.round(tv) : fin(mine) && tv != null && Math.abs(mine - tv) <= Math.max(0.02 * Math.abs(tv), c.key === "key" ? 50 : 0.05);
+      const ok = c.int ? fin(mine) && tv != null && Math.round(mine) === Math.round(tv) : fin(mine) && tv != null && Math.abs(mine - tv) <= (c.tol != null ? c.tol + 1e-9 : Math.max(0.02 * Math.abs(tv), c.key === "key" ? 50 : 0.05));
       if (ok) c.same++; else c.diffs.push([sym, tv, fin(mine) ? mine : null]);
+      if (c.par && res.log) res.log.push([d.to || "", sym, c.h, fin(mine) ? +mine.toFixed(4) : "", tv == null ? "" : tv, fin(mine) && tv != null ? +(mine - tv).toFixed(4) : "", ok ? "ok" : "OUT"]);
     });
-    if (type === "dss") { const ti = colI[0], fi = colI[1];
-      if (ti >= 0 && row[ti] !== "") { const tv = Math.round(num(row[ti])); res.tierN++; const id = tv + "→" + d.tier; res.conf[id] = (res.conf[id] || 0) + 1; if (tv === d.tier) res.tierSame++; else res.tierDiff.push([sym, tv, d.tier, fi >= 0 ? num(row[fi]) : null, d.fail]); } }
+    if (isDss(type)) { const ti = colI[0], fi = colI[1], bt = T.tier ? T.tier(d, r) : d.tier, bf = T.fail ? T.fail(d, r) : d.fail;
+      if (ti >= 0 && row[ti] !== "") { const tv = Math.round(num(row[ti])); res.tierN++; const id = tv + "→" + bt; res.conf[id] = (res.conf[id] || 0) + 1; if (tv === bt) res.tierSame++; else res.tierDiff.push([sym, tv, bt, fi >= 0 ? num(row[fi]) : null, bf]); } }
     if (res.theme) { const tv = Math.round(num(row[thI])), th = tasTheme(sym, r ? r.industry : null); res.theme.n++; if (tv === th.id) res.theme.same++; else res.theme.diffs.push([sym, tv, th.id]); if (tv === 0) res.theme.zeroTV++; if (th.id === 0) res.theme.zeroBoard++; }
   }
   res.missingCols = T.cols.filter((c, j) => colI[j] < 0).map(c => c.h);
@@ -7817,7 +7821,7 @@ function cmpHTML(R, any){
   const conf = Object.entries(R.conf).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k.replace("→", " → ")}: ${v}`).join(" · ");
   return `<h4 style="margin:12px 0 4px">${esc(R.kind)} · compared with <b>${esc(R.name)}</b></h4>
     <div class="small">${R.rows} rows in that file · <b>${R.both}</b> scored by the board · ${R.notHere.length} not in this board's files or history${R.noHist.length ? ` · ${R.noHist.length} with too little stored history` : ""}${R.missingCols.length ? ` · columns not in that export: ${R.missingCols.map(esc).join(", ")}` : ""}</div>
-    ${R.type === "dss" ? `<div class="kpis" style="margin:8px 0"><div class="kpi card"><div class="k">Same Tier</div><div class="v ${R.tierN && R.tierSame / R.tierN >= 0.95 ? "pos" : "neg"}">${dssPct(R.tierSame, R.tierN)}</div><div class="n">${R.tierSame} of ${R.tierN} · Pine → board: ${esc(conf)}</div></div></div>` : ""}
+    ${isDss(R.type) ? `<div class="kpis" style="margin:8px 0"><div class="kpi card"><div class="k">Same Tier</div><div class="v ${R.tierN && R.tierSame / R.tierN >= 0.95 ? "pos" : "neg"}">${dssPct(R.tierSame, R.tierN)}</div><div class="n">${R.tierSame} of ${R.tierN} · Pine → board: ${esc(conf)}</div></div>${R.log ? `<div class="kpi card"><div class="k">Parity fields in tolerance</div><div class="v ${R.log.length && R.log.every(x => x[6] === "ok") ? "pos" : "neg"}">${dssPct(R.log.filter(x => x[6] === "ok").length, R.log.length)}</div><div class="n">${R.log.filter(x => x[6] !== "ok").length} outside · <button class="btn sm" data-feed="plog">Download parity log</button></div></div>` : ""}</div>` : ""}
     ${R.theme ? `<div class="small" style="margin:6px 0"><b>Theme ID</b>: board and TradingView agree on ${R.theme.same} of ${R.theme.n}. TradingView left <b>${R.theme.zeroTV}</b> unmapped (its baked-in list is from an older universe), the board left <b>${R.theme.zeroBoard}</b> (no override and no industry match). ${R.theme.diffs.slice(0, 20).map(([s, a, b]) => `${esc(s)} ${a}→${b}`).join(" · ")}</div>` : ""}
     <div class="tscroll" style="max-height:360px"><table class="mini"><thead><tr><th class="l">Column</th><th>Compared</th><th>Match</th><th class="l">First differences (TradingView vs board)</th></tr></thead><tbody>${colRows}</tbody></table></div>
     ${R.tierDiff.length ? `<div class="small" style="margin-top:6px"><b>Tier differs</b> (TradingView tier/fail code → board tier/fail code): ${R.tierDiff.slice(0, 60).map(([s, a, b, fa, fb]) => `<span class="tk" data-sym="${esc(s)}">${esc(s)} ${a}/${fa ?? "?"} → ${b}/${fb}</span>`).join(" ")}${R.tierDiff.length > 60 ? ` and ${R.tierDiff.length - 60} more` : ""}</div>` : ""}`;
@@ -7826,7 +7830,7 @@ function renderFeedCard(){
   const tab = $("tab-data"); if (!tab) return;
   let box = $("feedBox"); if (!box) { const at = tab.querySelector(":scope > p.lede"); (at || tab).insertAdjacentHTML(at ? "afterend" : "afterbegin", `<div class="card g1" id="feedBox"></div>`); box = $("feedBox"); }
   if (!S.snap) { box.innerHTML = ""; return; }
-  const head = `<div class="hd"><h2>Deep Space feed</h2><span class="sub">one CSV for the daily MAP/BRIEF: Deep Space Screener (38 columns), 6.0X, REACCEL, TAS with live themes, Power List and board context</span><span class="spacer"></span>
+  const head = `<div class="hd"><h2>Deep Space feed</h2><span class="sub">one CSV for the daily MAP/BRIEF: Deep Space Screener v5.0 (Spec 6.1, 39 columns), Spec 6.1 lists, REACCEL, TAS with live themes, Power List and board context</span><span class="spacer"></span>
     <button class="btn sm primary" data-feed="csv" ${S.has.hist ? "" : "disabled"}>Export feed CSV</button><button class="btn sm" data-feed="cmp" ${S.has.hist ? "" : "disabled"}>Compare with TradingView exports…</button></div>`;
   if (!S.has.hist) { box.innerHTML = head + `<div class="bd"><div class="empty" style="padding:4px 0">The feed is built from the stored daily bars. <button class="btn sm" data-hist="full">Load price history</button></div></div>`; return; }
   const rows = S.stocks.map(r => ({r, d: dssOf(r.sym)})).filter(o => o.d);
@@ -7849,12 +7853,13 @@ function renderFeedCard(){
     ${tRows.map(({t, P, rs4, hl, g}) => `<tr><td class="l">${t[0]} · ${esc(t[2])}</td><td class="l">${t[1]}</td><td>${P ? sg(P.r21, 1) + "%" : "—"}</td><td class="${rs4 > 0 ? "pos" : "neg"}">${fin(rs4) ? sg(rs4, 1) : "—"}</td><td>${P && fin(P.stage) ? P.stage : "—"}</td><td>${hl == null ? "—" : ["Weak", "Neutral", "<b>Strong</b>"][hl]}</td><td>${g.n}</td><td class="l small">${g.lead.slice(0, 14).map(s => g.pick.includes(s) ? `<b>${esc(s)}</b>` : esc(s)).join(" ")}${g.nl.length ? ` · new leaders: ${g.nl.map(esc).join(" ")}` : ""}</td></tr>`).join("")}</tbody></table>
     <div class="small dim" style="margin-top:4px">Themes are resolved live from your file's Industry column with the same rules as tools/build-tas-map.py (overrides first, then industry) — no weekly script edit. Proxy ETFs and the index tape are read from the stored bars even when your files don't carry them, and are added to the feed as extra rows.</div></details>`;
   const C = DSF.cmp && !DSF.cmp.type ? DSF.cmp : {};
-  const cmp = ["dss", "tas", "ra"].filter(k => C[k]).map(k => cmpHTML(C[k], any)).join("") + (Object.keys(C).length ? `<div class="small dim" style="margin-top:6px">Numbers match when within 2% (or 0.05) of TradingView's; whole-number columns must be equal. Expect small gaps from data (TradingView vs Massive bars, splits, volume) and names sitting right on a line. Compare files from the same session: this board's bars run to ${esc(any ? any.to : "—")}.</div>` : "");
+  const cmp = ["dss5", "dss", "tas", "ra"].filter(k => C[k]).map(k => cmpHTML(C[k], any)).join("") + (Object.keys(C).length ? `<div class="small dim" style="margin-top:6px">Numbers match when within 2% (or 0.05) of TradingView's; whole-number columns must be equal. Expect small gaps from data (TradingView vs Massive bars, splits, volume) and names sitting right on a line. Compare files from the same session: this board's bars run to ${esc(any ? any.to : "—")}.</div>` : "");
   const stale = feedStale();
   box.innerHTML = head + `<div class="bd">${stale ? `<div class="note" style="margin-bottom:8px;color:var(--neg)"><b>Price history is behind:</b> it ends ${esc(stale.last)} but should run to ${esc(stale.want)} (a holiday can make this a false alarm). Update it before exporting — numbers built across a gap are wrong. <button class="btn sm" data-hist="upd">Update price history</button></div>` : ""}
     <div class="small">Bars to <b>${esc(any ? any.to : "—")}</b>${ts ? ` (stored history + today's bar from ${ts.src === "csv" ? "your file" : ts.src === "live" ? "live mode" : "the board"})` : " (stored history — no newer bar in this file)"} · QQQ regime <b>${esc(reg)}</b> · ${rows.length} stocks scored · screener defaults (zone 0.75, StopFit 1.25, ADR 3%, $20M)</div>
     <table class="mini" style="margin-top:8px"><tbody>
-      <tr><td class="l"><b>Spec 6.0</b> (Deep Space Screener)</td><td class="l">${tierLine(t60)}</td></tr>
+      <tr><td class="l"><b>Spec 6.1</b> (Deep Space Screener v5.0)</td><td class="l">${s61TierLine(rows)}</td></tr>
+      <tr><td class="l">Spec 6.0 (legacy screener v4.1)</td><td class="l">${tierLine(t60)}</td></tr>
       <tr><td class="l"><b>Spec 6.0X</b> (Pivot script gates)</td><td class="l">${tierLine(t6x)}${t6x["—"] ? ` · ${t6x["—"]} not known` : ""}</td></tr>
       <tr><td class="l">Setup Quality</td><td class="l">${[5, 4, 3, 2, 1, 0].map(k => `<b>${sq[k] || 0}</b> at ${k}`).join(" · ")}</td></tr></tbody></table>
     ${top.length ? `<div class="small" style="margin-top:8px">Tier 4 (6.0), by RS Rank Key · Setup Quality in bold: ${top.map(chip).join("")}</div>` : ""}
@@ -7862,9 +7867,425 @@ function renderFeedCard(){
     <div class="small dim" style="margin-top:6px">6.0X ladder (confirmed 18 Oct): Tier 4 = liquidity, RS state, weekly above a rising 10W and above a rising 50 SMA, plus above the 21 EMA, within 0.5 ADR of the 9 or 21, and no more than 4 ADR above the 50. Tier 3 = the same with one of the last three missing. LoD and room are daily estimates in the file, never gates. Setup Quality is the same 0–5 score for both.</div>
     ${themeT}${cmp}</div>`;
 }
-$("tab-data").addEventListener("click", e => { const b = e.target.closest("[data-feed]"); if (!b) return; if (b.dataset.feed === "csv") feedExport(); else $("fileDss").click(); });
+$("tab-data").addEventListener("click", e => { const b = e.target.closest("[data-feed]"); if (!b) return; if (b.dataset.feed === "csv") feedExport(); else if (b.dataset.feed === "plog") s61ParityLog(); else $("fileDss").click(); });
 const _renderTabF = renderTab;
 renderTab = function(t){ _renderTabF(t); if (t === "data") { try { renderFeedCard(); } catch (e) { console.warn("feed card", e); } if (WS && typeof buildSecs === "function") buildSecs(t); } };
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   UNIFIED SPEC 6.1 (19 Oct, Eugene's rulings) — BESIDE the plan until test day 1.
+   Same definitions as indicators/screener/deep-space-screener/deep-space-screener.pine v5.0, line for line, on the
+   same bars the Deep Space feed uses (dssBars: stored history + today's bar when the file is newer; the symbol's own
+   bars only, missing days skipped like Pine).
+     ADR% = mean((H − L) / C × 100, 20) · ADR$ = ADR% / 100 × C · band = max/min(EMA9, EMA21)
+     Dist 9 / 21 / Band = (C − line) / ADR$ · Rising: EMA21 vs 5 bars ago (brief default), SMA50 vs 5 bars ago and
+     weekly SMA10 vs the week before (the 6X lookbacks) · weekly = last COMPLETED week (weeks before the last bar's week)
+     1 Liquidity   market cap ≥ $1B (the file's Market cap; the Pine uses shares × close) · mean(C × V, 20) ≥ $100M · C > $10
+     2 Integrity   < 100 bars = provisional flag · any |C / C[1] − 1| > 40% in the last 50 bars = fail
+     3 Structure   C > EMA21 rising · C > SMA50 rising · last weekly close > rising weekly SMA10
+     4 Stage       flag only (Eugene, 19 Oct): Weinstein main stage 3 (3 / 3A) = one soft blocker; any other stage passes
+     5 Extension   (C − SMA50) / ADR$ ≤ 4, or ExtReset (v4.1 gap logic: gap over the prior high ≥ 1 ADR on ≥ 2× 30-day volume, 20 bars)
+     6 Location    BELOW21 → ABOVE (> +0.5) → L1 (≥ 0) → L2 (Dist 9 ≥ −0.25) → L3, in that order
+     7 Group       board group state not Lagging
+     8 RS          board RS ≥ 75
+     9 Earnings    event session = next NYSE session after the file's upcoming earnings date (the CSV has no BMO/AMC timing,
+                   so every date is treated as "after the close or unknown"); N = sessions after the last completed session up
+                   to and including it; pass N ≥ 6; Exit By = the session before; no date = blocker, never a pass
+     10 Room       (first resistance − planned entry) / (0.6 × ADR$) ≥ 2, NH passes. Planned entry: L1 / L3 / Above = band top,
+                   L2 = the prior day's EMA9. First resistance = lowest confirmed 5/5 swing high OR low (ties count) from the
+                   last 252 sessions above the entry
+     11 LOD (live) entry ≤ 0.6 ADR above today's low; 1R = entry − LOD. Never part of the pass.
+   Lists (Eugene, 19 Oct): hard = 1 2 3 5 7 8 (any fail → Out) · soft = L2, 4, 9, 10.
+     L1 + no soft blocker = A-eligible · L1 + one = OnDeck-1blocker · L2 + none = OnDeck-L2 · L3 / Above zone = Background
+     (Out with 2+ soft blockers) · anything with two blockers = Out. Spec61 Pass = checks 1–10 all pass (L1 only).
+   Size: base grade (Settings) − 1 below the 200 SMA − regime step (MAP says: Supportive 0 · Mixed 1 · Defensive 2)
+     − personal steps (urge ≥ 4, three straight losses: 1 each), never below C. Shares = NLV × % ÷ (entry − LOD); before
+     the open 1R = 0.6 ADR$ (estimate).
+   "Spec 6.1 drives the plan" (localStorage adrb.s61Live, OFF by default — turn it on for test day 1): the Spec 6.1 lists
+   take the plan's place on Setups and the old Board plan / Pivot script / Wild / HOOD / gapper hints are hidden. Off =
+   every number on the board is exactly as before (the regression check proves it).
+   ===================================================================== */
+const S61 = {adrN: 20, liqCap: 1e9, liqDv: 100e6, liqPx: 10, liqN: 20, intBars: 100, brk: 40, intLB: 50, e21LB: 5, s50LB: 5, wkLen: 10,
+  ext: 4.0, gapAdr: 1.0, gapRvol: 2.0, gapWin: 20, avgVolN: 30, above: 0.5, l2: -0.25, pivN: 5, pivLB: 252, risk: 0.6, room: 2,
+  rsMin: 75, erMin: 6, rmvC: 50, lod: 0.6, rej: 0.25, rejKeep: 3, hiLen: 20, qBraid: 1.5, qVdu: 55, qDcr: 75};
+// NYSE full-day closures 2026–2027 (nyse.com holiday calendar). Past 2027 only weekends are skipped — add the next year here.
+const NYSE_HOL = new Set(["2026-01-01", "2026-01-19", "2026-02-16", "2026-04-03", "2026-05-25", "2026-06-19", "2026-07-03", "2026-09-07", "2026-11-26", "2026-12-25",
+  "2027-01-01", "2027-01-18", "2027-02-15", "2027-03-26", "2027-05-31", "2027-06-18", "2027-07-05", "2027-09-06", "2027-11-25", "2027-12-24"]);
+const isSess = d => isWkday(d) && !NYSE_HOL.has(d);
+const nextSess = d => { let x = addDays(d, 1); while (!isSess(x)) x = addDays(x, 1); return x; };
+const prevSess = d => { let x = addDays(d, -1); while (!isSess(x)) x = addDays(x, -1); return x; };
+const s61Live = () => !!store.get("adrb.s61Live", false);
+const s61Me = () => store.get("adrb.s61Me", {}) || {};
+const s61Cat = () => new Set(store.get("adrb.s61Cat", []) || []);
+const LOC61 = {L1: {n: "Continuation — in zone", c: "go", code: 1}, L2: {n: "Reclaim watch", c: "zone", code: 2}, L3: {n: "Background", c: "", code: 3},
+  ABOVE: {n: "Above zone", c: "wait", code: 4}, BELOW21: {n: "Below 21 — out", c: "bad", code: 0}};
+const LIST61 = {"A-eligible": {n: "Focus A-eligible", c: "go"}, "OnDeck-L2": {n: "On deck · L2 reclaim", c: "zone"}, "OnDeck-1blocker": {n: "On deck · 1 blocker", c: "zone"}, Background: {n: "Background", c: ""}, Out: {n: "Out", c: "bad"}};
+const REG_STEP = {Supportive: 0, Mixed: 1, Defensive: 2};
+
+// earnings in NYSE sessions: N = sessions after lastDone up to and including the event session
+function s61Earn(eru, lastDone){
+  const rd = eru ? String(eru).slice(0, 10) : "";
+  if (!/^\d{4}-\d\d-\d\d$/.test(rd) || !lastDone) return {n: null, why: "no date"};
+  const ev = nextSess(rd);                                    // timing unknown → the session after the report date
+  if (ev <= lastDone) return {n: null, why: "date already passed", ev};
+  let n = 0, x = lastDone; while (x < ev && n < 400) { x = nextSess(x); n++; }
+  return {n, ev, exitBy: prevSess(ev), past2027: rd > "2027-12-31"};
+}
+// the screener maths on one symbol's bars (last bar), Pine order
+function s61Calc(b){
+  const C = S61, {c, o, h, l, v} = b, n = b.n, t = n - 1;
+  const e9 = PZ.ema(c, 9), e21 = PZ.ema(c, 21), s50 = PZ.sma(c, 50), s200 = PZ.sma(c, 200);
+  const adrS = PZ.sma(PZ.map(n, k => (h[k] - l[k]) / c[k] * 100), C.adrN), adr = adrS[t], adrOk = fin(adr) && adr > 0, D = adrOk ? adr / 100 * c[t] : NaN;
+  const dv20 = PZ.sma(PZ.map(n, k => c[k] * v[k]), C.liqN)[t];
+  // 2 · integrity
+  let brk = false, brkMax = 0;
+  for (let k = Math.max(1, t - C.intLB + 1); k <= t; k++) if (c[k - 1] > 0) { const m = Math.abs(c[k] / c[k - 1] - 1) * 100; if (m > brkMax) brkMax = m; if (m > C.brk) brk = true; }
+  // 3 · structure
+  const ago = (a, m) => t - m >= 0 ? a[t - m] : NaN;
+  const e21Up = e21[t] > ago(e21, C.e21LB), s50Up = s50[t] > ago(s50, C.s50LB);
+  const k3e21 = c[t] > e21[t] && e21Up, k3s50 = c[t] > s50[t] && s50Up;
+  const wk = b.dates.map(weekKey), wc = [];
+  for (let k = 0; k <= t; k++) { if (wk[k] >= wk[t]) break; if (k === 0 || wk[k] !== wk[k - 1]) wc.push(c[k]); else wc[wc.length - 1] = c[k]; }
+  const W = C.wkLen, m = wc.length - 1, wsma = e => { if (e - W + 1 < 0) return NaN; let s = 0; for (let k = e - W + 1; k <= e; k++) s += wc[k]; return s / W; };
+  const wC1 = m >= 0 ? wc[m] : NaN, wS1 = wsma(m), wS2 = wsma(m - 1), k3wk = fin(wC1) && fin(wS1) && fin(wS2) && wC1 > wS1 && wS1 > wS2;
+  const structOk = k3e21 && k3s50 && k3wk;
+  // 5 · extension + reset
+  const avgV = PZ.sma(v, C.avgVolN);
+  const gap = PZ.map(n, k => { const a = adrS[k]; return fin(a) && a > 0 && k > 0 && h[k - 1] > 0 && ((o[k] - h[k - 1]) / h[k - 1] * 100) >= C.gapAdr * a && v[k] >= avgV[k] * C.gapRvol ? 1 : 0; });
+  const gs = PZ.since(gap)[t], xReset = (fin(gs) ? gs : 1e6) <= C.gapWin;
+  const ext = adrOk ? (c[t] - s50[t]) / D : NaN, extOk = (fin(ext) && ext <= C.ext) || xReset;
+  // 6 · location
+  const bandTop = Math.max(e9[t], e21[t]), bandBot = Math.min(e9[t], e21[t]);
+  const d9 = adrOk ? (c[t] - e9[t]) / D : NaN, d21 = adrOk ? (c[t] - e21[t]) / D : NaN, dB = adrOk ? (c[t] - bandTop) / D : NaN;
+  const loc = (!structOk || !(c[t] > e21[t])) ? "BELOW21" : !fin(dB) ? null : dB > C.above ? "ABOVE" : dB >= 0 ? "L1" : d9 >= C.l2 ? "L2" : "L3";
+  // 10 · room
+  const entry = loc === "L2" ? (t >= 1 ? e9[t - 1] : NaN) : (loc === "L1" || loc === "L3" || loc === "ABOVE") ? bandTop : NaN;
+  const P = C.pivN, piv = [];
+  for (let k = Math.max(P, t - C.pivLB + 1); k <= t - P; k++) {
+    let ph = true, pl = true;
+    for (let u = k - P; u <= k + P; u++) { if (u === k) continue; if (!(h[k] >= h[u])) ph = false; if (!(l[k] <= l[u])) pl = false; }
+    if (ph) piv.push({k, p: h[k], hi: true, d: b.dates[k]}); if (pl) piv.push({k, p: l[k], hi: false, d: b.dates[k]});
+  }
+  const resAbove = px => { let fr = NaN, at = null; for (const q of piv) if (q.p > px && (!fin(fr) || q.p < fr)) { fr = q.p; at = q; } return {fr, at}; };
+  const R0 = fin(entry) ? resAbove(entry) : {fr: NaN, at: null}, nh = fin(entry) && !fin(R0.fr);
+  const room = !fin(entry) || !adrOk ? NaN : nh ? Infinity : (R0.fr - entry) / (C.risk * D);
+  // Rejected 9 — label only (A: from below · B: reclaim then rejection), newest within rejKeep sessions
+  let rej = null;
+  for (let k = t; k >= Math.max(1, t - C.rejKeep + 1) && !rej; k--) {
+    const Dk = adrS[k] / 100 * c[k];
+    const A = c[k - 1] < e9[k - 1] && h[k] >= e9[k] - C.rej * Dk && c[k] < e9[k];
+    const B = k >= 2 && c[k - 1] > e9[k - 1] && c[k - 2] < e9[k - 2] && c[k] < e9[k];
+    if (A || B) rej = {type: A ? "A" : "B", age: t - k, d: b.dates[k]};
+  }
+  // columns the screener measures in the new ADR
+  const tri = [e9[t], e21[t], s50[t]], braid = adrOk ? ((Math.max(...tri) - Math.min(...tri)) / c[t] * 100) / adr : NaN;
+  const swing = PZ.highest(h, C.hiLen)[t], depth = adrOk && swing > 0 ? ((swing - c[t]) / c[t] * 100) / adr : NaN;
+  return {t, close: c[t], to: b.dates[t], bars: n, adr, D, dv20, brk, brkMax, prov: n < C.intBars, e9: e9[t], e9p: t >= 1 ? e9[t - 1] : NaN, e21: e21[t], s50: s50[t], s200: s200[t],
+    e21Up, s50Up, k3e21, k3s50, k3wk, wk: {c: wC1, s1: wS1, s2: wS2}, structOk, ext, xr: xReset, extOk, bandTop, bandBot, d9, d21, dB, loc, entry,
+    fr: R0.fr, frAt: R0.at, nh, room, piv, resAbove, rej, braid, depth, lo: l[t], hi: h[t]};
+}
+// the screener's fail code and tier (checks 1, 2, 3, 5 + location)
+function s61Pine(x, mcap){
+  const liqOk = mcap != null && mcap >= S61.liqCap && fin(x.dv20) && x.dv20 >= S61.liqDv && x.close > S61.liqPx;
+  const fail = !liqOk ? 1 : x.brk ? 2 : !x.k3e21 ? 3 : !x.k3s50 ? 4 : !x.k3wk ? 5 : !x.extOk ? 6 : 0;
+  const tier = fail === 6 ? 1 : fail !== 0 ? 0 : x.loc === "L1" ? 4 : x.loc === "L2" ? 3 : (x.loc === "L3" || x.loc === "ABOVE") ? 2 : 0;
+  return {liqOk, fail, tier};
+}
+const S61C = {key: "", map: new Map()};
+function s61Reset(){ S61C.key = ""; }
+// one stock, every check, its list, size and flags
+function s61Of(r){
+  if (!r || r.etf || !S.has.hist) return null;
+  const k = (typeof dssKey === "function" ? dssKey() : "") + "|" + (mapRegime().v || "") + "|" + JSON.stringify(s61Me()) + "|" + store.get("adrb.s61Cat", []).length + "|" + CFG.grade + "|" + CFG.nlv;
+  if (S61C.key !== k) { S61C.key = k; S61C.map = new Map(); }
+  if (S61C.map.has(r.sym)) return S61C.map.get(r.sym);
+  let out = null; try { out = s61Build(r); } catch (e) { console.warn("spec 6.1", r.sym, e); out = null; }
+  S61C.map.set(r.sym, out); return out;
+}
+function s61Build(r){
+  const d = dssOf(r.sym); if (!d || !d.s61) return null;
+  const x = d.s61, C = S61, pine = s61Pine(x, r.mcap ?? null), ck = {};
+  const add = (n, l, ok, v, lim, kind) => { ck[n] = {n, l, ok, v, lim, kind}; };
+  const money = v => v == null || !fin(v) ? "—" : v >= 1e9 ? "$" + (v / 1e9).toFixed(1) + "B" : "$" + Math.round(v / 1e6) + "M";
+  add(1, "Liquidity", r.mcap == null ? null : pine.liqOk, `cap ${money(r.mcap)} · ${money(x.dv20)}/day · $${f2(x.close)}`, "cap ≥ $1B · ≥ $100M/day · > $10", "hard");
+  add(2, "Data integrity", !x.brk, `${x.bars} bars${x.prov ? " (provisional)" : ""} · biggest 1-day move ${x.brkMax.toFixed(0)}%`, "no single bar > 40% in 50", "hard");
+  add(3, "Structure", x.structOk, `21E ${x.k3e21 ? "✓" : "✗"} · 50S ${x.k3s50 ? "✓" : "✗"} · 10W ${x.k3wk ? "✓" : "✗"}`, "above rising 21 EMA, 50 SMA, 10-week", "hard");
+  let stg = null; try { stg = stageOf(r); } catch (e) {}
+  const main = stg ? WS_MAIN[stg.lab] : null;
+  add(4, "Stage", main !== "3", stg ? `Stage ${stg.lab}` : "no stage", "not Stage 3 (flag)", "soft");
+  add(5, "Extension", x.extOk, fin(x.ext) ? `${sg(x.ext, 2)} ADR${x.xr ? " · reset by a gap" : ""}` : "—", "≤ 4 ADR above the 50 SMA", "hard");
+  add(6, "Location", x.loc == null ? null : x.loc === "L1", x.loc ? `${LOC61[x.loc].n} · band ${sg(x.dB, 2)} · 9 ${sg(x.d9, 2)}` : "—", "L1: 0 to +0.5 ADR above the band", x.loc === "L2" ? "soft" : "loc");
+  const gs = r.gState && r.gState !== "—" ? r.gState : null;
+  add(7, "Group", gs == null ? null : gs !== "Lagging", gs || "no group state", "not Lagging", "hard");
+  add(8, "RS", r.rs == null ? null : r.rs >= C.rsMin, `RS ${r.rs ?? "—"}`, `≥ ${C.rsMin}`, "hard");
+  const er = s61Earn(r.eru, x.to);
+  add(9, "Earnings", er.n == null ? false : er.n >= C.erMin, er.n == null ? `earnings date unknown${er.why === "date already passed" ? " (file's date has passed)" : ""}` : `in ${er.n} session${er.n === 1 ? "" : "s"} · exit by ${er.exitBy}`, "none in the next 5 sessions", "soft");
+  add(10, "Room", !fin(x.entry) ? null : x.nh ? true : x.room >= C.room, !fin(x.entry) ? "no planned entry" : x.nh ? `NH — no pivot above ${f2(x.entry)}` : `${x.room.toFixed(2)}R to ${f2(x.fr)} from ${f2(x.entry)}`, "≥ 2R (1R = 0.6 ADR)", "soft");
+  // 11 · live: today's low, entry at the last price (regular session / live only)
+  const pm = S.mode === "pm", lo = pm ? null : r.lo1d, px = r.last;
+  let live = null;
+  if (lo != null && px != null && fin(x.D) && px > lo) { const R1 = px - lo, lodA = R1 / x.D, rr = x.resAbove(px), lroom = fin(rr.fr) ? (rr.fr - px) / R1 : Infinity; live = {entry: px, lo, R1, lodA, fr: rr.fr, room: lroom, ok: lodA <= C.lod && lroom >= C.room}; }
+  add(11, "LOD (live)", live ? live.lodA <= C.lod : null, live ? `${live.lodA.toFixed(2)} ADR above today's low ${f2(lo)}` : pm ? "at the entry (opens 10:00 ET)" : "needs today's low", "≤ 0.6 ADR", "live");
+  // list
+  const hardFail = [1, 2, 3, 5, 7, 8].filter(n => ck[n].ok !== true), soft = [4, 9, 10].filter(n => ck[n].ok !== true);
+  let list;
+  if (hardFail.length || x.loc == null || x.loc === "BELOW21") list = "Out";
+  else if (x.loc === "L3" || x.loc === "ABOVE") list = soft.length >= 2 ? "Out" : "Background";
+  else if (x.loc === "L2") list = soft.length ? "Out" : "OnDeck-L2";
+  else list = soft.length === 0 ? "A-eligible" : soft.length === 1 ? "OnDeck-1blocker" : "Out";
+  const pass = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].every(n => ck[n].ok === true);
+  const ff = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].find(n => ck[n].ok !== true);
+  const ffTxt = ff == null ? "" : ff === 1 ? `1 Liquidity ${r.mcap == null ? "cap unknown" : r.mcap < C.liqCap ? "cap " + money(r.mcap) : !(x.dv20 >= C.liqDv) ? money(x.dv20) + "/day" : "px " + f2(x.close)}`
+    : ff === 2 ? `2 Break ${x.brkMax.toFixed(0)}%>40%` : ff === 3 ? `3 Structure ${!x.k3e21 ? "21E" : !x.k3s50 ? "50S" : "10W"}` : ff === 4 ? `4 Stage ${stg ? stg.lab : "?"}`
+    : ff === 5 ? `5 Ext ${fin(x.ext) ? x.ext.toFixed(2) : "?"}>4` : ff === 6 ? `6 ${x.loc ? LOC61[x.loc].n.replace(" — out", "") : "no ADR"}` : ff === 7 ? `7 Group ${gs || "unknown"}`
+    : ff === 8 ? `8 RS ${r.rs ?? "?"}<${C.rsMin}` : ff === 9 ? `9 Earnings ${er.n == null ? "unknown" : er.n + "<" + C.erMin}` : !fin(x.entry) ? "10 Room no entry" : `10 Room ${x.room.toFixed(2)}R<${C.room}R`;
+  const blockers = [...(x.loc === "L2" ? [6] : []), ...soft];
+  // size
+  const mr = mapRegime().v || "", regStep = REG_STEP[mr] ?? 0, me = s61Me(), meStep = (me.urge ? 1 : 0) + (me.loss ? 1 : 0);
+  const smaStep = fin(x.s200) ? (x.close < x.s200 ? 1 : 0) : 0;
+  let gi = GRADES.findIndex(g => g[0] === CFG.grade); if (gi < 0) gi = 2;
+  const fi = Math.min(GRADES.length - 1, gi + smaStep + regStep + meStep), fin61 = GRADES[fi];
+  const sEntry = live ? live.entry : fin(x.entry) ? x.entry : null, R1 = live ? live.R1 : fin(x.D) ? C.risk * x.D : null;
+  const shares = CFG.nlv && R1 > 0 ? Math.floor(CFG.nlv * fin61[1] / 100 / R1) : null;
+  const size = {base: GRADES[gi], smaStep, smaKnown: fin(x.s200), regStep, reg: mr, meStep, me, final: fin61, floored: gi + smaStep + regStep + meStep > GRADES.length - 1, entry: sEntry, R1, est: !live, shares};
+  const rmv = d.rmv, compressed = fin(rmv) && rmv <= C.rmvC;
+  const exceptional = (gs === "Leading" || s61Cat().has(r.sym)) && compressed;
+  // setup quality — the screener's single definition (braid in the new ADR)
+  const sq = (fin(x.braid) && x.braid <= C.qBraid ? 1 : 0) + (d._.rmvPass ? 1 : 0) + (fin(d.vdu) && d.vdu <= C.qVdu ? 1 : 0) + (fin(d.dcr) && d.dcr >= C.qDcr ? 1 : 0) + (d._.leader || d.nh ? 1 : 0);
+  let shadow = null; try { const s6 = s6Of(r); shadow = s6 && s6.res != null ? s6.res : null; } catch (e) {}
+  return {r, x, d, ck, pine, list, pass, ff, ffTxt, blockers, er, live, size, rmv, compressed, exceptional, sq, shadow, stage: stg, mapUni: ck[1].ok === true && ck[2].ok === true};
+}
+const s61Rej = s => s && s.x.rej ? `${s.x.rej.type} ${s.x.rej.age}` : "none";
+// whole-file lists, ranked (RS; on Defensive days exceptional names first) — filters change visibility only
+function s61Lists(all){
+  const L = {"A-eligible": [], "OnDeck-L2": [], "OnDeck-1blocker": [], Background: [], Out: []}, def = mapRegime().v === "Defensive";
+  for (const r of S.stocks) { if (!all && !gOK(r)) continue; const s = s61Of(r); if (s) L[s.list].push(s); }
+  const by = (a, b) => (def ? (b.exceptional ? 1 : 0) - (a.exceptional ? 1 : 0) : 0) || (b.r.rs ?? 0) - (a.r.rs ?? 0) || (a.r.sym < b.r.sym ? -1 : 1);
+  for (const k in L) L[k].sort(by);
+  return L;
+}
+
+
+/* ---------------- Deep Space feed: the screener's v5.0 columns + the Spec 6.1 board columns ---------------- */
+const r2 = v => fin(v) ? Math.round(v * 100) / 100 : NaN;                 // Pine math.round(x, 2)
+const s61Sq = (d, x) => (fin(x.braid) && x.braid <= S61.qBraid ? 1 : 0) + (d._.rmvPass ? 1 : 0) + (fin(d.vdu) && d.vdu <= S61.qVdu ? 1 : 0) + (fin(d.dcr) && d.dcr >= S61.qDcr ? 1 : 0) + (d._.leader || d.nh ? 1 : 0);
+// one symbol's screener values (rows without a file row — theme proxies, index tape — have no market cap: liquidity fails, as in the Pine for a fund)
+function s61V(sym, r){ const d = dssOf(sym); if (!d || !d.s61) return null; return {d, x: d.s61, r, p: s61Pine(d.s61, r && r.mcap != null ? r.mcap : null), sq: s61Sq(d, d.s61)}; }
+// [Pine plot title, value, decimals (null = integer), compare tolerance, parity-week field]
+const DSS5_COLS = [["Tier", v => v.p.tier, null, null, 1], ["Fail Code (0=pass)", v => v.p.fail, null, null, 1], ["P1 Fail Code (legacy)", v => v.d.fail], ["Setup Quality (0-5)", v => v.sq, null, null, 1],
+  ["Loc Label (1L1 2L2 3L3 4Above 0Below21)", v => v.x.loc ? LOC61[v.x.loc].code : NaN, null, null, 1], ["Dist 9EMA ADR", v => r2(v.x.d9), 2, 0.05, 1], ["Dist 21EMA ADR", v => r2(v.x.d21), 2, 0.05, 1],
+  ["Room R est (99=NH)", v => !fin(v.x.entry) || !fin(v.x.D) ? NaN : v.x.nh ? 99 : r2(v.x.room), 2, 0.10, 1], ["First Resistance (0=NH)", v => !fin(v.x.entry) ? NaN : v.x.nh ? 0 : v.x.fr, 4, 0.01, 1],
+  ["Braid ADR", v => v.x.braid, 3], ["Stack 9>21>50SMA", v => v.d.stack], ["Ext ADR", v => v.x.ext, 3], ["ExtReset", v => v.x.xr ? 1 : 0], ["SMA Gate (0/1/2 grades down)", v => v.d.smaG],
+  ["Bars < 100", v => v.x.prov ? 1 : 0, null, null, 1], ["Break > 40%", v => v.x.brk ? 1 : 0, null, null, 1], ["Depth ADR", v => v.x.depth, 3], ["Days Off High", v => v.d.doh], ["VDU %", v => v.d.vdu, 2],
+  ["RMV", v => v.d.rmv, 2], ["RMV+ Score", v => v.d.rmvS], ["ADR%", v => v.x.adr, 3], ["$Vol M (20d)", v => v.x.dv20 / 1e6, 2], ["Perf 1mo %", v => v.d.perf, 2], ["DCR%", v => v.d.dcr, 2], ["WCR%", v => v.d.wcr, 2],
+  ["RS (0Lag1Fade2Em3Lead)", v => v.d.rsC], ["RS Level Score", v => v.d.lvl], ["RS Trend Score", v => v.d.trd], ["RS Weekly NH", v => v.d.nh], ["RS Spread 1W %", v => v.d.rs1w, 3], ["RS Spread 1M %", v => v.d.rs1m, 3],
+  ["RS Spread 3M %", v => v.d.rs3m, 3], ["RS Spread 6M %", v => v.d.rs6m, 3], ["RS 1M Pctl (0-100)", v => v.d.p1m, 2], ["RS Thrust Rate %", v => v.d.thrust, 2], ["RS Accel20 pp", v => v.d.ra.acc, 3],
+  ["Data OK", v => v.d.dataOk], ["Bench OK", v => v.d.benchOk]];
+// brief §3 headers. "Dist 9EMA ADR", "Bars < 100" and "Break > 40%" are already in the screener block above (same numbers,
+// 1 = yes), so they're not repeated — a CSV can't carry two columns with one name.
+const yn = b => b ? "Y" : "N";
+const FEED_61 = [["MAP Universe", s => yn(s.mapUni)], ["Loc Label", s => s.x.loc || ""], ["Room R est", s => !fin(s.x.entry) ? "" : s.x.nh ? "NH" : s.x.room.toFixed(2)],
+  ["First Resistance", s => !fin(s.x.entry) ? "" : s.x.nh ? "NH" : +s.x.fr.toFixed(4)], ["Earnings In (sessions)", s => s.er.n == null ? "UNKNOWN" : s.er.n], ["Exit By", s => s.er.exitBy || ""],
+  ["Regime", s => s.size.reg || ""], ["Regime Step", s => s.size.reg ? String(-s.size.regStep) : ""], ["Spec61 Pass", s => yn(s.pass)], ["Spec61 First Fail", s => s.ffTxt],
+  ["Spec61 List", s => s.list], ["Exceptional", s => yn(s.exceptional)], ["Shadow Pivot Level", s => s.shadow != null ? +s.shadow.toFixed(4) : ""], ["Setup Quality", s => s.sq], ["Rejected 9", s => s61Rej(s)]];
+// compare: a Deep Space Screener v5.0 export (recognised by Loc Label) — checked first, so its "RS Accel20 pp" column isn't read as a REACCEL export
+{ const rest = {...CMP_T}; for (const k in CMP_T) delete CMP_T[k];
+  CMP_T.dss5 = {name: "Deep Space Screener v5.0 (Spec 6.1)", test: h => /loc label/.test(h) && /setup quality/.test(h),
+    cols: DSS5_COLS.map(([h, f, dp, tol, par]) => ({h, f: (d, r) => { const V = d && d.s61 ? {d, x: d.s61, r, p: s61Pine(d.s61, r && r.mcap != null ? r.mcap : null), sq: s61Sq(d, d.s61)} : null; return V ? f(V) : NaN; }, int: dp == null, key: h, tol, par: !!par})),
+    tier: (d, r) => d.s61 ? s61Pine(d.s61, r && r.mcap != null ? r.mcap : null).tier : null, fail: (d, r) => d.s61 ? s61Pine(d.s61, r && r.mcap != null ? r.mcap : null).fail : null};
+  Object.assign(CMP_T, rest); }
+function s61ParityLog(){
+  const R = DSF.cmp && DSF.cmp.dss5; if (!R || !R.log) { toast("Compare a Deep Space Screener v5.0 export first"); return; }
+  const q = v => { const t = String(v); return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  const L = [["date", "ticker", "field", "board", "screener", "delta", "within tolerance"].join(","), ...R.log.map(x => x.map(q).join(","))];
+  const day = R.log[0] ? R.log[0][0] : fmtDate(new Date());
+  download(`spec61-parity-${day}.csv`, L.join("\n"), "text/csv"); toast(`Parity log saved: ${R.log.length} cells, ${R.log.filter(x => x[6] !== "ok").length} outside tolerance`);
+}
+function s61TierLine(rows){
+  const c = {}, l = {}; rows.forEach(o => { const V = s61V(o.r.sym, o.r); if (V) c[V.p.tier] = (c[V.p.tier] || 0) + 1; const s = s61Of(o.r); if (s) l[s.list] = (l[s.list] || 0) + 1; });
+  return [4, 3, 2, 1, 0].map(k => `<b>${c[k] || 0}</b> ${({4: "Tier 4 · L1", 3: "Tier 3 · L2", 2: "Tier 2 · L3 / above", 1: "Tier 1 · extended", 0: "Tier 0"})[k]}`).join(" · ")
+    + `<br>Lists: ${Object.keys(LIST61).map(k => `<b>${l[k] || 0}</b> ${LIST61[k].n}`).join(" · ")}`;
+}
+// volatility pill under 6.1 (called from vsPill)
+function s61VsPill(r){ const d = r && !r.etf && S.has.hist ? dssOf(r.sym) : null; return d && fin(d.rmv) ? `<span class="pill ${d.rmv <= S61.rmvC ? "go" : ""}" title="RMV 0–100 (lower = tighter); ≤ ${S61.rmvC} = compressed">RMV ${Math.round(d.rmv)}${d.rmv <= S61.rmvC ? " · compressed" : ""}</span>` : null; }
+
+/* ---------------- ticker panel / drawer: one "Spec 6.1" block ---------------- */
+function s61PanelHTML(r){
+  if (r.etf) return "";
+  const s = s61Of(r);
+  const head = `<h4 style="margin:10px 0 4px;font-size:12px">Spec 6.1 ${s61Live() ? "" : `<span class="pill" title="Parity week: the plan above still runs on Spec 6.0. Turn on 'Spec 6.1 drives the plan' in Settings on test day 1.">parity week · not live</span>`}`;
+  if (!s) return `<div class="s61p">${head}</h4><div class="small dim">${S.has.hist ? "Too little stored history for this name." : "Needs the price history (Data check → load price history)."}</div></div>`;
+  const x = s.x, L = x.loc ? LOC61[x.loc] : null, li = LIST61[s.list], def = mapRegime().v === "Defensive";
+  const ic = ok => `<span class="ic ${ok == null ? "na" : ok ? "ok" : "no"}">${ok == null ? "·" : ok ? "✓" : "✕"}</span>`;
+  const row = c => `<div class="chk">${ic(c.ok)}<div>${c.n} · ${esc(c.l)}<div class="d">${esc(c.lim)}${c.kind === "soft" ? " · soft blocker" : c.kind === "live" ? " · at the entry, not in the pass" : ""}</div></div><div class="small">${esc(c.v)}</div></div>`;
+  const chips = [
+    L ? `<span class="pill ${L.c}">${esc(L.n)}</span>` : "",
+    `<span class="pill ${li.c}" title="Spec 6.1 list">${esc(li.n)}</span>`,
+    fin(s.rmv) ? `<span class="pill ${s.compressed ? "go" : ""}" title="RMV ≤ ${S61.rmvC} = compressed">RMV ${Math.round(s.rmv)}${s.compressed ? " · compressed" : ""}</span>` : "",
+    def && s.exceptional ? `<span class="pill go" title="Leading group or a verified fresh catalyst, AND RMV ≤ 50. Display + Defensive ranking only — never a gate.">Exceptional</span>` : "",
+    x.rej ? `<span class="pill wait" title="${x.rej.type === "A" ? "Rejected from below: the prior close was under the 9, the high came within 0.25 ADR of it, and it closed back under." : "Reclaim then rejection: it reclaimed the 9 the session before and closed back under."} Label only — never a gate.">rejected 9 (${x.rej.type}) · ${x.rej.age ? x.rej.age + "d ago" : "today"}</span>` : "",
+    x.prov ? `<span class="pill wait" title="Under 100 bars — provisional, still eligible">${x.bars} bars · provisional</span>` : "",
+    s.er.n != null ? `<span class="pill ${s.er.n < S61.erMin ? "bad" : ""}">Earnings in ${s.er.n} sessions · exit by ${esc(s.er.exitBy)}</span>` : `<span class="pill bad">Earnings date unknown</span>`
+  ].filter(Boolean).join(" ");
+  const z = s.size, gl = g => `${g[0]} ${g[1]}%`;
+  const sizeCard = `<div class="s61sz"><div class="lbl">Size · MAP says <b>${esc(z.reg || "not set")}</b></div>
+    <ol><li>Base grade: <b>${gl(z.base)}</b> NLV <span class="small">(Settings)</span></li>
+      <li>SMA step: ${z.smaKnown ? (z.smaStep ? "<b>−1</b> below the 200 SMA" : "0 — above the 200 SMA") : "0 — 200 SMA unknown (short history)"} <span class="small">(the 50 SMA is a gate here)</span></li>
+      <li>Regime step: ${z.reg ? `<b>${z.regStep ? "−" + z.regStep : "0"}</b> (${esc(z.reg)})` : `0 — set "MAP says" on Market`}</li>
+      <li>Personal step: <b>${z.meStep ? "−" + z.meStep : "0"}</b> <label class="tog"><input type="checkbox" data-s61me="urge" ${z.me.urge ? "checked" : ""}>urge ≥ 4</label> <label class="tog"><input type="checkbox" data-s61me="loss" ${z.me.loss ? "checked" : ""}>3 straight losses</label></li>
+      <li>Final grade: <b>${gl(z.final)}</b>${z.floored ? " (floor C)" : ""}</li>
+      <li>Shares: ${z.shares != null ? `${CFG.nlv.toLocaleString()} × ${z.final[1]}% ÷ ${f2(z.R1)} = <b>${z.shares.toLocaleString()}</b>` : CFG.nlv ? "—" : "add NLV in Settings"} <span class="small">${z.est ? `1R = 0.6 ADR = ${z.R1 != null ? f2(z.R1) : "—"} (estimate until the trigger; the real 1R is entry − LOD)` : `1R = entry ${f2(z.entry)} − LOD ${f2(s.live.lo)}`}</span></li></ol></div>`;
+  const lv = s.live, live = `<div class="s61lv ${lv ? (lv.ok ? "ok" : "no") : ""}"><div class="lbl">Check 11 · live</div>${lv ? `<span>Entry <b>${f2(lv.entry)}</b></span><span class="${lv.lodA <= S61.lod ? "" : "neg"}">vs LOD <b>${lv.lodA.toFixed(2)} ADR</b> (cap 0.6)</span><span>1R <b>${f2(lv.R1)}</b></span><span>First res. <b>${fin(lv.fr) ? f2(lv.fr) : "NH"}</b></span><span class="${lv.room >= S61.room ? "" : "neg"}">Room <b>${fin(lv.room) ? lv.room.toFixed(2) + "R" : "NH"}</b></span>` : `<span class="small">${S.mode === "pm" ? "Before the open: measured at the trigger (earliest 10:00 ET, close of the first 30-min bar). Entries before 10:00 ET are rule breaks." : "Needs today's low and last price."}</span>`}</div>`;
+  const cat = s61Cat().has(r.sym);
+  return `<div class="s61p">${head} — <span class="${s.list === "A-eligible" ? "ok-t" : s.list === "Out" ? "neg" : ""}">${esc(li.n)}${s.ffTxt ? " · first fail " + esc(s.ffTxt) : " · checks 1–10 pass"}</span></h4>
+    <div class="s61chips">${chips}</div>
+    <div class="small" style="margin:4px 0">Planned entry <b>${fin(x.entry) ? f2(x.entry) : "—"}</b>${x.loc === "L2" ? " (prior day's 9 EMA — reclaim level)" : fin(x.entry) ? " (top of the 9/21 band)" : ""} · first resistance <b>${x.nh ? "NH" : fin(x.fr) ? f2(x.fr) : "—"}</b>${x.frAt ? ` <span class="dim">(swing ${x.frAt.hi ? "high" : "low"} ${esc(x.frAt.d)})</span>` : ""} · ADR ${fin(x.adr) ? x.adr.toFixed(2) + "% = $" + f2(x.D) : "—"} · 1 · ${s.ck[1].ok == null ? "liquidity unknown" : s.ck[1].ok ? "liquid" : "illiquid"} · 2 · ${s.ck[2].ok ? "data clean" : "data break"}</div>
+    ${[3, 4, 5, 6, 7, 8, 9, 10, 11].map(n => row(s.ck[n])).join("")}
+    ${live}${sizeCard}
+    <div class="small" style="margin-top:6px">Setup Quality <b>${s.sq}/5</b> · Shadow pivot level <b>${s.shadow != null ? f2(s.shadow) : "—"}</b> <span class="dim">— shadow (not a trigger)</span> · <label class="tog"><input type="checkbox" data-s61cat="${esc(r.sym)}" ${cat ? "checked" : ""}>verified fresh catalyst</label></div>
+    <div class="small dim">Trigger: a 30-min close above the 30-min 21 EMA, earliest the 10:00 ET bar close. Stop = LOD at the trigger. Exits: ⅓ at 2R (3R if chosen before entry) or the T+3 close → stop to breakeven → shave 10% at each whole ADR from 7 ADR above the 50 SMA → runner out on a daily close under the 9 EMA.</div></div>`;
+}
+function s61Wire(root, sym){
+  root.querySelectorAll("[data-s61me]").forEach(i => i.onchange = () => { const me = s61Me(); me[i.dataset.s61me] = i.checked; store.set("adrb.s61Me", me); s61Reset(); s61Refresh(sym); });
+  root.querySelectorAll("[data-s61cat]").forEach(i => i.onchange = () => { const s = s61Cat(); i.checked ? s.add(i.dataset.s61cat) : s.delete(i.dataset.s61cat); store.set("adrb.s61Cat", [...s]); s61Reset(); s61Refresh(sym); });
+}
+function s61Refresh(sym){ if (S.ui.tab === "plan") renderTab("plan"); if ($("drawer").classList.contains("open")) openDrawer(sym); }
+// when 6.1 is live, the old Spec 6.0 blocks fold away (still one click away)
+function s61Retire(pane){
+  if (!s61Live() || !pane) return;
+  const old = [...pane.querySelectorAll(":scope > .tkt, :scope > .bpck, :scope > .s6p")];
+  if (old.length) { const d = document.createElement("details"); d.className = "tp-fold"; d.innerHTML = "<summary>Spec 6.0 ticket and checks (retired on test day 1)</summary>"; old.forEach(el => d.appendChild(el)); pane.appendChild(d); }
+}
+if (WS) {
+  const _tpBuild61 = tpBuild;
+  tpBuild = function(r){
+    _tpBuild61(r);
+    const pane = document.querySelector('#drawer .tp-pane[data-p="plan"]'); if (!pane || r.etf) return;
+    pane.insertAdjacentHTML("afterbegin", s61PanelHTML(r)); s61Wire(pane, r.sym); s61Retire(pane);
+    if (s61Live()) { const d = dssOf(r.sym); document.querySelectorAll("#drawer .tp-lv > span").forEach(sp => { if (/^Volatility /.test(sp.textContent)) sp.innerHTML = d && fin(d.rmv) ? `RMV <b>${Math.round(d.rmv)}${d.rmv <= S61.rmvC ? " · compressed" : ""}</b>` : ""; }); }
+  };
+} else {
+  const _openDrawer61 = openDrawer;
+  openDrawer = function(sym){
+    _openDrawer61(sym);
+    const r = S.rowBySym && S.rowBySym.get(sym), dr = $("drawer"); if (!r || r.etf || !dr) return;
+    const at = [...dr.querySelectorAll("h4")].find(h => /^Entry checks/.test(h.textContent.trim()));
+    (at ? at : dr.querySelector("#tvbox"))?.insertAdjacentHTML(at ? "beforebegin" : "afterend", s61PanelHTML(r)); s61Wire(dr, sym);
+  };
+}
+
+/* ---------------- Setups: the Spec 6.1 lists ---------------- */
+function renderS61Card(){
+  const tab = $("tab-plan"); if (!tab || !S.snap) return;
+  let box = $("s61Box");
+  if (!box) { $("s6pBox").insertAdjacentHTML("beforebegin", `<div class="card g1" id="s61Box"></div>`); box = $("s61Box"); }
+  const planCard = $("planSub") && $("planSub").closest(".card"), deckCard = planCard && planCard.nextElementSibling, rules = tab.querySelector(".card.rules");
+  const live = s61Live();
+  // live: the lists take the plan's place; off: they sit under the plan
+  if (live && planCard) planCard.before(box); else if (!live) $("s6pBox").before(box);
+  [planCard, deckCard, rules, $("s6pBox")].forEach(el => el && el.classList.toggle("hidden", live));
+  const wt = $("planCtl") && $("planCtl").querySelector('[data-c="wildDeck"]'); if (wt) wt.closest("label").classList.toggle("hidden", live);
+  const hd = `<div class="hd"><h2>Spec 6.1 lists</h2><span class="sub">${live ? "<b>live</b> — the plan for the Spec 6.1 test" : "parity week · not live — the plan above still runs on Spec 6.0"}</span><span class="spacer"></span>${S.has.hist ? `<button class="btn sm" id="s61Tv">Copy A + on deck for TradingView</button>` : ""}</div>`;
+  if (!S.has.hist) { box.innerHTML = hd + `<div class="bd"><div class="empty" style="padding:4px 0">Spec 6.1 is built from the stored daily bars (swing pivots, weekly 10W, slopes). <button class="btn sm" data-hist="full">Load price history</button></div></div>`; return; }
+  const L = s61Lists(false), all = s61Lists(true), mr = mapRegime().v || "", me = s61Me(), def = mr === "Defensive";
+  const ffc = {}; all.Out.forEach(s => { const k = s.ff; ffc[k] = (ffc[k] || 0) + 1; });
+  const tr = (s, i, cap) => { const x = s.x, r = s.r, z = s.size;
+    return `<tr data-sym="${esc(r.sym)}" class="${i < cap ? "" : "dimr"}"><td class="l sym">${esc(r.sym)}</td><td>${rsBadge(r.rs)}</td><td class="l small">${esc(r.group || "")}<br><span class="dim">${esc(r.gState || "")}</span></td>
+      <td><span class="pill ${x.loc ? LOC61[x.loc].c : ""}">${esc(x.loc || "—")}</span></td><td>${sg(x.d9, 2)}</td><td>${fin(x.entry) ? f2(x.entry) : "—"}</td><td>${x.nh ? "NH" : fin(x.fr) ? f2(x.fr) : "—"}</td>
+      <td class="${s.ck[10].ok === false ? "neg" : ""}">${x.nh ? "NH" : fin(x.room) ? x.room.toFixed(2) + "R" : "—"}</td><td class="${s.ck[9].ok ? "" : "neg"}">${s.er.n == null ? "?" : s.er.n}</td>
+      <td><b>${z.final[0]}</b>${z.shares != null ? `<br><span class="small">${z.shares.toLocaleString()} sh</span>` : ""}</td><td>${s.sq}</td>
+      <td class="l small">${s.blockers.length ? `<span class="neg">${esc(s.ffTxt)}</span> ` : ""}${def && s.exceptional ? `<span class="flag good">exceptional</span>` : ""}${s.compressed ? `<span class="flag">compressed</span>` : ""}${x.rej ? `<span class="flag">rejected 9 (${x.rej.type}) ${x.rej.age}d</span>` : ""}${x.prov ? `<span class="flag">${x.bars} bars</span>` : ""}</td></tr>`; };
+  const tbl = (rows, cap, empty) => rows.length ? `<div class="tscroll" style="max-height:420px"><table class="mini s61t"><thead><tr><th class="l">Ticker</th><th>RS</th><th class="l">Group</th><th>Loc</th><th title="Dist 9EMA ADR">9 ADR</th><th title="Planned entry">Entry</th><th title="First resistance: nearest 5/5 swing pivot above the entry">1st res.</th><th title="(first res − entry) / 0.6 ADR">Room</th><th title="NYSE sessions to the earnings session">Earn.</th><th title="Final grade after the SMA, regime and personal steps">Grade</th><th title="Setup Quality 0–5">SQ</th><th class="l">Notes</th></tr></thead><tbody>${rows.map((s, i) => tr(s, i, cap)).join("")}</tbody></table></div>` : `<div class="empty" style="padding:4px 0">${empty}</div>`;
+  const deck = [...L["OnDeck-L2"], ...L["OnDeck-1blocker"]].sort((a, b) => (def ? (b.exceptional ? 1 : 0) - (a.exceptional ? 1 : 0) : 0) || (b.r.rs ?? 0) - (a.r.rs ?? 0));
+  const n = k => all[k].length, shown = L["A-eligible"].length + deck.length, tot = n("A-eligible") + n("OnDeck-L2") + n("OnDeck-1blocker"), fl = shown < tot ? ` <span class="small">(filters on: ${shown} shown of ${tot})</span>` : "";
+  box.innerHTML = hd + `<div class="bd">
+    <div class="s61bar"><span>MAP says <b>${esc(mr || "not set")}</b> → regime step <b>${mr ? (REG_STEP[mr] ? "−" + REG_STEP[mr] : "0") : "0"}</b></span>
+      <label class="tog"><input type="checkbox" data-s61me="urge" ${me.urge ? "checked" : ""}>urge ≥ 4 (−1)</label><label class="tog"><input type="checkbox" data-s61me="loss" ${me.loss ? "checked" : ""}>3 straight losses (−1)</label>
+      <span class="small">base grade ${esc(CFG.grade)} · grade never below C${def ? " · Defensive: exceptional names sort first" : ""}</span></div>
+    <div class="kpis" style="margin:8px 0"><div class="kpi card"><div class="k">Focus A-eligible</div><div class="v">${n("A-eligible")}</div><div class="n">L1, checks 1–10 pass · MAP picks Focus A 0–5</div></div>
+      <div class="kpi card"><div class="k">On deck</div><div class="v">${n("OnDeck-L2") + n("OnDeck-1blocker")}</div><div class="n">${n("OnDeck-L2")} L2 reclaim · ${n("OnDeck-1blocker")} one blocker · list 0–6</div></div>
+      <div class="kpi card"><div class="k">Background</div><div class="v">${n("Background")}</div><div class="n">L3 or above the zone</div></div>
+      <div class="kpi card"><div class="k">Out</div><div class="v">${n("Out")}</div><div class="n">${Object.entries(ffc).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => `#${k}: ${v}`).join(" · ")}</div></div></div>
+    <h4 style="margin:8px 0 2px">Focus A-eligible${fl}</h4>${tbl(L["A-eligible"], 5, "No name passes every check 1–10 today.")}
+    <h4 style="margin:12px 0 2px">On deck</h4>${tbl(deck, 6, "Nothing on deck.")}
+    <details class="tp-fold" style="margin-top:8px"><summary>Background (${L.Background.length})</summary><div style="padding:6px 0">${L.Background.slice(0, 80).map(s => tkChip(s.r, s.x.loc === "ABOVE" ? "above" : "L3")).join("") || `<span class="dim small">none</span>`}</div></details>
+    <details class="tp-fold"><summary>How the lists work</summary><div class="small" style="padding:6px 0">Same rules as Deep Space Screener v5.0 (Unified Spec 6.1), on the stored daily bars. <b>Hard</b> (any fail = out): 1 liquidity ($1B cap, $100M/day 20-day, &gt; $10) · 2 no single-bar break &gt; 40% in 50 bars · 3 above a rising 21 EMA, a rising 50 SMA and a rising 10-week · 5 ≤ 4 ADR above the 50 SMA (or a gap reset) · 7 group not Lagging · 8 RS ≥ 75. <b>Soft</b> (one = on deck, two = out): location L2 · 4 Stage 3 · 9 earnings inside 5 sessions (or no date) · 10 room under 2R to the first 5/5 swing pivot (1R = 0.6 ADR). L3 and Above zone sit in Background. The first 5 A-eligible and first 6 on deck are full-strength; the rest are greyed. The earnings date in the CSV has no before/after-the-open timing, so every report is treated as after the close: a before-the-open reporter's real exit is one session earlier than shown.</div></details>
+  </div>`;
+  s61Wire(box, null);
+  box.querySelectorAll("tbody").forEach(tb => tb.addEventListener("click", e => { if (e.target.closest("[data-sym]:not(tr)")) return; const t = e.target.closest("tr[data-sym]"); if (t) openDrawer(t.dataset.sym); }));
+  $("s61Tv") && ($("s61Tv").onclick = () => copyText([...L["A-eligible"], ...deck].map(s => s.r.sym).join(","), "A-eligible + on deck copied"));
+}
+const _renderTab61 = renderTab;
+renderTab = function(t){ _renderTab61(t); if (t === "plan" && S.snap) { try { renderS61Card(); } catch (e) { console.warn("spec 6.1 card", e); } if (WS && typeof buildSecs === "function") buildSecs(t); } };
+
+/* ---------------- live switch: the retired hints and Wild go away ---------------- */
+const _flagsHTML61 = flagsHTML;
+flagsHTML = function(r){
+  let s = _flagsHTML61(r);
+  if (!s61Live()) return s;
+  s = s.replace(/<span class="flag rule"[^>]*>HOOD rule<\/span>/g, "").replace(/(<span class="flag rej"[^>]*>)rejected /g, "$1pushed back under ");
+  const x = !r.etf ? s61Of(r) : null;
+  if (x && x.x.rej) s += `<span class="flag" title="Rejected 9 — label only">rejected 9 (${x.x.rej.type})</span>`;
+  return s;
+};
+const _openDrawer61b = openDrawer;
+openDrawer = function(sym){
+  _openDrawer61b(sym);
+  if (!s61Live()) return;
+  $("drawer").querySelectorAll(".note").forEach(n => { if (/^(HOOD rule|Gapper):/.test(n.textContent.trim())) n.remove(); });
+};
+// the Wild → on deck toggle doesn't apply under 6.1 (compression replaces it); restored when the switch is off
+const _computePlan61 = computePlan;
+computePlan = function(){
+  if (!s61Live() || !CFG.wildDeck) return _computePlan61();
+  const w = CFG.wildDeck; CFG.wildDeck = false; try { return _computePlan61(); } finally { CFG.wildDeck = w; }
+};
+
+/* ---------------- Settings: the switch ---------------- */
+const _renderSettings61 = renderSettings;
+renderSettings = function(){
+  _renderSettings61();
+  const reset = $("sReset"); if (!reset) return;
+  const box = document.createElement("div");
+  box.innerHTML = `<h4>Unified Spec 6.1</h4>
+    <div class="row"><div>Spec 6.1 drives the plan<div class="d">Off for the parity week: the Spec 6.1 lists and ticker block are shown beside today's plan, which still runs on Spec 6.0. Turn on for test day 1 — the lists take the plan's place and the Spec 6.0 ticket, Board plan / Pivot script blocks, Wild volatility and the HOOD / gapper hints are folded away. Off brings everything back.</div></div><div><input type="checkbox" id="s61LiveSw" ${s61Live() ? "checked" : ""}></div></div>`;
+  reset.parentElement.before(box);
+  $("s61LiveSw").onchange = e => { store.set("adrb.s61Live", e.target.checked); s61Reset(); computePlan(); renderAll(); toast(e.target.checked ? "Spec 6.1 now drives the plan" : "Back to the Spec 6.0 plan (Spec 6.1 lists shown beside it)"); };
+};
+
+/* ---------------- self-check: the Spec 6.1 lists follow their written rules ---------------- */
+const _selfCheck61 = selfCheck;
+selfCheck = function(){
+  const R = _selfCheck61();
+  if (!S.snap || !S.has.hist) return R;
+  const F = (ok, sym, what, board, mine) => { R.n++; if (!ok) R.fails.push({sym, what, board, mine}); };
+  for (const r of S.stocks) {
+    const s = s61Of(r); if (!s) continue; const x = s.x, D = x.D;
+    // location label redone from the distances, in the written order
+    const want = !x.structOk || !(x.close > x.e21) ? "BELOW21" : !fin(D) ? null : (x.close - x.bandTop) / D > 0.5 ? "ABOVE" : (x.close - x.bandTop) / D >= 0 ? "L1" : (x.close - x.e9) / D >= -0.25 ? "L2" : "L3";
+    F(want === x.loc, r.sym, "Spec 6.1 location label", x.loc, want);
+    if (fin(x.entry) && !x.nh) F(Math.abs((x.fr - x.entry) / (0.6 * D) - x.room) < 1e-9 && x.fr > x.entry, r.sym, "Spec 6.1 room = (first res − entry) / 0.6 ADR", x.room, (x.fr - x.entry) / (0.6 * D));
+    if (fin(x.entry)) F(x.loc === "L2" ? x.entry === x.e9p : x.entry === x.bandTop, r.sym, "Spec 6.1 planned entry", x.entry, x.loc === "L2" ? x.e9p : x.bandTop);
+    const hard = [1, 2, 3, 5, 7, 8].some(n => s.ck[n].ok !== true), soft = [4, 9, 10].filter(n => s.ck[n].ok !== true).length;
+    const lw = hard || !x.loc || x.loc === "BELOW21" ? "Out" : x.loc === "L3" || x.loc === "ABOVE" ? (soft >= 2 ? "Out" : "Background") : x.loc === "L2" ? (soft ? "Out" : "OnDeck-L2") : soft === 0 ? "A-eligible" : soft === 1 ? "OnDeck-1blocker" : "Out";
+    F(lw === s.list, r.sym, "Spec 6.1 list", s.list, lw);
+    F(s.pass === (s.list === "A-eligible"), r.sym, "Spec 6.1 pass = A-eligible", s.pass, s.list);
+    F(GRADES.indexOf(s.size.final) >= GRADES.indexOf(s.size.base) && s.size.final !== undefined, r.sym, "Spec 6.1 size never above the base grade", s.size.final && s.size.final[0], s.size.base[0]);
+  }
+  return R;
+};
+
+/* ---------------- styles ---------------- */
+document.head.insertAdjacentHTML("beforeend", `<style>
+.s61p{border:1px solid var(--line);border-radius:10px;padding:4px 10px 8px;margin:2px 0 10px;background:var(--surface)}
+.s61chips{display:flex;flex-wrap:wrap;gap:4px;margin:2px 0}
+.s61lv{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin:8px 0;font-size:12px}
+.s61lv.ok{border-color:var(--st1)} .s61lv.no{border-color:var(--crit)} .s61lv .lbl,.s61sz .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3)}
+.s61sz{border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12px;background:var(--surface-2)} .s61sz ol{margin:4px 0 0 18px;padding:0} .s61sz li{margin:2px 0}
+.s61bar{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:12.5px}
+.s61t tr.dimr td{opacity:.55} .s61t td.sym{font-weight:700}
+</style>`);
 </script>
 <script id="mobile-js">
 "use strict";
