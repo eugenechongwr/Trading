@@ -467,11 +467,13 @@ tr.thin td,.tk.thin{opacity:.5}
 .mbs-h{display:flex;gap:10px;align-items:baseline;margin-bottom:6px}
 .mbs-bar{display:flex;height:12px;border-radius:7px;overflow:hidden;background:var(--surface-3)}
 .mbs-bar span.na{background:var(--surface-3)}
-.mbs-k{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:8px 0 6px;text-align:center}
+.mbs-k{display:flex;gap:0;margin:8px 0 6px;text-align:center}
+.mbs-k > div{flex-basis:0;min-width:74px;padding:0 4px;overflow-wrap:anywhere;line-height:1.25}
+.mbs-k > div.na{min-width:0;padding:0}
 .mbs-k span{font-size:12px;font-weight:650}.mbs-k b{display:block;font-weight:500;color:var(--ink-2);font-variant-numeric:tabular-nums}
 .mbs-k small{display:block;color:var(--ink-3);font-size:11px}
 .mbs-k i,.sa-memg .lbl i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
-.mbs-svg{width:100%;height:auto;display:block}
+.mbs-svg{width:100%;max-width:880px;height:auto;display:block}
 .mbs-svg text{font-size:10px;fill:var(--ink-3)} .mbs-svg text.lv{font-size:11px;font-weight:650}
 .mbs-svg .gl{stroke:var(--line);stroke-width:1}
 .sat td,.sat th{white-space:nowrap}
@@ -5557,8 +5559,10 @@ renderTab = function(t){ if (t === "data" && S.snap) renderSelfCheck(); _renderT
 /* =====================================================================
    SCANS (18 Oct) — REACCEL and EP 9M. Screens, flags and filter criteria only: they change what is shown, never
    rankings, states or the plan.
-   REACCEL = indicators/screener/reaccel-screener v0.1 gates, with the v0.2 acceleration test from its README
-   (RS1M − (RS3M − RS1M) / 2 ≥ 5 pp) and names that reported in the last 5 days left out (a gap can pass gate 4 alone).
+   REACCEL = indicators/screener/reaccel-screener gates and acceleration exactly as the Pine has them
+   (RSAccel20 = RS1M − RS3M / 3 ≥ 5 pp; changed 18 Oct from the README's v0.2 RS1M − (RS3M − RS1M) / 2, as agreed).
+   A report in the last 5 days no longer hides a name (the Pine doesn't): it's flagged instead, because a gap can pass
+   gate 4 alone.
    RS here is the CSV's % return minus the benchmark's (CFG.bench, QQQ by default), same as the Pine (QQQ).
    EP 9M = Stockbee's 9-million-share episodic pivot: 9M+ shares in a session, price ≥ $3, and at least 3× normal
    volume ("far above its normal volume"). A raw 9M spike is not a buy — see the screen's note.
@@ -5567,7 +5571,7 @@ const RA = {perf6: 40, rs6: 10, p3lo: -20, p3hi: 15, offLo: 8, offHi: 35, acc: 5
 function reaccelOf(r){
   if (r.etf || r.last == null || r.perf6m == null || r.perf3m == null || r.vs_p6m == null || r.vs_p3m == null || r.vs_p1m == null
     || r.s200 == null || r.s50 == null || r.e21 == null || r.offHigh == null) return null;
-  const P = r.last, off = -r.offHigh, acc = r.vs_p1m - (r.vs_p3m - r.vs_p1m) / 2;
+  const P = r.last, off = -r.offHigh, acc = r.vs_p1m - r.vs_p3m / 3;
   const g = [
     r.perf6m >= RA.perf6 && r.vs_p6m >= RA.rs6,                                                     // 1 former leader
     r.perf3m >= RA.p3lo && r.perf3m <= RA.p3hi && off >= RA.offLo && off <= RA.offHi,                // 2 reset
@@ -5575,7 +5579,7 @@ function reaccelOf(r){
     P > r.e21 && r.vs_p1m > 0 && acc >= RA.acc                                                       // 4 turning
   ];
   const er = !!r.postER;
-  return {ok: g.every(Boolean) && !er, g, acc, er, struct: P > r.s50 ? 2 : 1};
+  return {ok: g.every(Boolean), g, acc, er, struct: P > r.s50 ? 2 : 1};
 }
 const EP9 = {vol: 9e6, px: 3, mult: 3, days: 10, avgN: 50};
 function ep9Of(r){
@@ -5605,7 +5609,7 @@ function ep9Hist(r){
 }
 const fmtVol = v => v >= 1e9 ? (v / 1e9).toFixed(2) + "B" : v >= 1e6 ? (v / 1e6).toFixed(1) + "M" : Math.round(v).toLocaleString();
 SCREENS.push(
-  {k: "reaccel", t: "REACCEL — former leader re-accelerating", d: `Led over 6 months (+${RA.perf6}% and ${RA.rs6}+ points ahead of the benchmark), reset for about 3 (3M between ${RA.p3lo}% and +${RA.p3hi}%, ${RA.offLo}–${RA.offHi}% off the 52-week high), long-term structure intact (above the 200 SMA, 50 over 200), and turning: above the 21 EMA, ahead of the benchmark over 1M, last month's RS pace ${RA.acc}+ points faster than the prior two. Names that reported in the last 5 days are left out. A candidate list, not an entry.`,
+  {k: "reaccel", t: "REACCEL — former leader re-accelerating", d: `Led over 6 months (+${RA.perf6}% and ${RA.rs6}+ points ahead of the benchmark), reset for about 3 (3M between ${RA.p3lo}% and +${RA.p3hi}%, ${RA.offLo}–${RA.offHi}% off the 52-week high), long-term structure intact (above the 200 SMA, 50 over 200), and turning: above the 21 EMA, ahead of the benchmark over 1M, 1M RS at least ${RA.acc} points above a third of the 3M RS (the Pine's RSAccel20). Names that reported in the last 5 days stay in but carry a REPORTED flag — a gap can pass the turning test on its own. A candidate list, not an entry.`,
     need: ["perf6m", "perf3m", "perf1m", "hi52", "s200"], f: r => { const x = reaccelOf(r); return !!(x && x.ok); }},
   {k: "ep9", t: "EP 9M — 9 million shares", d: () => `${S.mode === "pm" ? "Last session" : "Today"}: ${EP9.vol / 1e6}M+ shares, price $${EP9.px}+, and ${EP9.mult}×+ normal volume. Stockbee's volume-first episodic pivot. A raw 9M spike is not a buy: a 2020–26 backtest of ~5,000 of them found the median trade lost money; the edge needed a real catalyst (earnings, FDA, a launch) and a stop under the day's low. Check the news first.`,
     need: ["vol", "rvol"], f: r => { const x = ep9Of(r); return !!(x && x.ok); }},
@@ -5623,7 +5627,7 @@ const _flags1 = flagsHTML;
 flagsHTML = function(r){
   const ra = reaccelOf(r), e = ep9Of(r), eh = !(e && e.ok) && ep9Hist(r);
   return _flags1(r)
-    + (ra && ra.ok ? `<span class="flag good" title="Former leader re-accelerating: 6M leader, 3M reset, structure intact, RS pace ${sg(ra.acc, 1)} points">REACCEL</span>` : "")
+    + (ra && ra.ok ? `<span class="flag good" title="Former leader re-accelerating: 6M leader, 3M reset, structure intact, RSAccel20 ${sg(ra.acc, 1)} points">REACCEL</span>${ra.er ? `<span class="flag er" title="Reported in the last 5 days — the REACCEL turn may be the earnings gap alone">REPORTED</span>` : ""}` : "")
     + (e && e.ok ? `<span class="flag post" title="${fmtVol(r.vol)} shares, ${e.mult.toFixed(1)}× normal — check for a real catalyst">EP 9M</span>` : "")
     + (eh ? `<span class="flag post" title="${fmtVol(eh.vol)} shares on ${eh.date} (${eh.mult.toFixed(1)}× its 50-day average)">EP 9M ${eh.ago}d</span>` : "");
 };
@@ -6358,7 +6362,7 @@ function gaugeHTML(title, up, dn, lu, ld, note){
 function stageStripHTML(c, total){
   const t = total || 1;
   return `<div class="mbs-bar">${STG.filter(m => c[m]).map(m => `<span style="flex:${c[m]};background:${stgC(m)}" title="Stage ${m} · ${stgT(m)}: ${c[m]} (${Math.round(c[m] / t * 100)}%)"></span>`).join("")}${c.na ? `<span class="na" style="flex:${c.na}" title="Not enough history: ${c.na}"></span>` : ""}</div>
-    <div class="mbs-k">${STG.map(m => `<div><span><i style="background:${stgC(m)}"></i>Stage ${m}</span><b>${c[m].toLocaleString()} · ${Math.round(c[m] / t * 100)}%</b><small>${stgT(m)}</small></div>`).join("")}</div>`;
+    <div class="mbs-k">${STG.map(m => `<div style="flex-grow:${Math.max(c[m], t * 0.001)}"><span><i style="background:${stgC(m)}"></i>Stage ${m}</span><b>${c[m].toLocaleString()} · ${Math.round(c[m] / t * 100)}%</b><small>${stgT(m)}</small></div>`).join("")}${c.na ? `<div class="na" style="flex-grow:${c.na}"></div>` : ""}</div>`;   // each label sits under its own slice of the bar (same weights), text wraps when a slice is narrow
 }
 // share of each stage per session — S2 and S4 drawn bold, S1 / S3 thin (Deepvue's chart)
 function stageTrendSVG(tr, nShow, wPx){
@@ -6417,7 +6421,7 @@ function mbPaint(){
       <div class="mbs">
         <div class="mbs-h"><b>Stage analysis</b><span class="small">${mk ? (tot ? `${tot.toLocaleString()} names with enough history` : "") : "stocks in your file"} · Weinstein, Deepvue-style reference · 1A→1, 2A→2, 3A→3, 4B-→4</span></div>
         ${sc && tot ? stageStripHTML(sc, tot) : `<div class="small dim">${S.has.hist ? "Not enough stored history for stages yet." : "Stages need the price history."}</div>`}
-        ${tr ? stageTrendSVG(tr, MBV.trendN, box.clientWidth - 26) : ""}
+        ${tr ? stageTrendSVG(tr, MBV.trendN, Math.min(880, box.clientWidth - 26)) : ""}
       </div>`}
       <div class="small" style="margin-top:6px">Each gauge is the bullish count ÷ both counts — 50% is the balance point. ${mk ? `Whole market = your stored whole-market bars (same universe and split fix as the Market monitor).` : `Your list = the stocks in today's file.`} "On volume" uses ${MBV.mult}× average volume — Deepvue doesn't publish its cut-off, so expect different counts. A participation read, not a timing signal; MAP decides the regime.${MB.msg ? ` · <b>${esc(MB.msg)}</b>` : ""}</div></div>`;
   $("mbScope").onclick = e => { const b = e.target.closest("button"); if (!b) return; MB.scope = b.dataset.s; store.set("adrb.mbScope", MB.scope); MB.key = ""; mbPaint(); };
@@ -6755,6 +6759,926 @@ if (WS) {
       <div class="small">Stop = the 30-min pullback low, never wider than ½ ADR (${r.adrD ? f2(r.adrD / 2) : "—"}). Trigger: a 30-min close above the 30-min 21 EMA. The full note is folded below.</div></div>`);
   };
 }
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   DECISION LOG (18 Oct) — Decide › Decision log, both layouts. Tracking only: never changes rows, ranks, states or the plan.
+   One record per PLAN DAY (the session the list is for):
+     premarket file dated D → plan day D (data = the session before) · regular-session file of session D0 → plan day = next weekday.
+     Live mode doesn't log (its data refreshes all day).
+   A record opens only when a file is loaded for a plan day that hasn't finished (now ET < 16:00 on the plan day). Opening an old
+   file or snapshot never creates one, so nothing is decided with hindsight.
+   What surfaced = the board's plan (in zone / wait) + on deck from the same computePlan the Setups tab uses, but with the filter
+   bar OFF and "Buy zone only" off, so the record doesn't depend on what was on screen — plus MAP's A / B / stalk lists.
+   Each name's facts are frozen the first time it appears that day.
+   Per name: Take / Stalk / Pass (+ reasons, note), optional chart notes (planned trigger, real stop, first resistance → room in R)
+   and an "entered" tick. Decisions can change until 16:00 ET on the plan day; ones made after 09:30 ET that day are marked
+   "after the open". Once the day locks, a name with no decision stays "No decision". A trading session (a stored price-history
+   date) after the first record with no record at all is a "Missed session".
+   Scoring — stored daily bars after the data session, never today's partial bar. A daily-bar estimate, NOT the 30-min trigger:
+     fill   = within 5 sessions price trades to the board's entry (limit when the entry is at/below the price then, buy-stop when
+              above); fill = min(open, entry) / max(open, entry); opening through the stop or the 2R target = "gap, skipped".
+     exit   = widest stop (entry − ½ ADR) or the 2R target, else the close of the 3rd session after the fill (T+3 time exit).
+              On the fill bar only the stop counts. Stop and target on the same bar → stop. Opening through a level exits at the open.
+     R      = (exit − fill) ÷ (entry − widest stop).
+     moves  = close-to-close % 5 and 10 sessions after the data session, for every surfaced name and for two baselines: the whole
+              file and "RS 80+, above the 50 SMA, not surfaced".
+   Storage: IndexedDB dsb-files / kv / "journal" (localStorage adrb.journal if IndexedDB is blocked); carried in snapshots and
+   merged back when one is opened (newest edit wins per name).
+   ===================================================================== */
+const JN = {recs: {}, loaded: false, ready: null, now: () => Date.now(), FILL: 5, HOLD: 3, t: null, open: new Set(),
+  view: Object.assign({dec: "all", list: "all"}, store.get("adrb.jnView", {}) || {})};
+const JN_REASONS = [["ext", "Extended / chasing"], ["stop", "Stop too wide"], ["room", "No room overhead"], ["er", "Earnings"], ["group", "Weak group / theme"],
+  ["mkt", "Market / regime"], ["chart", "Chart structure"], ["vol", "Too volatile"], ["exp", "Enough exposure"], ["time", "No time / missed it"], ["other", "Other"]];
+const JN_RN = Object.fromEntries(JN_REASONS);
+const JN_DEC = {take: "Take", stalk: "Stalk", pass: "Pass", none: "No decision", open: "Not decided yet"};
+const JN_SRC = {zone: "Plan · in zone", wait: "Plan · wait", deck: "On deck", A: "MAP A", B: "MAP B", S: "Stalk"};
+const JN_OUT = {target: "+2R first", stop: "Stopped", time: "T+3 exit", open: "Running", nofill: "Never reached entry", gap: "Gapped past a level", pending: "Waiting for bars", nodata: "No price data", nolv: "No levels"};
+const JN_TRIG = ["T1", "T4", "Other"];
+const JN_RSO = ["90+", "80–89", "60–79", "under 60", "—"];
+
+/* ---------------- dates ---------------- */
+const jnNextWk = d => { let x = addDays(d, 1); while (!isWkday(x)) x = addDays(x, 1); return x; };
+const jnET = () => etParts(JN.now());
+const jnDay = d => { try { return new Date(d + "T12:00:00Z").toLocaleDateString("en-GB", {weekday: "short", day: "numeric", month: "short", timeZone: "UTC"}); } catch (e) { return d; } };
+// plan day + data session for the file on screen (null = this file can't be logged)
+function jnDays(){
+  if (!S.snap || !S.snap.asOf || S.snap.live || !S.stocks || !S.stocks.length) return null;
+  const a = S.snap.asOf;
+  if (S.mode === "pm") { const p = isWkday(a) ? a : jnNextWk(a); return {p, d0: prevWkday(addDays(p, -1))}; }
+  const d0 = prevWkday(a); return {p: jnNextWk(d0), d0};
+}
+const jnOpenDay = p => { const n = jnET(); return n.d < p || (n.d === p && n.m < 16 * 60); };
+const jnAfterOpen = (p, ms) => { const n = etParts(ms); return n.d > p || (n.d === p && n.m >= 9 * 60 + 30); };
+
+/* ---------------- storage ---------------- */
+JN.ready = (async () => {
+  let v = null;
+  try { v = await fGet("kv", "journal"); } catch (e) { JN.idbOff = true; }
+  if (!v) v = store.get("adrb.journal", null);
+  if (v && typeof v === "object") JN.recs = v;
+  JN.loaded = true;
+})();
+async function jnSaveNow(){
+  clearTimeout(JN.t);
+  try { if (JN.idbOff) throw new Error("no idb"); await fPut("kv", "journal", JN.recs); } catch (e) { store.set("adrb.journal", JN.recs); }
+}
+function jnSave(){ clearTimeout(JN.t); JN.t = setTimeout(jnSaveNow, 250); }
+
+/* ---------------- recording ---------------- */
+const jr = x => x == null || !isFinite(x) ? null : +(+x).toFixed(4);
+const jnEr = r => r.erIn == null || r.erIn < 0 ? "unknown" : r.erSoon ? "soon" : "clear";
+function jnFacts(r, why){
+  const v = vsOf(r); let x = null; try { x = s6Of(r); } catch (e) {}
+  return {last: jr(r.last), st: r.state || null, status: statusOf(r).t, rs: r.rs ?? null, grp: r.group || null, gs: r.gState && r.gState !== "—" ? r.gState : null,
+    entry: jr(r.entry), stop: jr(r.stop), tgt: jr(r.target), adr: jr(r.adr), zx: jr(r.zx), ext: jr(r.extU), grade: sizeGrade(r).g,
+    vs: v ? v.k : null, er: jnEr(r), erIn: r.erIn ?? null, piv: x ? (x.pass ? "pass" : x.why || "fail") : null, thin: !!r.thin, ...(why ? {why} : {})};
+}
+// the board's plan + on deck with the filter bar and "Buy zone only" switched off (the Setups tab's own computePlan)
+function jnSurface(){
+  if (!GF.on && S.ui.planOnly !== "buy") return S.plan;
+  const keep = S.plan, on = GF.on, only = S.ui.planOnly;
+  try { GF.on = false; S.ui.planOnly = "all"; GFV++; computePlan(); return S.plan; }
+  finally { GF.on = on; S.ui.planOnly = only; GFV++; S.plan = keep; }
+}
+function jnRecord(){
+  const dd = jnDays(); if (!dd || !jnOpenDay(dd.p)) return false;
+  const pl = jnSurface(); if (!pl) return false;
+  const now = JN.now(), files = S.snap.files.map(f => f.name);
+  let rec = JN.recs[dd.p];
+  if (!rec) rec = JN.recs[dd.p] = {p: dd.p, d0: dd.d0, mode: S.mode, files: [], at: now, zone: zoneStamp(), rsMin: CFG.rsMin, planN: CFG.planN, n: []};
+  rec.files = [...new Set([...rec.files, ...files])];
+  rec.tape = S.tape ? S.tape.bucket : (rec.tape ?? null);
+  rec.map = mapRegime().v || rec.map || null;
+  const by = new Map(rec.n.map(o => [o.s, o]));
+  const add = (r, src, why) => {
+    let o = by.get(r.sym);
+    if (!o) { o = {s: r.sym, src: [], first: now, f: jnFacts(r, why)}; by.set(r.sym, o); rec.n.push(o); }
+    if (!o.src.includes(src)) o.src.push(src);
+  };
+  for (const r of pl.plan) add(r, r.state === 1 ? "zone" : "wait");
+  for (const d of pl.deck) add(d.r, "deck", d.why);
+  // MAP lists follow the lists as typed while the day is open (board tags stay once a name has surfaced)
+  const L = {A: LISTS.focus, B: typeof MAPL !== "undefined" ? MAPL.b : new Set(), S: typeof MAPL !== "undefined" ? MAPL.stalk : new Set()};
+  for (const o of rec.n) o.src = o.src.filter(k => !(k in L) || L[k].has(o.s));
+  const rowBy = S.rowBySym || new Map(S.rows.map(r => [r.sym, r]));
+  for (const k in L) for (const s of L[k]) { const r = rowBy.get(s); if (r && !r.etf) add(r, k); }
+  rec.n = rec.n.filter(o => o.src.length || o.dec || o.note || o.ch || o.took);
+  // baselines: the whole file, and strong names the board did not surface (taken from the first file of the day)
+  const u = new Set((rec.u || "").split(" ").filter(Boolean)); S.stocks.forEach(r => u.add(r.sym)); rec.u = [...u].join(" ");
+  if (rec.strong == null) { const surf = new Set(rec.n.map(o => o.s)); rec.strong = S.stocks.filter(r => !surf.has(r.sym) && (r.rs ?? 0) >= CFG.momRS && r.a50 === true && !r.thin).map(r => r.sym).join(" "); }
+  jnSave(); return true;
+}
+function jnSoon(){ JN.ready.then(() => { let ch = false; try { ch = jnRecord(); } catch (e) { console.warn("decision log", e); } if (ch && S.ui.tab === "journal") renderJournal(); }); }
+const _afterLoadJ = afterLoad;
+afterLoad = function(k){ _afterLoadJ(k); jnSoon(); };
+const _mlogJ = mlogRecord;
+mlogRecord = function(){ _mlogJ(); jnSoon(); };
+const _setMapRegimeJ = setMapRegime;
+setMapRegime = function(v, c){ _setMapRegimeJ(v, c); jnSoon(); };
+
+/* ---------------- scoring ---------------- */
+let JNH = {key: ""};
+function jnHK(){ const k = HIST.nD + "|" + (HIST.dates[HIST.nD - 1] || "") + "|" + HIST.nS; if (JNH.key !== k) JNH = {key: k, base: new Map()}; return JNH; }
+// last stored session on or before d0
+function jnT0(d0){
+  if (!HIST.nD) return null; let lo = 0, hi = HIST.nD - 1, a = null;
+  while (lo <= hi) { const m = (lo + hi) >> 1; if (HIST.dates[m] <= d0) { a = m; lo = m + 1; } else hi = m - 1; }
+  return a;
+}
+// close-to-close % k sessions after t0 · undefined = not enough bars yet · null = no data
+function jnMove(i, t0, k){
+  if (t0 == null || i == null) return null;
+  if (t0 + k >= HIST.nD) return undefined;
+  const a = HIST.C[i * HIST.nD + t0], b = HIST.C[i * HIST.nD + t0 + k];
+  return isFinite(a) && isFinite(b) && a > 0 ? (b / a - 1) * 100 : null;
+}
+function jnSim(f, i, t0){
+  const E = f.entry, SP = f.stop, TG = f.tgt, ref = f.last;
+  if (E == null || SP == null || TG == null || !(E > SP) || !(TG > E)) return {k: "nolv"};
+  if (i == null || t0 == null) return {k: "nodata"};
+  const nD = HIST.nD, risk = E - SP, above = ref != null && E > ref + 1e-9;
+  const B = t => { const o = i * nD + t; return [HIST.O[o], HIST.Hh[o], HIST.L[o], HIST.C[o]]; };
+  let kf = null, fill = null;
+  for (let k = 1; k <= JN.FILL; k++) {
+    const t = t0 + k; if (t >= nD) return {k: "pending"};
+    const [o, h, l] = B(t); if (!isFinite(h) || !isFinite(l)) continue;
+    const op = isFinite(o) ? o : E;
+    if (above ? h >= E : l <= E) { fill = above ? Math.max(op, E) : Math.min(op, E); kf = k; break; }
+  }
+  if (kf == null) return {k: "nofill"};
+  const tf = t0 + kf, R = x => (x - fill) / risk, out = (k, x, t) => ({k, fill, exit: x, R: R(x), fd: HIST.dates[tf], xd: HIST.dates[t]});
+  if (fill <= SP || fill >= TG) return {k: "gap", fill, fd: HIST.dates[tf]};
+  if (B(tf)[2] <= SP) return out("stop", SP, tf);
+  let lastC = B(tf)[3], lastT = tf;
+  for (let j = 1; j <= JN.HOLD; j++) {
+    const t = tf + j;
+    if (t >= nD) return {k: "open", fill, fd: HIST.dates[tf], R: isFinite(lastC) ? R(lastC) : null};
+    const [o, h, l, c] = B(t);
+    if (!isFinite(h) || !isFinite(l)) continue;
+    if (isFinite(o) && o <= SP) return out("stop", o, t);
+    if (l <= SP) return out("stop", SP, t);
+    if (isFinite(o) && o >= TG) return out("target", o, t);
+    if (h >= TG) return out("target", TG, t);
+    if (isFinite(c)) { lastC = c; lastT = t; }
+  }
+  return out("time", lastC, lastT);
+}
+const jnFinished = s => s && (s.k === "stop" || s.k === "target" || s.k === "time");
+const jnFilled = s => s && (jnFinished(s) || s.k === "open");
+function jnScoreName(o, rec, t0){
+  const i = HIST.idx ? HIST.idx.get(o.s) : null;
+  if (!HIST.nD) return {sim: {k: "nodata"}, m5: null, m10: null};
+  return {sim: jnSim(o.f, i ?? null, t0), m5: jnMove(i, t0, 5), m10: jnMove(i, t0, 10)};
+}
+// baselines for one record: whole file, strong-not-surfaced, and how many of the top 20 liquid 5-day gainers were surfaced
+function jnBase(rec, t0){
+  const H = jnHK(); if (H.base.has(rec.p)) return H.base.get(rec.p);
+  const surf = new Set(rec.n.filter(o => o.src.some(k => k === "zone" || k === "wait" || k === "deck")).map(o => o.s));
+  const mv = (syms, k) => syms.map(s => jnMove(HIST.idx.get(s), t0, k));
+  const u = (rec.u || "").split(" ").filter(Boolean), st = (rec.strong || "").split(" ").filter(s => s && !surf.has(s));
+  const out = {u5: mv(u, 5), u10: mv(u, 10), s5: mv(st, 5), s10: mv(st, 10), top: null};
+  if (t0 != null && t0 + 5 < HIST.nD && t0 >= 19) {
+    const nD = HIST.nD, liq = [];
+    for (const s of u) {
+      const i = HIST.idx.get(s); if (i == null) continue;
+      let dv = 0, n = 0; for (let t = t0 - 19; t <= t0; t++) { const c = HIST.C[i * nD + t], v = HIST.V[i * nD + t]; if (isFinite(c) && isFinite(v)) { dv += c * v; n++; } }
+      const m = jnMove(i, t0, 5); if (n >= 15 && dv / n >= 20e6 && m != null) liq.push([s, m]);
+    }
+    liq.sort((a, b) => b[1] - a[1]);
+    const top = liq.slice(0, 20); out.top = {n: top.length, hit: top.filter(([s]) => surf.has(s)).map(([s]) => s)};
+  }
+  H.base.set(rec.p, out); return out;
+}
+const jnMed = a => { const v = a.filter(x => x != null && isFinite(x)).sort((x, y) => x - y); if (!v.length) return null; const m = v.length >> 1; return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2; };
+const jnUp = a => { const v = a.filter(x => x != null && isFinite(x)); return v.length ? v.filter(x => x > 0).length / v.length * 100 : null; };
+function jnAgg(items){
+  const sims = items.map(x => x.sc.sim), fin = sims.filter(jnFinished), filled = sims.filter(jnFilled).length, nofill = sims.filter(s => s.k === "nofill").length;
+  const R = fin.map(s => s.R);
+  return {n: items.length, fillRate: filled + nofill ? filled / (filled + nofill) * 100 : null, fin: fin.length,
+    avgR: R.length ? R.reduce((a, b) => a + b, 0) / R.length : null, sumR: R.length ? R.reduce((a, b) => a + b, 0) : null,
+    win: R.length ? R.filter(x => x > 0).length / R.length * 100 : null, m5: jnMed(items.map(x => x.sc.m5)), up5: jnUp(items.map(x => x.sc.m5)), m10: jnMed(items.map(x => x.sc.m10))};
+}
+const jnDecOf = (o, rec) => o.dec ? o.dec.k : jnOpenDay(rec.p) ? "open" : "none";
+function jnRoom(o){ const c = o.ch, E = o.f.entry; return c && c.stop != null && c.res != null && E != null && E > c.stop ? (c.res - E) / (E - c.stop) : null; }
+// every logged name with its score (newest day first)
+function jnItems(){
+  const out = [];
+  for (const p of Object.keys(JN.recs).sort().reverse()) {
+    const rec = JN.recs[p], t0 = HIST.nD ? jnT0(rec.d0) : null;
+    for (const o of rec.n) out.push({rec, o, sc: jnScoreName(o, rec, t0), dec: jnDecOf(o, rec)});
+  }
+  return out;
+}
+function jnMissed(){
+  const ps = Object.keys(JN.recs).sort(); if (!ps.length || !HIST.nD) return [];
+  const have = new Set(ps); return HIST.dates.filter(d => d >= ps[0] && !have.has(d));
+}
+
+/* ---------------- page ---------------- */
+document.querySelector('#tabs button[data-tab="shorts"]').insertAdjacentHTML("afterend", `<button data-tab="journal" data-sub="Log decisions, score what surfaced" title="Log decisions, score what surfaced">Decision log</button>`);
+$("foot").insertAdjacentHTML("beforebegin", `<section class="tab" id="tab-journal"><p class="lede">Every name the board surfaces is logged here, one list per trading day. Mark each one Take, Stalk or Pass before the session. Names you don't mark are logged as "no decision", and days you don't load a file are logged as missed. Later the stored daily bars score what happened, so you can see how good the board is at surfacing names and how good your calls are. Nothing here changes the board's rankings, states or plan.</p><div id="jnBody"></div></section>`);
+document.head.insertAdjacentHTML("beforeend", `<style>
+#tabs button[data-tab="journal"]{--ic:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M9 11l3 3 8-8'/><path d='M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9'/></svg>")}
+.jn-t td{vertical-align:top}
+.jn-t tr.jn-sub td{border-top:0;padding-top:0;background:var(--surface-2)}
+.jn-t tr.jn-main.jn-has td{background:var(--surface-2)}
+.jn-dec{display:inline-flex;gap:4px}
+.jn-dec button,.jn-chip{border:1px solid var(--line-strong);background:var(--surface);color:var(--ink-2);border-radius:6px;padding:2px 8px;font-size:12px;cursor:pointer}
+.jn-dec button.on[data-v="take"]{background:var(--st1);border-color:var(--st1);color:#fff}
+.jn-dec button.on[data-v="stalk"]{background:var(--st2);border-color:var(--st2);color:#fff}
+.jn-dec button.on[data-v="pass"]{background:var(--ink-3);border-color:var(--ink-3);color:#fff}
+.jn-dec button:disabled,.jn-chip:disabled{cursor:default;opacity:.55}
+.jn-chip{font-size:11px;padding:1px 7px;margin:2px 3px 2px 0}
+.jn-chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.jn-src{display:inline-block;font-size:10.5px;padding:0 5px;border-radius:4px;margin:1px 3px 1px 0;background:var(--chip);color:var(--ink-2);white-space:nowrap}
+.jn-src.zone{background:var(--good-soft);border:1px solid var(--st1)}.jn-src.wait{background:var(--up-soft);border:1px solid var(--st2)}
+.jn-src.A{background:var(--accent);color:#fff}.jn-src.B,.jn-src.S{border:1px solid var(--accent)}
+.jn-sub input[type=text],.jn-sub input[type=number]{font-size:12px;padding:2px 6px;border:1px solid var(--line-strong);border-radius:6px;background:var(--surface);color:var(--ink)}
+.jn-sub input[type=number]{width:84px}
+.jn-sub .jn-l{display:inline-flex;align-items:center;gap:5px;margin:3px 12px 3px 0;font-size:12px;color:var(--ink-3)}
+.jn-out{white-space:nowrap}
+.jn-warn{padding:6px 10px;border-radius:8px;background:var(--up-soft);font-size:12.5px;margin:0 0 10px}
+.jn-ft td.l b{font-weight:650}
+.jn-ft tr.jn-fh td{background:var(--surface-2);font-weight:650}
+</style>`);
+const jnFmtR = v => v == null ? "—" : (v > 0 ? "+" : "") + v.toFixed(2) + "R";
+const jnFmtP = v => v === undefined ? `<span class="dim">…</span>` : v == null ? "—" : (v > 0 ? "+" : "") + v.toFixed(1) + "%";
+const jnPct = v => v == null ? "—" : Math.round(v) + "%";
+const jnCls = v => v == null ? "" : v > 0 ? "pos" : v < 0 ? "neg" : "";
+const jnSrcHTML = o => o.src.map(k => `<span class="jn-src ${k}">${JN_SRC[k] || k}</span>`).join("");
+function jnOutHTML(sc){
+  const s = sc.sim;
+  if (jnFinished(s)) return `<span class="jn-out ${jnCls(s.R)}"><b>${jnFmtR(s.R)}</b> <span class="small dim">${JN_OUT[s.k]}</span></span>`;
+  if (s.k === "open") return `<span class="jn-out">${jnFmtR(s.R)} <span class="small dim">so far</span></span>`;
+  return `<span class="small dim">${JN_OUT[s.k] || s.k}</span>`;
+}
+const jnFew = n => n < 10 ? ` <span class="small dim">(too few to read)</span>` : n < 30 ? ` <span class="small dim">(early read)</span>` : "";
+
+function jnTodayCard(){
+  const dd = jnDays(), ps = Object.keys(JN.recs).sort(), openP = ps.filter(jnOpenDay), p = dd && JN.recs[dd.p] && jnOpenDay(dd.p) ? dd.p : openP[openP.length - 1];
+  if (!p) {
+    const why = !S.snap ? "Load today's files to start the log." : S.snap.live ? "Live mode isn't logged — its prices refresh all day. Load the CSV files (or a snapshot) to log a list."
+      : !dd ? "This file can't be logged (no stocks in it)." : `This file is for <b>${jnDay(dd.p)}</b>, and that session has already finished — the log only opens a list for a day that hasn't closed yet, so nothing is decided with hindsight.`;
+    return `<div class="card g1" id="jnToday"><div class="hd"><h2>Today's list</h2><span class="sub">nothing open to decide right now</span></div><div class="bd"><div class="empty" style="padding:4px 0">${why}</div></div></div>`;
+  }
+  const rec = JN.recs[p], open = jnOpenDay(p), rowBy = S.rowBySym || new Map();
+  const ord = o => o.src.includes("zone") ? 0 : o.src.includes("wait") ? 1 : o.src.includes("deck") ? 2 : 3;
+  const L = [...rec.n].sort((a, b) => ord(a) - ord(b) || (b.f.rs ?? 0) - (a.f.rs ?? 0));
+  const nDec = rec.n.filter(o => o.dec).length;
+  const row = o => {
+    const f = o.f, d = o.dec, k = d ? d.k : null, dis = open ? "" : "disabled", show = d || o.note || o.ch || JN.open.has(p + ":" + o.s);
+    const er = f.er === "unknown" ? `<span class="neg">earnings date unknown</span>` : f.er === "soon" ? `<span class="neg">earnings in ${f.erIn}d</span>` : `no earnings in ${CFG.erDays}d`;
+    const meta = [esc(f.status), `RS ${f.rs ?? "—"}`, `grade ${esc(f.grade || "—")}`, f.vs ? esc(VSL[f.vs].n) : "", er, f.piv == null ? "" : f.piv === "pass" ? "Pivot script ✓" : /^needs/.test(f.piv) ? `<span class="dim">Pivot script ? ${esc(f.piv)}</span>` : `Pivot script ✕ <span class="dim">${esc(f.piv)}</span>`].filter(Boolean).join(" · ");
+    const rr = jnRoom(o), riskAdr = o.ch && o.ch.stop != null && f.entry != null && f.adr && f.last ? (f.entry - o.ch.stop) / (f.adr / 100 * f.last) : null;
+    const main = `<tr class="jn-main ${show ? "jn-has" : ""}"><td class="l"><span class="sym" ${rowBy.has(o.s) ? `data-jsym="${esc(o.s)}" style="cursor:pointer"` : ""}><b>${esc(o.s)}</b></span><div>${jnSrcHTML(o)}</div></td>
+      <td class="l small">${meta}${f.why ? `<div class="dim">On deck: ${esc(f.why)}</div>` : ""}<div class="dim">${esc(f.grp || "")}${f.gs ? " · group " + esc(f.gs) : ""}</div></td>
+      <td>${f.entry == null ? "—" : `${f2(f.entry)}<div class="small dim">stop ${f2(f.stop)} · 2R ${f2(f.tgt)}</div>`}</td>
+      <td class="l"><span class="jn-dec">${["take", "stalk", "pass"].map(v => `<button data-jd="${v}" data-v="${v}" data-p="${p}" data-s="${esc(o.s)}" class="${k === v ? "on" : ""}" ${dis}>${JN_DEC[v]}</button>`).join("")}</span>
+        ${d && d.ao ? `<div class="small dim">decided after the open</div>` : ""}${!show ? `<div><a class="small" data-jx="${p}:${esc(o.s)}" style="cursor:pointer">+ reasons, note, chart</a></div>` : ""}</td>
+      <td><label class="tog small" title="Tick if you actually bought it — a fact, so it stays editable"><input type="checkbox" data-jt data-p="${p}" data-s="${esc(o.s)}" ${o.took ? "checked" : ""}> entered</label></td></tr>`;
+    if (!show) return main;
+    const ch = o.ch || {};
+    const reasons = k === "pass" || k === "stalk" ? `<div class="small" style="margin-bottom:3px">Why ${k === "pass" ? "pass" : "stalk"}: ${JN_REASONS.map(([rk, rl]) => `<button class="jn-chip ${(d.why || []).includes(rk) ? "on" : ""}" data-jw="${rk}" data-p="${p}" data-s="${esc(o.s)}" ${dis}>${rl}</button>`).join("")}</div>` : "";
+    return main + `<tr class="jn-sub"><td></td><td class="l" colspan="4">${reasons}
+      <span class="jn-l">Note <input type="text" data-jn="note" data-p="${p}" data-s="${esc(o.s)}" value="${esc(o.note || "")}" placeholder="one line" style="width:220px" ${dis}></span>
+      <span class="jn-l">Trigger ${JN_TRIG.map(t => `<button class="jn-chip ${ch.trig === t ? "on" : ""}" data-jtr="${t}" data-p="${p}" data-s="${esc(o.s)}" ${dis}>${t}</button>`).join("")}</span>
+      <span class="jn-l">Real stop <input type="number" step="0.01" data-jn="stop" data-p="${p}" data-s="${esc(o.s)}" value="${ch.stop ?? ""}" ${dis}></span>
+      <span class="jn-l">First resistance <input type="number" step="0.01" data-jn="res" data-p="${p}" data-s="${esc(o.s)}" value="${ch.res ?? ""}" ${dis}></span>
+      <span class="jn-l">${rr == null ? `<span class="dim">room — enter both</span>` : `room <b class="${rr >= 2 ? "pos" : "neg"}">${rr.toFixed(2)}R</b>`}${riskAdr != null ? ` · risk ${riskAdr.toFixed(2)} ADR${riskAdr > 0.5 + 1e-9 ? ` <span class="neg">over ½ ADR</span>` : ""}` : ""}</span></td></tr>`;
+  };
+  const n = jnET(), lockTxt = open ? `decide by 16:00 ET ${jnDay(p)}${n.d === p && n.m >= 570 ? " · <b>the session is open</b> — new calls are marked \"after the open\"" : ""}` : "locked";
+  const dataTxt = rec.mode === "pm" ? `premarket file · data to the ${jnDay(rec.d0)} close` : `regular-session file of ${jnDay(rec.d0)}`;
+  return `<div class="card g1" id="jnToday"><div class="hd"><h2>Today's list — plan for ${jnDay(p)}</h2><span class="sub">${dataTxt} · ${lockTxt} · <b>${nDec} of ${rec.n.length}</b> decided</span></div>
+    <div class="bd">${dd && dd.p !== p ? `<div class="jn-warn">The file on screen is for ${jnDay(dd.p)}, which can't be logged any more — showing the open list for ${jnDay(p)}.</div>` : ""}
+    ${!rec.n.length ? `<div class="empty">The board surfaced nothing for this day, and no MAP lists are typed. That's a valid result.</div>` : `
+    <div class="tscroll" style="max-height:none"><table class="mini jn-t"><thead><tr><th class="l">Ticker</th><th class="l">What the board saw (frozen when it first appeared)</th><th>Entry</th><th class="l">Your call</th><th></th></tr></thead><tbody>${L.map(row).join("")}</tbody></table></div>`}
+    <div class="small" style="margin-top:6px">Lists come from the board's plan and on deck with the filter bar off (so the log doesn't depend on what you were viewing), plus your MAP A / B / stalk lists as typed on Setups. Names you leave blank are logged as "no decision" when the day locks. Entry, stop and 2R are the board's levels; the real stop and resistance are yours from the chart.</div></div></div>`;
+}
+
+function jnRender(){
+  const items = jnItems(), locked = items.filter(x => !jnOpenDay(x.rec.p)), missed = jnMissed(), hist = !!HIST.nD;
+  const recs = Object.keys(JN.recs).length;
+  // scorecard
+  const by = k => locked.filter(x => x.dec === k), A = {take: jnAgg(by("take")), stalk: jnAgg(by("stalk")), pass: jnAgg(by("pass")), none: jnAgg(by("none"))};
+  const all = jnAgg(locked), surfAll = items.filter(x => x.o.src.some(k => k === "zone" || k === "wait" || k === "deck"));
+  const lockedDays = Object.keys(JN.recs).filter(p => !jnOpenDay(p)).length;
+  const decided = locked.filter(x => x.dec !== "none").length;
+  const tile = (k, v, n, cls = "") => `<div class="kpi card"><div class="k">${k}</div><div class="v ${cls}">${v}</div><div class="n">${n}</div></div>`;
+  const kpis = `<div class="kpis">${tile("Days logged", recs, `${lockedDays} locked · ${recs - lockedDays} open`)}${tile("Missed sessions", missed.length, hist ? "trading days with no file loaded" : "needs the price history", missed.length ? "neg" : "")}
+    ${tile("Calls made", locked.length ? jnPct(decided / locked.length * 100) : "—", `${decided} of ${locked.length} names on locked days`)}
+    ${tile("Take · avg R", jnFmtR(A.take.avgR), `${A.take.fin} finished of ${A.take.n}`, jnCls(A.take.avgR))}${tile("Pass · avg R", jnFmtR(A.pass.avgR), `${A.pass.fin} finished of ${A.pass.n}`, jnCls(A.pass.avgR))}
+    ${tile("No decision · avg R", jnFmtR(A.none.avgR), `${A.none.fin} finished of ${A.none.n}`, jnCls(A.none.avgR))}</div>`;
+  const histNote = hist ? "" : `<div class="jn-warn">Scoring needs the stored price history (Massive). <button class="btn sm" data-hist="full">Load price history</button> — the log itself works without it.</div>`;
+  // decisions table
+  const aggRow = (label, g, note = "") => `<tr><td class="l"><b>${label}</b>${note ? `<div class="small dim">${note}</div>` : ""}</td><td>${g.n}</td><td>${jnPct(g.fillRate)}</td><td>${g.fin}${jnFew(g.fin)}</td><td>${jnPct(g.win)}</td><td class="${jnCls(g.avgR)}"><b>${jnFmtR(g.avgR)}</b></td><td class="${jnCls(g.sumR)}">${jnFmtR(g.sumR)}</td><td class="${jnCls(g.m5)}">${jnFmtP(g.m5)}</td><td>${jnPct(g.up5)}</td><td class="${jnCls(g.m10)}">${jnFmtP(g.m10)}</td></tr>`;
+  const head = first => `<thead><tr><th class="l">${first}</th><th>Names</th><th>Reached entry</th><th>Finished</th><th>Won</th><th>Avg R</th><th>Total R</th><th>Median 5d</th><th>Up after 5d</th><th>Median 10d</th></tr></thead>`;
+  const took = locked.filter(x => x.o.took), ao = locked.filter(x => x.o.dec && x.o.dec.ao), bo = locked.filter(x => x.o.dec && !x.o.dec.ao);
+  const decT = `<div class="card g1" id="jnDec"><div class="hd"><h2>Your calls</h2><span class="sub">locked days only · R from the daily-bar estimate below · a good "Pass" row is one that loses money</span></div><div class="bd">
+    <table class="mini">${head("Call")}<tbody>${aggRow("Take", A.take)}${aggRow("Stalk", A.stalk)}${aggRow("Pass", A.pass)}${aggRow("No decision", A.none, "names you left blank")}${aggRow("Everything logged", all)}
+      ${aggRow("Entered (you ticked it)", jnAgg(took), "what you actually bought, scored the same way — your real fills live in your trade log")}${aggRow("Calls before the open", jnAgg(bo))}${aggRow("Calls after the open", jnAgg(ao))}</tbody></table></div></div>`;
+  // board surfacing
+  const grp = k => items.filter(x => x.o.src.includes(k));
+  let bU5 = [], bU10 = [], bS5 = [], bS10 = [], topN = 0, topHit = 0, topDays = 0;
+  if (hist) for (const p of Object.keys(JN.recs)) { const rec = JN.recs[p], t0 = jnT0(rec.d0), b = jnBase(rec, t0); bU5 = bU5.concat(b.u5); bU10 = bU10.concat(b.u10); bS5 = bS5.concat(b.s5); bS10 = bS10.concat(b.s10); if (b.top) { topN += b.top.n; topHit += b.top.hit.length; topDays++; } }
+  const bRow = (label, a5, a10) => `<tr><td class="l"><b>${label}</b><div class="small dim">baseline</div></td><td>${a5.filter(x => x != null && isFinite(x)).length}</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td class="${jnCls(jnMed(a5))}">${jnFmtP(jnMed(a5))}</td><td>${jnPct(jnUp(a5))}</td><td class="${jnCls(jnMed(a10))}">${jnFmtP(jnMed(a10))}</td></tr>`;
+  const surfT = `<div class="card g1" id="jnSurf"><div class="hd"><h2>Is the board surfacing the right names?</h2><span class="sub">every logged day · moves are close to close after the data session · baselines use the same days</span></div><div class="bd">
+    <table class="mini">${head("List")}<tbody>${aggRow("Plan · in zone", jnAgg(grp("zone")))}${aggRow("Plan · wait for pullback", jnAgg(grp("wait")))}${aggRow("On deck", jnAgg(grp("deck")))}${aggRow("Everything the board surfaced", jnAgg(surfAll))}
+      ${aggRow("MAP A list", jnAgg(grp("A")))}${aggRow("MAP B list", jnAgg(grp("B")))}${aggRow("MAP stalk", jnAgg(grp("S")))}
+      ${hist ? bRow(`Strong, not surfaced (RS ${CFG.momRS}+, above the 50)`, bS5, bS10) + bRow("Whole file", bU5, bU10) : ""}</tbody></table>
+    ${topDays ? `<div class="small" style="margin-top:6px">Caught <b>${topHit} of ${topN}</b> of the top 20 five-day gainers (liquid names, $20M+ a day) across ${topDays} day${topDays === 1 ? "" : "s"}. Many big gainers are already extended when they run, so a low number here isn't automatically bad — compare it with the rows above.</div>` : ""}</div></div>`;
+  // factors
+  const FACT = [
+    ["Board list", x => x.o.src.includes("zone") ? "Plan · in zone" : x.o.src.includes("wait") ? "Plan · wait" : x.o.src.includes("deck") ? "On deck" : "MAP only"],
+    ["MAP list", x => x.o.src.includes("A") ? "A list" : x.o.src.includes("B") ? "B list" : x.o.src.includes("S") ? "Stalk" : "Not on MAP's lists"],
+    ["RS", x => x.o.f.rs == null ? "—" : x.o.f.rs >= 90 ? "90+" : x.o.f.rs >= 80 ? "80–89" : x.o.f.rs >= 60 ? "60–79" : "under 60"],
+    ["Volatility", x => x.o.f.vs ? VSL[x.o.f.vs].n : "no history then"],
+    ["Group", x => x.o.f.gs || "—"],
+    ["Earnings", x => ({clear: "None in the window", soon: "Inside the window", unknown: "Date unknown"})[x.o.f.er] || "—"],
+    ["Pivot script (6.0X)", x => x.o.f.piv == null ? "—" : x.o.f.piv === "pass" ? "Passes" : /^needs/.test(x.o.f.piv) ? "Not known (no history then)" : "Fails"],
+    ["Size grade", x => x.o.f.grade || "—"],
+    ["Tape read", x => x.rec.tape || "no breadth file"],
+    ["MAP call", x => x.rec.map || "not set"],
+    ["Room to resistance (your chart)", x => { const r = jnRoom(x.o); return r == null ? "not entered" : r >= 2 ? "2R or more" : "under 2R"; }],
+    ["Planned trigger", x => (x.o.ch && x.o.ch.trig) || "not entered"]
+  ];
+  const fScope = JN.view.fsc || "all", fItems = fScope === "take" ? locked.filter(x => x.dec === "take") : locked;
+  const factT = `<div class="card g1 jn-ft" id="jnFact"><div class="hd"><h2>What goes with better results</h2><span class="sub">locked days · each name counted once per factor</span><span class="spacer"></span>
+      <span class="seg" id="jnFsc">${[["all", "Everything logged"], ["take", "Only my Takes"]].map(([k, l]) => `<button data-jfs="${k}" class="${fScope === k ? "on" : ""}">${l}</button>`).join("")}</span></div><div class="bd">
+    ${fItems.length ? `<table class="mini">${head("Factor")}<tbody>${FACT.map(([name, fn]) => { const m = new Map(); fItems.forEach(x => { const v = fn(x); if (!m.has(v)) m.set(v, []); m.get(v).push(x); });
+      return `<tr class="jn-fh"><td class="l" colspan="10">${name}</td></tr>` + [...m].sort((a, b) => name === "RS" ? JN_RSO.indexOf(a[0]) - JN_RSO.indexOf(b[0]) : b[1].length - a[1].length).map(([v, L]) => aggRow(esc(v), jnAgg(L))).join(""); }).join("")}</tbody></table>`
+      : `<div class="empty" style="padding:4px 0">Nothing locked yet — this fills in once a logged day has closed.</div>`}
+    <div class="small" style="margin-top:6px">A factor is only worth acting on when the same pattern holds across many names and several weeks. Under 30 finished trades in a row, read it as a hint, not a rule.</div></div></div>`;
+  // pass reasons
+  const pr = new Map(); locked.filter(x => x.o.dec && (x.dec === "pass" || x.dec === "stalk")).forEach(x => { const w = x.o.dec.why && x.o.dec.why.length ? x.o.dec.why : ["(none given)"]; w.forEach(k => { const id = x.dec + "|" + k; if (!pr.has(id)) pr.set(id, []); pr.get(id).push(x); }); });
+  const prT = `<div class="card g1" id="jnWhy"><div class="hd"><h2>Why you passed or stalked</h2><span class="sub">locked days · if a reason keeps showing positive R, it's costing you trades</span></div><div class="bd">
+    ${pr.size ? `<table class="mini">${head("Reason")}<tbody>${[...pr].sort((a, b) => b[1].length - a[1].length).map(([id, L]) => { const [d, k] = id.split("|"); return aggRow(`${JN_DEC[d]} · ${esc(JN_RN[k] || k)}`, jnAgg(L)); }).join("")}</tbody></table>` : `<div class="empty" style="padding:4px 0">No passes or stalks on locked days yet.</div>`}</div></div>`;
+  // full log
+  const v = JN.view, rows = items.filter(x => (v.dec === "all" || x.dec === v.dec) && (v.list === "all" || x.o.src.includes(v.list)));
+  const MAXR = 400;
+  const logRows = rows.slice(0, MAXR).map(x => { const o = x.o, f = o.f, d = o.dec;
+    return `<tr><td class="l">${jnDay(x.rec.p)}</td><td class="l"><b ${S.rowBySym && S.rowBySym.has(o.s) ? `data-jsym="${esc(o.s)}" style="cursor:pointer"` : ""}>${esc(o.s)}</b></td><td class="l">${jnSrcHTML(o)}</td><td class="l small">${esc(f.status)} · RS ${f.rs ?? "—"}</td>
+      <td class="l">${JN_DEC[x.dec]}${d && d.why && d.why.length ? `<div class="small dim">${d.why.map(k => esc(JN_RN[k] || k)).join(", ")}</div>` : ""}${o.note ? `<div class="small dim">“${esc(o.note)}”</div>` : ""}${o.took ? ` <span class="jn-src">entered</span>` : ""}</td>
+      <td>${f.entry == null ? "—" : f2(f.entry)}</td><td class="l">${jnOutHTML(x.sc)}</td><td class="${jnCls(x.sc.m5)}">${jnFmtP(x.sc.m5)}</td><td class="${jnCls(x.sc.m10)}">${jnFmtP(x.sc.m10)}</td></tr>`; }).join("");
+  const segs = (id, key, opts) => `<span class="seg" id="${id}">${opts.map(([k, l]) => `<button data-jv="${key}" data-k="${k}" class="${v[key] === k ? "on" : ""}">${l}</button>`).join("")}</span>`;
+  const logT = `<div class="card g1" id="jnLog"><div class="hd"><h2>Every logged name</h2><span class="sub">${items.length} name-days · ${missed.length} missed session${missed.length === 1 ? "" : "s"}</span><span class="spacer"></span>
+      <button class="btn sm" data-ja="csv">Export CSV</button>${recs ? `<button class="btn sm" data-ja="clear">Clear log</button>` : ""}</div><div class="bd">
+    <div class="controls" style="margin-bottom:8px;display:flex;gap:10px;flex-wrap:wrap">${segs("jnVd", "dec", [["all", "All calls"], ["take", "Take"], ["stalk", "Stalk"], ["pass", "Pass"], ["none", "No decision"], ["open", "Not decided yet"]])}
+      ${segs("jnVl", "list", [["all", "All lists"], ["zone", "In zone"], ["wait", "Wait"], ["deck", "On deck"], ["A", "MAP A"], ["B", "MAP B"], ["S", "Stalk"]])}</div>
+    ${missed.length ? `<div class="small" style="margin-bottom:6px"><b>Missed sessions:</b> ${missed.slice(-30).map(jnDay).join(", ")}${missed.length > 30 ? ` and ${missed.length - 30} earlier` : ""}</div>` : ""}
+    ${rows.length ? `<div class="tscroll" style="max-height:520px"><table class="mini"><thead><tr><th class="l">Plan day</th><th class="l">Ticker</th><th class="l">Lists</th><th class="l">Board then</th><th class="l">Call</th><th>Entry</th><th class="l">Outcome</th><th>5d</th><th>10d</th></tr></thead><tbody>${logRows}</tbody></table></div>${rows.length > MAXR ? `<div class="small">Showing the newest ${MAXR} of ${rows.length} — Export CSV has them all.</div>` : ""}` : `<div class="empty" style="padding:4px 0">${recs ? "Nothing matches these buttons." : "Nothing logged yet. Load today's files — the board's list opens here automatically."}</div>`}</div></div>`;
+  const how = `<div class="card g1" id="jnHow"><div class="hd"><h2>How the scoring works</h2><span class="sub">plain rules, so the numbers can be checked by hand</span></div><div class="bd small">
+    <p><b>Which day.</b> A premarket file dated Monday is the plan for Monday. A regular-session file from Monday is the plan for Tuesday. A list opens only for a day that hasn't closed yet, and calls lock at 16:00 ET that day.</p>
+    <p><b>Reached entry.</b> Within 5 sessions after the data, price trades back to the board's entry (or up through it, when the entry is above where price was). The fill is the entry, or the open if it opened past it.</p>
+    <p><b>Result.</b> The trade ends at the board's widest stop (entry − ½ ADR) or the 2R target, whichever is hit first. If neither is hit, it ends at the close of the 3rd session after the fill (your T+3 rule). On the fill day only the stop counts; if the stop and target are both inside one day it counts as the stop. R = (exit − fill) ÷ (entry − widest stop).</p>
+    <p><b>Not checked yet.</b> This uses daily bars: it doesn't see your 30-min trigger, your real stop, slippage, the trim, or the runner. It's a fair, identical yardstick for every name — not your P&amp;L. Your real trades stay in your trade log.</p>
+    <p><b>Moves.</b> Close-to-close % change 5 and 10 sessions after the data session. "Whole file" and "Strong, not surfaced" are measured over the same days, so you can see whether the board's picks beat simply owning strong names.</p></div></div>`;
+  return histNote + kpis + decT + surfT + factT + prT + logT + how;
+}
+function renderJournal(){
+  const box = $("jnBody"); if (!box) return;
+  if (!JN.loaded) { box.innerHTML = `<div class="empty">Loading the log…</div>`; JN.ready.then(() => { if (S.ui.tab === "journal") renderJournal(); }); return; }
+  const y = scrollY;
+  box.innerHTML = jnTodayCard() + jnRender();
+  scrollTo(0, y);
+}
+const _renderTabJ = renderTab;
+renderTab = function(t){
+  if (t !== "journal") return _renderTabJ(t);
+  renderJournal();
+  if (typeof afterTab === "function") afterTab(t);
+};
+
+/* ---------------- edits ---------------- */
+function jnName(p, s){ const rec = JN.recs[p]; return rec ? rec.n.find(o => o.s === s) || null : null; }
+function jnEdit(p, s, fn, fact){
+  const o = jnName(p, s); if (!o) return;
+  if (!fact && !jnOpenDay(p)) { toast("This day is locked — calls can't change after 16:00 ET on the plan day"); renderJournal(); return; }
+  fn(o); o.ed = JN.now(); jnSave(); renderJournal();
+}
+$("tab-journal").addEventListener("click", e => {
+  const t = e.target;
+  const sym = t.closest("[data-jsym]"); if (sym) { openDrawer(sym.dataset.jsym); return; }
+  const b = t.closest("button,a"); if (!b) return;
+  const p = b.dataset.p, s = b.dataset.s;
+  if (b.dataset.jd) return jnEdit(p, s, o => { const k = b.dataset.jd; if (o.dec && o.dec.k === k) delete o.dec; else { const now = JN.now(); o.dec = {k, why: o.dec && o.dec.k === k ? o.dec.why : [], at: now, ao: jnAfterOpen(p, now)}; } });
+  if (b.dataset.jw) return jnEdit(p, s, o => { if (!o.dec) return; const w = new Set(o.dec.why || []), k = b.dataset.jw; w.has(k) ? w.delete(k) : w.add(k); o.dec.why = [...w]; });
+  if (b.dataset.jtr) return jnEdit(p, s, o => { const c = o.ch || {}; c.trig = c.trig === b.dataset.jtr ? null : b.dataset.jtr; o.ch = c; });
+  if (b.dataset.jx) { JN.open.add(b.dataset.jx); renderJournal(); return; }
+  if (b.dataset.jfs) { JN.view.fsc = b.dataset.jfs; store.set("adrb.jnView", JN.view); renderJournal(); return; }
+  if (b.dataset.jv) { JN.view[b.dataset.jv] = b.dataset.k; store.set("adrb.jnView", JN.view); renderJournal(); return; }
+  if (b.dataset.ja === "csv") return jnCSV();
+  if (b.dataset.ja === "clear") { if (confirm("Delete the whole decision log from this browser? Snapshots you've saved keep their copy.")) { JN.recs = {}; JNH = {key: ""}; jnSaveNow(); renderJournal(); } }
+});
+$("tab-journal").addEventListener("change", e => {
+  const t = e.target, p = t.dataset.p, s = t.dataset.s;
+  if (t.matches("[data-jt]")) return jnEdit(p, s, o => { o.took = t.checked; o.tookAt = JN.now(); }, true);
+  const k = t.dataset.jn; if (!k) return;
+  if (k === "note") return jnEdit(p, s, o => { const v = t.value.trim().slice(0, 300); if (v) o.note = v; else delete o.note; });
+  jnEdit(p, s, o => { const c = o.ch || {}, v = t.value === "" ? null : +t.value; c[k] = v != null && isFinite(v) && v > 0 ? v : null; o.ch = c; });
+});
+
+/* ---------------- export · snapshots ---------------- */
+function jnCSV(){
+  const q = v => { const x = v == null ? "" : String(v); return /[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x; };
+  const H = ["plan_day", "data_session", "file_type", "files", "ticker", "lists", "state", "status", "rs", "group", "group_state", "entry", "widest_stop", "target_2r", "adr_pct", "from_line_adr", "from_50_adr", "grade", "volatility", "earnings", "earnings_days", "pivot_script", "on_deck_why", "tape_read", "map_call",
+    "call", "reasons", "note", "decided_at", "after_open", "entered", "trigger", "chart_stop", "resistance", "room_r", "outcome", "fill", "fill_date", "exit", "exit_date", "r", "move_5d_pct", "move_10d_pct"];
+  const L = [H.join(",")];
+  for (const x of jnItems().reverse()) {
+    const o = x.o, f = o.f, d = o.dec, c = o.ch || {}, s = x.sc.sim, rr = jnRoom(o), r4 = v => v == null || !isFinite(v) ? "" : +v.toFixed(4);
+    L.push([x.rec.p, x.rec.d0, x.rec.mode === "pm" ? "premarket" : "regular", (x.rec.files || []).join(" + "), o.s, o.src.map(k => JN_SRC[k] || k).join(" + "), f.st ? ST[f.st].name : "", f.status, f.rs, f.grp, f.gs, f.entry, f.stop, f.tgt, f.adr, f.zx, f.ext, f.grade, f.vs ? VSL[f.vs].n : "", f.er, f.erIn, f.piv, f.why || "", x.rec.tape || "", x.rec.map || "",
+      JN_DEC[x.dec], d && d.why ? d.why.map(k => JN_RN[k] || k).join("; ") : "", o.note || "", d ? new Date(d.at).toISOString() : "", d ? (d.ao ? "yes" : "no") : "", o.took ? "yes" : "", c.trig || "", c.stop ?? "", c.res ?? "", r4(rr),
+      JN_OUT[s.k] || s.k, r4(s.fill), s.fd || "", r4(s.exit), s.xd || "", r4(s.R), x.sc.m5 == null ? "" : r4(x.sc.m5), x.sc.m10 == null ? "" : r4(x.sc.m10)].map(q).join(","));
+  }
+  for (const d of jnMissed()) L.push([d, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "MISSED SESSION"].map(q).join(","));
+  download(`deep-space-decision-log-${fmtDate(new Date())}.csv`, L.join("\n"), "text/csv");
+}
+function jnMerge(inc){
+  if (!inc || typeof inc !== "object") return 0;
+  let n = 0;
+  for (const p of Object.keys(inc)) {
+    const a = inc[p]; if (!a || !Array.isArray(a.n) || !/^\d{4}-\d{2}-\d{2}$/.test(p)) continue;
+    const b = JN.recs[p]; if (!b) { JN.recs[p] = structuredClone(a); n++; continue; }
+    const by = new Map(b.n.map(o => [o.s, o]));
+    for (const o of a.n) {
+      const x = by.get(o.s);
+      if (!x) { b.n.push(structuredClone(o)); n++; }
+      else if ((o.ed || 0) > (x.ed || 0)) { for (const k of ["dec", "note", "ch", "took", "tookAt", "ed"]) { if (o[k] === undefined) delete x[k]; else x[k] = structuredClone(o[k]); } x.src = [...new Set([...x.src, ...o.src])]; n++; }
+    }
+    if (a.u) { const u = new Set((b.u || "").split(" ").filter(Boolean)); a.u.split(" ").forEach(s => s && u.add(s)); b.u = [...u].join(" "); }
+    if (b.strong == null && a.strong != null) b.strong = a.strong;
+  }
+  JNH = {key: ""}; jnSave(); return n;
+}
+const _snapshotObjJ = snapshotObj;
+snapshotObj = function(){ const o = _snapshotObjJ(); o.journal = JN.recs; return o; };
+const _openSnapshotJ = openSnapshot;
+openSnapshot = async function(file){
+  try { const o = JSON.parse(await file.text()); if (o && o.kind === "deep-space-snapshot" && o.journal) { await JN.ready; jnMerge(o.journal); } } catch (e) {}
+  return _openSnapshotJ(file);
+};
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   DEEP SPACE FEED (18 Oct) — one CSV for the daily MAP/BRIEF, built from the stored Massive daily bars (+ today's bar
+   from the file when it's newer, the same rule every history feature uses). Read-only: rows, ranks, states and the
+   plan are never touched.
+   1 · The 38 Deep Space Screener v4.1 columns, ported line by line from
+       indicators/screener/deep-space-screener/deep-space-screener.pine with its DEFAULT inputs (Eugene runs defaults).
+       Pine primitives copied: ta.sma = plain mean, na if any na in the window · ta.ema / ta.rma seeded by the SMA of
+       the first `len` values, na after a gap until re-seeded · ta.tr(true) · ta.highest / ta.lowest skip na and need
+       `len` bars · ta.barssince. Header names = the Pine plot titles, so the feed reads like the Pine export.
+       Weekly columns (WCR%, RS Weekly NH): the current week is the developing week at the last bar; inside the 52-bar
+       window of the RS-NH highest (52 DAILY bars — the Pine applies ta.highest on the chart timeframe) earlier days
+       see the last completed week, a week's last day sees its own week (request.security, lookahead off).
+       Tier 5 / −1 never appear: Focus and Blocklist are empty by default.
+   2 · 6.0X = the spec6-pivot-entry daily gates as the board already ports them (s6Of): 1 weekly close above a rising
+       10W · 2 above the 21 EMA · 3 above a rising 50 SMA · 4 within 0.5 ADR of the 9 or 21 · 5 ≤ 4 ADR above the 50.
+       "6X Tier" mirrors the screener's ladder with those gates: floor = liquidity + RS state (Lead/Emrg/Fade, the
+       screener's) + gates 1 and 3 (properties of the name); allowance = gates 2, 4, 5 (tonight's location).
+       Tier 4 = floor + all of 2/4/5 · Tier 3 = floor + at most one of 2/4/5 failing · else Developing (2) when the
+       screener's Developing passes · else 0. LoD and room are daily estimates — columns only, never gates (the real
+       ones are measured on the 30-min chart at the fill). A board-defined ladder: Eugene to confirm.
+   3 · REACCEL exactly as reaccel-screener.pine (bar lookbacks 21/63/126, 252-bar high, QQQ).
+   4 · Board context: state, RS rank, group, earnings (clear / soon / unknown), plan, MAP lists, market cap,
+       20-session $ turnover and the Active Long check ($1B cap · $100M 20-day turnover · close > $10).
+   Compare: drop a real Deep Space Screener export (its own button, or on the page — it's recognised by the
+   "P1 Fail Code" / "Setup Quality" columns and never loaded as a stock file) → per-column match and the tickers whose
+   Tier differs, with both fail codes.
+   ===================================================================== */
+const DSSC = {e9: 9, e21: 21, s50: 50, s200: 200, adrLen: 20, liqLen: 30, perfLen: 21, hiLen: 20, vduFast: 3, vduBase: 50, stopLB: 3,
+  gapAdr: 1.0, gapRvol: 2.0, gapWin: 20, rsSmooth: 5, rsSlopeLB: 10, rsSlopeMin: 0.5, rsLvlFlat: 0, rsInc: [false, true, true, true, true],
+  leadMin: 3, trendMin: 3, emergMin: 2, reqNh: false, nhLen: 52, nhProx: 3.0, thW1w: 0.6, thW1m: 0.4, thAccel: 0.1, thNorm: 63, thAccLB: 3, bucket: 1.0,
+  rmvLens: [3, 5, 8], rmvNorm: 15, g1: 18, g2: 28, durMin: 5, volDry: 55, btRecent: 3, btBase: 20, btCeil: 70, bwCeil: 0.8, bwMax: 60, ctLen: 5, ctBase: 50, ctCeil: 25, rmvMin: 3,
+  zoneMax: 0.75, extMin: -10, extMax: 4, extResetOn: true, chaseOn: false, chaseMax: 0.6, adrMin: 3.0, stopMax: 1.25, rsOk: [false, true, true, true], t3Max: 1, liqOn: true, liqM: 20,
+  devExtMin: -10, devExtMax: 6, devRsOk: [false, true, true, true], qBraid: 1.5, qVdu: 55, qDcr: 75, regLB: 20, regTol: 0, bench: "QQQ"};
+// ---- Pine primitives on Float64Arrays (NaN = na)
+const PZ = {
+  sma(a, p){ const n = a.length, o = new Float64Array(n).fill(NaN); for (let t = p - 1; t < n; t++) { let s = 0, ok = true; for (let k = t - p + 1; k <= t; k++) { const x = a[k]; if (!isFinite(x)) { ok = false; break; } s += x; } if (ok) o[t] = s / p; } return o; },
+  _rec(a, p, al){ const n = a.length, o = new Float64Array(n).fill(NaN), sm = PZ.sma(a, p); for (let t = 0; t < n; t++) { const pv = t ? o[t - 1] : NaN; o[t] = isFinite(pv) ? (isFinite(a[t]) ? al * a[t] + (1 - al) * pv : NaN) : sm[t]; } return o; },
+  ema(a, p){ return PZ._rec(a, p, 2 / (p + 1)); },
+  rma(a, p){ return PZ._rec(a, p, 1 / p); },
+  hl(a, p, mx){ const n = a.length, o = new Float64Array(n).fill(NaN); for (let t = p - 1; t < n; t++) { let v = NaN; for (let k = t - p + 1; k <= t; k++) { const x = a[k]; if (isFinite(x) && (!isFinite(v) || (mx ? x > v : x < v))) v = x; } o[t] = v; } return o; },
+  highest(a, p){ return PZ.hl(a, p, true); },
+  lowest(a, p){ return PZ.hl(a, p, false); },
+  tr(h, l, c){ const n = h.length, o = new Float64Array(n); for (let t = 0; t < n; t++) o[t] = t && isFinite(c[t - 1]) ? Math.max(h[t] - l[t], Math.abs(h[t] - c[t - 1]), Math.abs(l[t] - c[t - 1])) : h[t] - l[t]; return o; },
+  since(b){ const n = b.length, o = new Float64Array(n).fill(NaN); let last = -1; for (let t = 0; t < n; t++) { if (b[t]) last = t; if (last >= 0) o[t] = t - last; } return o; },
+  map(n, f){ const o = new Float64Array(n); for (let t = 0; t < n; t++) o[t] = f(t); return o; }
+};
+const fin = x => typeof x === "number" && isFinite(x);
+// bars for one symbol: stored history (+ today's bar when the file is newer and the benchmark has it too), leading gap trimmed
+function dssBars(sym){
+  if (!HIST.nD || !HIST.idx) return null;
+  const i = HIST.idx.get(sym), bi = HIST.idx.get(DSSC.bench); if (i == null) return null;
+  const ts = todaySource(), r = S.rowBySym && S.rowBySym.get(sym);
+  let x = ts ? ts.get(sym) : null; const xb = ts ? ts.get(DSSC.bench) : null;
+  if (!xb) x = null;
+  const nD = HIST.nD, N = nD + (x ? 1 : 0);
+  const A = () => new Float64Array(N).fill(NaN), c = A(), o = A(), h = A(), l = A(), v = A(), bc = A(), dates = HIST.dates.slice();
+  for (let t = 0; t < nD; t++) { const k = i * nD + t; c[t] = HIST.C[k]; o[t] = HIST.O[k]; h[t] = HIST.Hh[k]; l[t] = HIST.L[k]; v[t] = HIST.V[k]; if (bi != null) bc[t] = HIST.C[bi * nD + t]; }
+  if (x) {
+    const op = fin(x.o) ? x.o : r && fin(r.op1d) ? r.op1d : r && fin(r.cfo1d) && fin(r.last) ? r.last / (1 + r.cfo1d / 100) : NaN;
+    c[nD] = x.c; h[nD] = x.h; l[nD] = x.l; v[nD] = fin(x.v) ? x.v : NaN; o[nD] = op; bc[nD] = xb.c; dates.push(ts.date);
+  }
+  // the symbol's own bars only: a day with no bar (not listed yet, or missing from the grouped file) is skipped, the way Pine
+  // counts bars per symbol — one missing day must not blank every 20/50-bar average for the next 50 sessions
+  const keep = []; for (let t = 0; t < N; t++) if (fin(c[t]) && fin(h[t]) && fin(l[t])) keep.push(t);
+  if (!keep.length) return null;
+  const pick = a => Float64Array.from(keep, t => a[t]);
+  // bi / bcAll: QQQ's own bars — Pine's request.security(bench, "D", close[m]) counts m bars on the benchmark's calendar
+  return {c: pick(c), o: pick(o), h: pick(h), l: pick(l), v: pick(v), bc: pick(bc), bi: Int32Array.from(keep), bcAll: bc, dates: keep.map(t => dates[t]), today: !!x, n: keep.length};
+}
+// regime (QQQ trend): its own bars, same today-bar rule
+function dssRegime(){
+  const b = dssBars(DSSC.bench); if (!b) return {code: null, ok: false};
+  const n = b.n, t = n - 1, s50 = PZ.sma(b.c, DSSC.s50), e21 = PZ.ema(b.c, DSSC.e21);
+  const qC = b.c[t], qS = s50[t], prev = t - DSSC.regLB >= 0 && fin(s50[t - DSSC.regLB]) ? s50[t - DSSC.regLB] : NaN;
+  if (!fin(qC) || !fin(qS)) return {code: null, ok: false};
+  const up = fin(prev) && qS >= prev * (1 - DSSC.regTol / 100), above = qC > qS;
+  return {code: above && up && fin(e21[t]) && qC > e21[t] ? 2 : above && up ? 1 : 0, ok: true};
+}
+// the screener, last bar only (series built where the Pine needs history)
+function dssCalc(b, reg){
+  const C = DSSC, {c, o, h, l, v, bc} = b, n = b.n, t = n - 1;
+  const e9 = PZ.ema(c, C.e9), e21 = PZ.ema(c, C.e21), s50 = PZ.sma(c, C.s50), s200 = PZ.sma(c, C.s200);
+  const hl = PZ.map(n, k => h[k] / l[k]), adrS = PZ.map(n, k => 0), _adr = PZ.sma(hl, C.adrLen);
+  for (let k = 0; k < n; k++) adrS[k] = 100 * (_adr[k] - 1);
+  const adr = adrS[t], adrOk = fin(adr) && adr > 0;
+  const avgVolS = PZ.sma(v, C.liqLen), dollarVol = c[t] * avgVolS[t];
+  const perf = t - C.perfLen >= 0 && c[t - C.perfLen] > 0 ? (c[t] / c[t - C.perfLen] - 1) * 100 : NaN;
+  const hiS = PZ.highest(h, C.hiLen), swingHigh = hiS[t];
+  const depth = adrOk && swingHigh > 0 ? ((swingHigh - c[t]) / c[t] * 100) / adr : NaN;
+  const doh0 = PZ.since(PZ.map(n, k => h[k] >= hiS[k] ? 1 : 0))[t], doh = fin(doh0) ? doh0 : 0;
+  const vF = PZ.sma(v, C.vduFast), vB = PZ.sma(v, C.vduBase), vduS = PZ.map(n, k => 100 * vF[k] / Math.max(vB[k], 1)), vdu = vduS[t];
+  const z9 = adrOk ? (Math.abs(c[t] - e9[t]) / c[t] * 100) / adr : NaN, z21 = adrOk ? (Math.abs(c[t] - e21[t]) / c[t] * 100) / adr : NaN;
+  const zone = fin(z9) && fin(z21) ? Math.min(z9, z21) : NaN, basis = fin(z9) && fin(z21) ? (z9 <= z21 ? 9 : 21) : NaN;
+  const loc = (c[t] >= e9[t] ? 1 : 0) + (c[t] >= e21[t] ? 1 : 0) + (c[t] >= s50[t] ? 1 : 0);
+  const ext = adrOk && s50[t] > 0 ? ((c[t] - s50[t]) / s50[t] * 100) / adr : NaN;
+  const bHi = Math.max(e9[t], e21[t], s50[t]), bLo = Math.min(e9[t], e21[t], s50[t]), braid = adrOk ? ((bHi - bLo) / c[t] * 100) / adr : NaN;
+  const stack = e9[t] > e21[t] && e21[t] > s50[t];
+  const chase = adrOk ? ((c[t] - l[t]) / c[t] * 100) / adr : NaN;
+  const stopLow = PZ.lowest(l, C.stopLB)[t], stopDist = c[t] > 0 ? (c[t] - stopLow) / c[t] * 100 : NaN;
+  const stopFit = adrOk && fin(stopDist) ? stopDist / (adr * 0.5) : NaN;
+  const smaGate = (c[t] < s50[t] ? 1 : 0) + (c[t] < s200[t] ? 1 : 0);
+  const gap = PZ.map(n, k => { const a = adrS[k]; return fin(a) && a > 0 && k > 0 && h[k - 1] > 0 && ((o[k] - h[k - 1]) / h[k - 1] * 100) >= C.gapAdr * a && v[k] >= avgVolS[k] * C.gapRvol ? 1 : 0; });
+  const gs = PZ.since(gap)[t], xReset = (fin(gs) ? gs : 1e6) <= C.gapWin;
+  // relative strength vs QQQ
+  const bAgo = (k, m) => b.bcAll ? (b.bi[k] - m >= 0 ? b.bcAll[b.bi[k] - m] : NaN) : (k - m >= 0 ? bc[k - m] : NaN);   // benchmark m bars ago on its own calendar
+  const spread = m => PZ.map(n, k => { if (k - m < 0) return NaN; const tb = c[k - m], bb = bAgo(k, m), rt = tb > 0 ? (c[k] / tb - 1) * 100 : NaN, rb = bb > 0 ? (bc[k] / bb - 1) * 100 : NaN; return fin(rt) && fin(rb) ? rt - rb : NaN; });
+  const rs = [5, 21, 63, 126, 189, 252].map(m => PZ.sma(spread(m), C.rsSmooth));
+  const [rs1w, rs1m, rs3m, rs6m, rs9m, rs12m] = rs;
+  const norm = x => { const lo = PZ.lowest(x, C.thNorm), hi = PZ.highest(x, C.thNorm); return PZ.map(n, k => fin(x[k]) ? (x[k] - lo[k]) / Math.max(hi[k] - lo[k], 0.0001) * 100 : NaN); };
+  const p1w = norm(rs1w), p1m = norm(rs1m);
+  const thrust = fin(p1w[t]) && fin(p1m[t]) ? C.thW1w * p1w[t] + C.thW1m * p1m[t] + C.thAccel * (p1w[t] - (t - C.thAccLB >= 0 ? p1w[t - C.thAccLB] : NaN)) : NaN;
+  // Trend = slope of the log RS line, each window smoothed by an EMA of about a quarter of its length (RS Command Center v3's
+  // f_rs_slope: 5/16/32/47/63), change over rsSlopeLB bars, counted only once that window's level exists. The repo's
+  // screener still differences the rolling spreads (rs12m − rs12m[10]); the screener running in TradingView doesn't —
+  // on 18 Oct real bars this rule matched TradingView's RS Trend Score on every name checked, the old one on 2 of 5.
+  const lrs = (() => { const o = new Float64Array(n).fill(NaN); let last = NaN; for (let k = 0; k < n; k++) { const x = c[k] > 0 && bc[k] > 0 ? 100 * Math.log(c[k] / bc[k]) : NaN; if (fin(x)) last = x; o[k] = last; } return o; })();   // fixnan
+  const L5 = [rs1m, rs3m, rs6m, rs9m, rs12m], EL = [5, 16, 32, 47, 63];
+  const dl = L5.map((x, j) => { if (!fin(x[t])) return NaN; const e = PZ.ema(lrs, EL[j]), a = e[t], z = t - C.rsSlopeLB >= 0 ? e[t - C.rsSlopeLB] : NaN; return fin(a) && fin(z) ? a - z : NaN; });
+  const lvl = L5.reduce((s, x, j) => s + (C.rsInc[j] && fin(x[t]) && x[t] > C.rsLvlFlat ? 1 : 0), 0), trd = dl.reduce((s, x, j) => s + (C.rsInc[j] && fin(x) && x > C.rsSlopeMin ? 1 : 0), 0);
+  // weekly: developing week at the last bar; inside the 52-bar window, the last completed week (a week's last day = its own week)
+  const wk = b.dates.map(weekKey), wS = (() => { let k = t; while (k > 0 && wk[k - 1] === wk[t]) k--; return k; })();
+  let wH = -Infinity, wL = Infinity; for (let k = wS; k <= t; k++) { if (fin(h[k])) wH = Math.max(wH, h[k]); if (fin(l[k])) wL = Math.min(wL, l[k]); }
+  const wcr = wH - wL > 0 ? (c[t] - wL) / (wH - wL) * 100 : NaN;
+  const ratio = k => c[k] > 0 && bc[k] > 0 ? c[k] / bc[k] : NaN;
+  const wr = PZ.map(n, k => { if (k === t) return ratio(k); if (wk[k + 1] !== wk[k]) return ratio(k); let j = k; while (j >= 0 && wk[j] === wk[k]) j--; return j >= 0 ? ratio(j) : NaN; });
+  const wHi = PZ.highest(wr, C.nhLen)[t], nh = fin(wr[t]) && fin(wHi) && wHi > 0 && wr[t] >= wHi * (1 - C.nhProx / 100);
+  const dcr = h[t] - l[t] > 0 ? (c[t] - l[t]) / (h[t] - l[t]) * 100 : NaN;
+  const lvlS = lvl >= C.leadMin, trdS = trd >= C.trendMin, leader = lvlS && trdS && (!C.reqNh || nh), fading = lvlS && !leader, emerg = !lvlS && trd >= C.emergMin;
+  const rsC = leader ? 3 : emerg ? 2 : fading ? 1 : 0;
+  // RMV + components
+  const tr = PZ.tr(h, l, c), atrs = C.rmvLens.map(p => PZ.rma(tr, p)), vAvg = PZ.map(n, k => (atrs[0][k] + atrs[1][k] + atrs[2][k]) / 3);
+  const rLo = PZ.lowest(vAvg, C.rmvNorm), rHi = PZ.highest(vAvg, C.rmvNorm), rmvS = PZ.map(n, k => (vAvg[k] - rLo[k]) / Math.max(rHi[k] - rLo[k], 0.001) * 100);
+  let dur = 0; for (let k = 0; k <= t; k++) dur = rmvS[k] <= C.g2 ? dur + 1 : 0;
+  const rmv = rmvS[t], cTight = rmv <= C.g1, cDur = dur >= C.durMin, cDry = fin(vdu) && vdu <= C.volDry;
+  const brp = PZ.map(n, k => (h[k] - l[k]) / c[k] * 100), brR = PZ.sma(brp, C.btRecent)[t], brB = PZ.sma(brp, C.btBase)[t], cBar = brR / Math.max(brB, 0.001) * 100 <= C.btCeil;
+  const ctRng = PZ.map(n, k => (h[k] - l[k]) / Math.max(l[k], 0.0001) * 100), ctAdrS = PZ.sma(ctRng, C.btBase), ctAdr = PZ.map(n, k => Math.max(ctAdrS[k], 0.0001));
+  const hiC = PZ.highest(c, C.ctLen), loC = PZ.lowest(c, C.ctLen), hiP = PZ.highest(h, C.ctLen), loP = PZ.lowest(l, C.ctLen);
+  const comb = PZ.map(n, k => (((hiC[k] - loC[k]) / Math.max(loC[k], 0.0001) * 100) / ctAdr[k] + ((hiP[k] - loP[k]) / Math.max(loP[k], 0.0001) * 100) / ctAdr[k]) / 2);
+  const cbH = PZ.highest(comb, C.ctBase)[t], cbL = PZ.lowest(comb, C.ctBase)[t], ct = (comb[t] - cbL) / Math.max(cbH - cbL, 0.0001) * 100, cClose = ct <= C.ctCeil;
+  const bwBars = Math.min(Math.max(dur, C.durMin), C.bwMax);
+  let bwRatio = NaN; if (t - bwBars + 1 >= 0) { const H = PZ.highest(h, bwBars)[t], Lw = PZ.lowest(l, bwBars)[t]; bwRatio = ((H - Lw) / Math.max(Lw, 0.0001) * 100) / (ctAdr[t] * Math.sqrt(bwBars)); }
+  const cBase = fin(bwRatio) && bwRatio <= C.bwCeil;
+  const rmvScore = [cTight, cDur, cDry, cBar, cBase, cClose].filter(Boolean).length, rmvPass = cTight && cDur && rmvScore >= C.rmvMin;
+  // Playbook 1 gates
+  const rsOk = C.rsOk[rsC], liqOk = !C.liqOn || dollarVol > C.liqM * 1e6, waived = C.extResetOn && xReset;
+  const kVeto = c[t] > e21[t], kS50 = c[t] > s50[t], kZone = fin(zone) && zone <= C.zoneMax, kExt = waived || (fin(ext) && ext >= C.extMin && ext <= C.extMax);
+  const kChase = !C.chaseOn || (fin(chase) && chase <= C.chaseMax), kAdr = fin(adr) && adr >= C.adrMin, kStop = fin(stopFit) && stopFit <= C.stopMax, kRs = rsOk;
+  const fail = !liqOk ? 1 : !kRs ? 1 : !kVeto ? 2 : !kS50 ? 3 : !kZone ? 4 : !kExt ? 5 : !kChase ? 6 : !kAdr ? 7 : !kStop ? 8 : 0;
+  const nFail = [kVeto, kS50, kZone, kExt, kChase, kAdr, kStop, kRs].filter(x => !x).length;
+  const ready = liqOk && nFail === 0, pull = liqOk && kAdr && kS50 && kRs && nFail <= C.t3Max;
+  const dev = [c[t] > s50[t], c[t] > s200[t], fin(perf) && perf > 0, C.devRsOk[rsC], fin(ext) && ext >= C.devExtMin && ext <= C.devExtMax].every(Boolean);
+  const tier = C.liqOn && !liqOk ? 0 : ready ? 4 : pull ? 3 : dev ? 2 : 0;
+  const sq = (fin(braid) && braid <= C.qBraid ? 1 : 0) + (rmvPass ? 1 : 0) + (fin(vdu) && vdu <= C.qVdu ? 1 : 0) + (fin(dcr) && dcr >= C.qDcr ? 1 : 0) + (leader || nh ? 1 : 0);
+  const key = fin(rs1m[t]) ? Math.round(rs1m[t] / C.bucket) * 10000 + (fin(thrust) ? thrust : 0) : NaN;
+  // REACCEL (reaccel-screener.pine)
+  const ret = m => t - m >= 0 && c[t - m] ? 100 * (c[t] / c[t - m] - 1) : NaN, bret = m => { const z = bAgo(t, m); return z > 0 ? 100 * (bc[t] / z - 1) : NaN; };
+  const r1 = ret(21), r3 = ret(63), r6 = ret(126), q1 = r1 - bret(21), q3 = r3 - bret(63), q6 = r6 - bret(126), acc = q1 - q3 / 3;
+  const hi52 = PZ.highest(h, 252)[t], off = 100 * (hi52 - c[t]) / hi52;
+  const raOk = r6 >= 40 && q6 >= 10 && r3 >= -20 && r3 <= 15 && off >= 8 && off <= 35 && c[t] > s200[t] && s50[t] > s200[t] && c[t] > e21[t] && q1 > 0 && acc >= 5;
+  return {tier, fail, sq, zone, basis, loc, braid, stack: stack ? 1 : 0, ext, xr: xReset ? 1 : 0, smaG: smaGate, stopFit, chase, depth, doh, vdu, rmv, rmvS: rmvScore, dur,
+    adr, dvM: dollarVol / 1e6, perf, dcr, wcr, rsC, lvl, trd, nh: nh ? 1 : 0, rs1w: rs1w[t], rs1m: rs1m[t], rs3m: rs3m[t], rs6m: rs6m[t], p1m: p1m[t], thrust, key,
+    reg: reg.code, dataOk: 1, benchOk: reg.ok && fin(bc[t]) ? 1 : 0,
+    _: {liqOk, rsOk, dev, kAdr, kS50, dl},
+    ra: {ok: raOk ? 1 : 0, st: raOk ? (c[t] > s50[t] ? 2 : 1) : 0, acc, r1, r3, r6, q1, q3, q6, off}};
+}
+// column registry: [header, key, decimals (null = integer)]
+const DSS_COLS = [["Tier", "tier"], ["P1 Fail Code (0=ready)", "fail"], ["Setup Quality (0-5)", "sq"], ["Zone ADR", "zone", 3], ["Zone Basis (9/21)", "basis"], ["LOCATION (3=above 9/21/50)", "loc"],
+  ["Braid ADR", "braid", 3], ["Stack 9>21>50SMA", "stack"], ["Ext ADR", "ext", 3], ["ExtReset", "xr"], ["SMA Gate (0/1/2 grades down)", "smaG"], ["StopFit (≤1 fits half-ADR)", "stopFit", 3],
+  ["Chase ADR", "chase", 3], ["Depth ADR", "depth", 3], ["Days Off High", "doh"], ["VDU %", "vdu", 2], ["RMV", "rmv", 2], ["RMV+ Score", "rmvS"], ["Duration bars", "dur"],
+  ["ADR%", "adr", 3], ["$Vol M", "dvM", 2], ["Perf 1mo %", "perf", 2], ["DCR%", "dcr", 2], ["WCR%", "wcr", 2], ["RS (0Lag1Fade2Em3Lead)", "rsC"], ["RS Level Score", "lvl"],
+  ["RS Trend Score", "trd"], ["RS Weekly NH", "nh"], ["RS Spread 1W %", "rs1w", 3], ["RS Spread 1M %", "rs1m", 3], ["RS Spread 3M %", "rs3m", 3], ["RS Spread 6M %", "rs6m", 3],
+  ["RS 1M Pctl (0-100)", "p1m", 2], ["RS Thrust Rate %", "thrust", 2], ["RS Rank Key (1M then Thrust)", "key", 2], ["Regime (0Chop1Neut2Strong)", "reg"], ["Data OK", "dataOk"], ["Bench OK", "benchOk"]];
+// 6.0X ladder on top of the screener's floor (see the header note)
+function dss6x(r, d){
+  let x = null; try { x = r ? s6Of(r) : null; } catch (e) {}
+  if (!x || !d) return {x, tier: null, gate: null};
+  const g = x.g, order = [["wk", 1], ["e21", 2], ["s50", 3], ["zone", 4], ["ext", 5]];
+  const fl = order.find(([k]) => g[k] === false), unk = order.find(([k]) => g[k] == null);
+  const gate = fl ? fl[1] : unk ? null : 0;
+  if (g.wk == null || g.s50 == null) return {x, tier: null, gate};
+  const floor = d._.liqOk && d._.rsOk && g.wk && g.s50, miss = [g.e21, g.zone, g.ext].filter(v => v === false).length;
+  const tier = !d._.liqOk ? 0 : floor && miss === 0 ? 4 : floor && miss <= 1 ? 3 : d._.dev ? 2 : 0;
+  return {x, tier, gate};
+}
+const DSF = {key: "", map: new Map(), reg: null, cmp: null};
+const dssPct = (a, n) => !n ? "—" : a === n ? "100%" : (Math.floor(a / n * 1000) / 10).toFixed(1) + "%";   // never rounds a miss up to 100%
+function dssKey(){ const ts = todaySource(); return HIST.nD + "|" + (HIST.dates[HIST.nD - 1] || "") + "|" + (ts ? ts.date + ts.src : "") + "|" + (S.snap ? S.snap.asOf + S.mode + S.rows.length : ""); }
+function dssOf(sym){
+  const k = dssKey(); if (DSF.key !== k) { DSF.key = k; DSF.map = new Map(); DSF.reg = dssRegime(); }
+  if (DSF.map.has(sym)) return DSF.map.get(sym);
+  let d = null; try { const b = dssBars(sym); d = b && b.n >= 2 ? dssCalc(b, DSF.reg) : null; if (d) { d.bars = b.n; d.today = b.today; d.to = b.dates[b.n - 1]; d.close = b.c[b.n - 1]; d.tas = tasCalc(b); d.pl = plCalc(b); } } catch (e) { d = null; }
+  DSF.map.set(sym, d); return d;
+}
+function dssTurnover(sym){
+  const i = HIST.idx ? HIST.idx.get(sym) : null; if (i == null) return null;
+  const nD = HIST.nD; let s = 0, n = 0; for (let t = Math.max(0, nD - 20); t < nD; t++) { const c = HIST.C[i * nD + t], v = HIST.V[i * nD + t]; if (fin(c) && fin(v)) { s += c * v; n++; } }
+  return n >= 15 ? s / n : null;
+}
+// ---- TAS (thematic-acceleration-screener.pine v3.0) — themes resolved LIVE from the file's Industry column, so the universe never
+// needs a script edit. Rules = tools/build-tas-map.py THEMES (id, proxy, name, industries, overrides); the test fails if the two drift.
+// Resolution: index (L1) → theme proxy (L2) → override ticker → industry → 0. Theme Src here: 1 override · 2 industry · 3 proxy · 4 index.
+const TAS_THEMES = [[1,"SMH","AI silicon / semis",["Semiconductors","Electronic production equipment"],["LRCX","AMAT","KLAC","ASML","TER","ONTO","ACLS","UCTT","AEIS","FORM","AEHR","AXTI","ENTG","Q"]],[2,"XSD","Memory / optical / components",["Computer peripherals","Electronic components","Electronic equipment/Instruments","Electronics distributors","Telecommunications equipment"],["SNDK","STX","WDC","MU","COHR","LITE","CRDO","GLW","SITM","SKHY","TTMI","VICR","FN","VIAV","ZBRA","HPQ","AAOI","PENG"]],[3,"IGV","Software",["Packaged software","Data processing services","Information technology services","Miscellaneous commercial services","Commercial printing/Forms","Financial publishing/Services"],["IT"]],[4,"FDN","Internet platforms",["Internet software/Services","Internet retail","Cable/Satellite TV","Other consumer services","Specialty telecommunications"],["AMZN","GOOGL","META","NFLX","SHOP","SPOT","RDDT","UBER","ABNB","DASH","SNAP","MTCH","RBLX","DUOL","W","CART","LTH"]],[5,"XLU","Power / IPP",["Electric utilities","Alternative power generation","Gas distributors"],["VST","CEG","TLN","NRG","GEV","PEG","D","BE","GNRC","FCEL","SEI","AMT","CCI"]],[6,"PAVE","Electrical / infra",["Engineering & construction","Construction materials","Industrial machinery","Trucks/Construction/Farm machinery","Industrial specialties","Electrical products"],["ETN","PWR","VRT","POWL","MOD","HUBB","AZZ","ACM","NVT","FIX","FLR","FPS","CLS","SANM","FLEX","URI","SUNB","WCC"]],[7,"ITA","Defense / aero",["Aerospace & defense"],["LMT","NOC","GD","RTX","LHX","HWM","KTOS","LDOS"]],[8,"URA","Nuclear / uranium",[],["CCJ","LEU","SMR","OKLO","UEC","NNE","BWXT","UUUU","DNN","URNM"]],[9,"GDX","Gold & silver miners",["Precious metals"],["NEM","AEM","AU","KGC","WPM","HMY","EGO","IAG","BTG","AG","EXK","HL","CDE","PAAS"]],[10,"XOP","Energy E&P / services",["Integrated oil","Oil & gas production","Contract drilling","Oilfield services/Equipment","Oil & gas pipelines"],["FANG","DVN","OXY","EOG","PR","MTDR","HAL","SLB","TRGP"]],[11,"XLF","Financials / capital markets",["Investment banks/Brokers","Major banks","Regional banks","Finance/Rental/Leasing","Investment managers","Life/Health insurance","Multi-line insurance","Property/Casualty insurance","Savings banks"],["JPM","GS","MS","BLK","KKR","APO","IBKR","HOOD","SCHW"]],[12,"IBIT","Crypto equities",[],["COIN","MSTR","MARA","RIOT","CLSK","GLXY","CIFR","HUT","BTDR","BMNR","PURR","ASST","CRCL","FIGR","SOFI","DAVE","CHYM","HIVE","WGMI","IBIT","ETHA","SBET","USDE"]],[13,"XBI","Biotech",["Biotechnology","Pharmaceuticals: generic","Pharmaceuticals: other"],["VRTX","REGN","ALNY","NTRA","INSM","TEM","ADMA","CRSP","TXG","ABCL","RGEN","BRKR"]],[14,"IHI","Medtech",["Medical specialties","Services to the health industry","Medical distributors"],["ISRG","BSX","SYK","PODD","DXCM","TNDM","GEHC"]],[15,"XHB","Housing / building",["Homebuilding","Building products","Home improvement chains","Forest products"],["DHI","LEN","PHM","TOL","BLDR","IBP","MAS","JHX"]],[16,"XRT","Consumer / retail",["Specialty stores","Apparel/Footwear retail","Discount stores","Department stores","Electronics/Appliance stores","Restaurants","Household/Personal care","Consumer non-durables","Apparel/Footwear","Food: specialty/candy","Recreational products","Motor vehicles","Electronics/Appliances","Other consumer specialties","Hotels/Resorts/Cruise lines"],["ANF","DECK","ONON","CAVA","DKS","TJX","LULU","CROX","CVNA","GME","ELF","EL","URBN","SIG","ASO","FIVE","OLLI","BBY","CAKE","ACVA"]],[17,"KWEB","China / EM internet",[],["BABA","PDD","JD","BIDU","NTES","TCOM","LI","XPEV","FUTU","BZ","NU","XP","HDB","NIO","TME","BEKE","GRAB","ITUB","BBD"]],[18,"IYT","Transport",["Air freight/Couriers","Airlines","Trucking","Railroads","Marine shipping","Other transportation"],["ODFL","CHRW","XPO","SAIA","UNP","CSX","DAL","UAL","GXO","FRO"]],[19,"CRAK","Refiners",["Oil refining/Marketing"],[]],[20,"XLV","Pharma / managed care",["Pharmaceuticals: major","Managed health care","Hospital/Nursing management","Medical/Nursing services","Health industry services"],["LLY","TMO","MDT","BAX","IQV","ICLR","RVTY","WAT","DGX","WST","ELV","HUM","CNC","MOH","OSCR","GKOS","EXEL","CORT","HALO","ROIV","IOVA","SMMT","TGTX","AMLX","RVMD","GH","ILMN","MRNA","TEVA","AVTR","A","MTD","CRL","BIO"]],[21,"XME","Metals / materials / ag",["Steel","Other metals/Minerals","Aluminum","Chemicals: agricultural","Chemicals: specialty","Chemicals: major diversified","Agricultural commodities/Milling","Containers/Packaging","Pulp & paper","Industrial conglomerates"],["MP","ALB","LAC","USAR","CRML","UAMY","NEU","DAR","BG","DE","AGCO","CNH"]],[22,"QTUM","Quantum / compute hardware",["Computer processing hardware"],["IONQ","RGTI","QBTS","QUBT","INFQ","CBRS"]],[23,"WGMI","Neocloud / AI infra",[],["NBIS","CRWV","CORZ","WULF","APLD","IREN","HTFL","SMCI","DELL","HPE","ANET","UI","NTAP","P","KEEL"]],[24,"ARKX","Space / drones",[],["ASTS","SPCX","RDW","RKLB","LUNR","PL","UMAC","AVAV","JOBY","ACHR","RCAT","ONDS","VSAT","NOK"]]];
+const TAS_L1 = ["SPY", "QQQ", "IWM", "RSP", "MDY", "DIA"];
+const TAS_PROXY = new Map(TAS_THEMES.map(t => [t[1], t[0]])), TAS_OVR = new Map(), TAS_IND = new Map();
+TAS_THEMES.forEach(t => { t[4].forEach(s => TAS_OVR.set(s, t[0])); t[3].forEach(s => TAS_IND.set(s.toLowerCase(), t[0])); });
+function tasTheme(sym, industry){
+  if (TAS_L1.includes(sym)) return {layer: 1, id: 99, src: 4};
+  if (TAS_PROXY.has(sym)) return {layer: 2, id: TAS_PROXY.get(sym), src: 3};
+  if (TAS_OVR.has(sym)) return {layer: 3, id: TAS_OVR.get(sym), src: 1};
+  const id = industry ? TAS_IND.get(String(industry).trim().toLowerCase()) : null;   // case-insensitive: TradingView exports vary
+  return id ? {layer: 3, id, src: 2} : {layer: 3, id: 0, src: 0};
+}
+const tasName = id => id === 99 ? "Index tape" : id ? TAS_THEMES[id - 1][2] : "unmapped";
+function tasCalc(b){
+  const {c, h, l, v} = b, n = b.n, t = n - 1;
+  const ret = m => t - m >= 0 && c[t - m] > 0 ? (c[t] / c[t - m] - 1) * 100 : NaN;
+  const r1 = ret(1), r5 = ret(5), r10 = ret(10), r21 = ret(21), r50 = ret(50);
+  const prior = t - 21 >= 0 && c[t - 21] > 0 ? (c[t - 10] / c[t - 21] - 1) * 100 : NaN, accel = r10 - prior;
+  const hl = PZ.map(n, k => h[k] / l[k]), am = PZ.sma(hl, 20)[t], adr = 100 * (am - 1), ok = fin(adr) && adr > 0;
+  const z = (x, bars) => ok && fin(x) ? x / (adr * Math.sqrt(bars)) : NaN, accelZ = z(accel, 10), ret4Z = z(r21, 21);
+  const e21 = PZ.ema(c, 21)[t], s50S = PZ.sma(c, 50), s50 = s50S[t], stgS = PZ.sma(c, 150), stg = stgS[t];
+  const hi52 = PZ.highest(h, 252)[t], p52 = fin(hi52) && hi52 > 0 ? (c[t] / hi52 - 1) * 100 : NaN;
+  const au = p => ok && fin(p) ? p / adr : NaN;
+  const ext50 = au(s50 > 0 ? (c[t] / s50 - 1) * 100 : NaN), dist21 = au(e21 > 0 ? (c[t] / e21 - 1) * 100 : NaN);
+  const s50p = t - 10 >= 0 ? s50S[t - 10] : NaN, slope50 = fin(s50p) && s50p > 0 ? (s50 / s50p - 1) * 100 : NaN;
+  const stgP = t - 10 >= 0 ? stgS[t - 10] : NaN, up = fin(stgP) && stg > stgP, above = fin(stg) && c[t] > stg;
+  const stage = !fin(stg) ? NaN : above && up ? 2 : above ? 3 : up ? 1 : 4;
+  const vS = PZ.sma(v, 50)[t], vF = PZ.sma(v, 5)[t], v20 = PZ.sma(v, 20)[t];
+  const surge = fin(vS) && vS > 0 ? vF / vS : NaN, dvM = fin(v20) ? c[t] * v20 / 1e6 : NaN;
+  let num = 0, den = 0, okA = t - 49 >= 0;
+  for (let k = Math.max(0, t - 49); k <= t; k++) { const rg = h[k] - l[k], clv = rg > 0 ? ((c[k] - l[k]) - (h[k] - c[k])) / rg : 0; if (!fin(v[k]) || !fin(clv)) okA = false; num += clv * v[k]; den += v[k]; }
+  const accum = okA && den > 0 ? num / den * 100 : NaN;
+  const st = (fin(s50) && c[t] > s50 ? 1 : 0) + (fin(stg) && c[t] > stg ? 1 : 0) + (fin(p52) && p52 >= -25 ? 1 : 0) + (fin(accum) && accum > 0 ? 1 : 0) + (fin(surge) && surge >= 1 ? 1 : 0);
+  const sq = x => 50 + 50 * x / (1 + Math.abs(x));
+  const score = fin(ret4Z) && fin(accelZ) ? 0.45 * sq(ret4Z) + 0.35 * sq(accelZ) + 0.20 * (100 * st / 5) : NaN;
+  return {r1, r5, r10, r21, r50, accel, accelZ, ret4Z, adr, p52, ext50, dist21, slope50, stage, surge, dvM, accum, st, score};
+}
+// TAS join (the MAP/BRIEF "Leaders in Themes" maths from the TAS README, done here so Claude doesn't have to):
+//   igRS4 = stock Ret4W − proxy Ret4W · igAccel = stock Accel − proxy Accel · themeRS4 = proxy Ret4W − QQQ Ret4W · themeTrend = proxy Stage 2
+//   state LEADER/FADING/EMERGING/LAG · health = themeRS4 > 0 + themeTrend (0 weak · 1 neutral · 2 strong)
+//   New Leader = LEADER|EMERGING, Accel σ ≥ 0.5, health ≤ 1, own Stage 2 · MAP pick = Score ≥ 65, LEADER|EMERGING, health 2
+function tasJoin(d, th){
+  if (!d || !d.tas || th.layer !== 3 || !th.id) return null;
+  const px = TAS_THEMES[th.id - 1][1], p = dssOf(px), q = dssOf("QQQ");
+  if (!p || !p.tas || !q || !q.tas) return {proxy: px, missing: true};
+  const s = d.tas, P = p.tas, igRS4 = s.r21 - P.r21, igAcc = s.accel - P.accel, themeRS4 = P.r21 - q.tas.r21, themeTrend = P.stage === 2;
+  if (!fin(igRS4) || !fin(igAcc)) return {proxy: px, missing: true};
+  const state = igRS4 >= 0 ? (igAcc >= 0 ? "LEADER" : "FADING") : (igAcc >= 0 ? "EMERGING" : "LAG");
+  const health = (themeRS4 > 0 ? 1 : 0) + (themeTrend ? 1 : 0), lead = state === "LEADER" || state === "EMERGING";
+  return {proxy: px, igRS4, igAcc, themeRS4, themeTrend, state, health, newLeader: lead && s.accelZ >= 0.5 && health <= 1 && s.stage === 2, pick: lead && s.score >= 65 && health === 2};
+}
+// ---- Power List Screener (power-list-screener.pine) default slots: 9 EMA · 21 EMA · 50 SMA · 200 SMA (MA5 off, still plotted = 200 SMA);
+// ATR 14 RMA; ATR multiple from MA 2; RS NH weekly, 12M (52 bars on the chart = daily), 3% proximity, price side = weekly high, strict.
+// The SGD sizing columns are account-specific and stay out (the book lives outside the board).
+function plCalc(b){
+  const {c, h, l} = b, n = b.n, t = n - 1;
+  const e9 = PZ.ema(c, 9)[t], e21 = PZ.ema(c, 21)[t], s50 = PZ.sma(c, 50)[t], s200 = PZ.sma(c, 200)[t];
+  const dist = m => m > 0 ? (c[t] - m) / m * 100 : NaN;
+  const atr = PZ.rma(PZ.tr(h, l, c), 14)[t], atrX = atr > 0 ? (c[t] - e21) / atr : NaN;
+  const h52 = PZ.highest(h, 252)[t], l52 = PZ.lowest(l, 252)[t];
+  const adr = PZ.sma(PZ.map(n, k => (h[k] - l[k]) / c[k] * 100), 20)[t];
+  const stopDist = fin(atr) ? Math.max(c[t] - (l[t] - 0.1 * atr), 0.2 * atr) : NaN;
+  // weekly series as the chart sees them (lookahead off): a week's last stored day = that week; earlier days = the previous week; last bar = this week so far
+  const wk = b.dates.map(weekKey), lastOf = new Map(); wk.forEach((w, k) => lastOf.set(w, k));
+  const wkAgg = (k, upto) => { let H = -Infinity, s = k; while (s > 0 && wk[s - 1] === wk[k]) s--; for (let j = s; j <= upto; j++) if (fin(h[j])) H = Math.max(H, h[j]); return H; };
+  const prevEnd = k => { let j = k; while (j >= 0 && wk[j] === wk[k]) j--; return j; };
+  const wRat = PZ.map(n, k => { const j = k === t || lastOf.get(wk[k]) === k ? k : prevEnd(k); return j >= 0 && c[j] > 0 && b.bc[j] > 0 ? c[j] / b.bc[j] : NaN; });
+  const wHi = PZ.map(n, k => { if (k === t) return wkAgg(k, k); if (lastOf.get(wk[k]) === k) return wkAgg(k, k); const j = prevEnd(k); return j >= 0 ? wkAgg(j, j) : NaN; });
+  const rHi = PZ.highest(wRat, 52), pHi = PZ.highest(wHi, 52);
+  const rsNH = k => fin(wRat[k]) && fin(rHi[k]) && rHi[k] > 0 && wRat[k] >= rHi[k] * 0.97, pxNH = k => fin(wHi[k]) && fin(pHi[k]) && wHi[k] >= pHi[k];
+  const nhAt = k => rsNH(k) && pxNH(k), bpAt = k => rsNH(k) && !pxNH(k);
+  const ago = f => { for (let i = 0; i < 52 && t - i >= 0; i++) if (f(t - i)) return i; return -1; };
+  const loc = (c[t] >= e9 ? 1 : 0) + (c[t] >= e21 ? 1 : 0) + (c[t] >= s50 ? 1 : 0) + (c[t] >= s200 ? 1 : 0);
+  return {d1: dist(e9), d2: dist(e21), d3: dist(s50), d4: dist(s200), d5: dist(s200), atrX, h52: h52 > 0 ? (c[t] - h52) / h52 * 100 : NaN, l52: l52 > 0 ? (c[t] - l52) / l52 * 100 : NaN,
+    nh: nhAt(t) ? 1 : 0, nhAgo: ago(nhAt), bp: bpAt(t) ? 1 : 0, bpAgo: ago(bpAt), loc, adr, stop: c[t] > 0 && fin(stopDist) ? stopDist / c[t] * 100 : NaN};
+}
+// ---- the feed rows
+const FEED_X = [["6X Tier", "tier"], ["6X Fail Gate (0=all pass)", "gate"], ["6X 1 Weekly 10W rising", "wk"], ["6X 2 Above 21E", "e21"], ["6X 3 Above 50S rising", "s50"],
+  ["6X 4 Zone ADR (9|21)", "zone", 3], ["6X 4 Zone OK", "zoneOk"], ["6X 5 Ext ADR", "ext", 3], ["6X 5 Ext OK", "extOk"], ["6X LoD ADR (est)", "lod", 3], ["6X Room R (est)", "room", 2]];
+const FEED_RA = [["REACCEL", "ok"], ["REACCEL Structure (1 early / 2 >50S)", "st"], ["RS Accel20 pp", "acc", 3], ["Perf 1M %", "r1", 2], ["Perf 3M %", "r3", 2], ["Perf 6M %", "r6", 2],
+  ["RS 1M pp", "q1", 3], ["RS 3M pp", "q3", 3], ["RS 6M pp", "q6", 3], ["Off 52W High %", "off", 2]];
+const TAS_COLS = [["Score", "score", 2], ["Ret 1D %", "r1", 3], ["Ret 1W %", "r5", 3], ["Ret 2W %", "r10", 3], ["Ret 4W %", "r21", 3], ["Ret 10W %", "r50", 3], ["Accel %", "accel", 3],
+  ["Accel σ", "accelZ", 3], ["Ret 4W σ", "ret4Z", 3], ["ADR %", "adr", 3], ["% from 52W High", "p52", 3], ["Ext 50SMA (ADR)", "ext50", 3], ["Dist 21EMA (ADR)", "dist21", 3], ["SMA50 Slope %", "slope50", 3],
+  ["Stage (1B2A3T4D)", "stage"], ["Vol Surge", "surge", 3], ["$Vol M", "dvM", 2], ["Accumulation", "accum", 2], ["Struct /5", "st"]];
+const FEED_TAS = ["TAS Layer (1Idx2Theme3Stock)", "TAS Theme ID", "TAS Theme", "TAS Theme Proxy", "TAS Theme Src (1Ovr2Ind3Pxy4Idx)", "TAS Sort Key", ...TAS_COLS.map(c => "TAS " + c[0]),
+  "TAS igRS4", "TAS igAccel", "TAS Theme RS4", "TAS Theme Stage2", "TAS Leadership", "TAS Theme Health (0Weak1Neut2Strong)", "TAS New Leader", "TAS MAP Pick"];
+const PL_COLS = [["MA1% (9EMA)", "d1", 3], ["MA2% (21EMA)", "d2", 3], ["MA3% (50SMA)", "d3", 3], ["MA4% (200SMA)", "d4", 3], ["MA5% (off = 200SMA)", "d5", 3], ["ATR/MA (21EMA ATR14)", "atrX", 3],
+  ["52WH%", "h52", 3], ["52WL%", "l52", 3], ["RS_NH", "nh"], ["Hist_NH_Bars", "nhAgo"], ["RSNHBP", "bp"], ["Hist_BP_Bars", "bpAgo"], ["LOCATION", "loc"], ["ADR%", "adr", 3], ["STOP%", "stop", 3]];
+const FEED_PL = PL_COLS.map(c => "PL " + c[0]);
+const FEED_B = ["Board State", "Board Status", "Board RS (1-99)", "Board Group", "Group State", "Board Plan", "MAP List", "Earnings Date", "Earnings In (days)", "Earnings Status",
+  "Market Cap", "Turnover 20d $M", "Active Long Eligible", "Volatility", "Weinstein Stage", "Price Bars", "Data To", "Feed Row"];
+function tasCells(sym, d, th){
+  const j = tasJoin(d, th), T = d && d.tas;
+  const key = T && fin(T.score) ? th.id * 100000 + (th.layer === 2 ? 2 : th.layer === 1 ? 3 : 1) * 10000 + Math.round(T.score * 10) : th.id * 100000 + (th.layer === 2 ? 2 : th.layer === 1 ? 3 : 1) * 10000;
+  return [th.layer, th.id, tasName(th.id), th.id && th.id !== 99 ? TAS_THEMES[th.id - 1][1] : "", th.src, key, ...TAS_COLS.map(([, k, dp]) => T ? fv(T[k], dp) : ""),
+    j && !j.missing ? fv(j.igRS4, 3) : "", j && !j.missing ? fv(j.igAcc, 3) : "", j && !j.missing ? fv(j.themeRS4, 3) : "", j && !j.missing ? (j.themeTrend ? 1 : 0) : "",
+    j && !j.missing ? j.state : "", j && !j.missing ? j.health : "", j && !j.missing ? (j.newLeader ? 1 : 0) : "", j && !j.missing ? (j.pick ? 1 : 0) : ""];
+}
+function feedRows(){
+  const plan = S.plan || {plan: [], deck: []}, inPlan = new Map(plan.plan.map(r => [r.sym, r.state === 1 ? "In zone" : "Wait"])); plan.deck.forEach(d => inPlan.set(d.r.sym, "On deck"));
+  const out = [], have = new Set();
+  for (const r of S.rows) {
+    have.add(r.sym);
+    const d = dssOf(r.sym), six = dss6x(r, d), x = six.x, th = tasTheme(r.sym, r.industry);
+    const to = dssTurnover(r.sym), mc = r.mcap ?? null, px = r.last;
+    const elig = mc == null || to == null || px == null ? "unknown" : mc >= 1e9 && to >= 100e6 && px > 10 ? "yes" : "no";
+    const lists = [LISTS.focus.has(r.sym) ? "A" : "", typeof MAPL !== "undefined" && MAPL.b.has(r.sym) ? "B" : "", typeof MAPL !== "undefined" && MAPL.stalk.has(r.sym) ? "Stalk" : "", LISTS.held.has(r.sym) ? "Held" : ""].filter(Boolean).join(" ");
+    let vs = null; try { vs = vsOf(r); } catch (e) {} let stg = null; try { const s = stageOf(r); stg = s ? s.lab : null; } catch (e) {}
+    out.push({sym: r.sym, r, d, th, six: {tier: six.tier, gate: six.gate, wk: x ? x.g.wk : null, e21: x ? x.g.e21 : null, s50: x ? x.g.s50 : null, zone: x ? Math.min(x.z9, x.z21) : null, zoneOk: x ? x.g.zone : null,
+      ext: x ? x.ext : null, extOk: x ? x.g.ext : null, lod: x ? x.lod : null, room: x ? x.room : null},
+      b: [r.state ? ST[r.state].name : "", statusOf(r).t, r.rs ?? "", r.group || "", r.gState && r.gState !== "—" ? r.gState : "", inPlan.get(r.sym) || "", lists, r.eru || "", r.erIn ?? "",
+        r.erIn == null || r.erIn < 0 ? "unknown" : r.erSoon ? "inside " + CFG.erDays + "d" : "clear", mc ?? "", to == null ? "" : (to / 1e6).toFixed(1), elig, vs ? VSL[vs.k].n : "", stg || "", d ? d.bars : "", d ? d.to : "", r.etf ? "etf (file)" : "stock"]});
+  }
+  // the TAS tape and theme proxies, from the stored bars, when the files don't carry them (the in-theme join needs them)
+  for (const s of [...TAS_L1, ...TAS_THEMES.map(t => t[1])]) {
+    if (have.has(s)) continue; const d = dssOf(s); if (!d) continue;
+    const th = tasTheme(s, null);
+    out.push({sym: s, r: null, d, th, six: {}, b: [...Array(15).fill(""), d.bars, d.to, th.layer === 1 ? "index (added)" : "theme proxy (added)"]});
+  }
+  return out;
+}
+const fv = (v, dp) => v == null || v === "" || (typeof v === "number" && !isFinite(v)) ? "" : typeof v === "boolean" ? (v ? 1 : 0) : typeof v === "number" ? (dp == null ? Math.round(v) : +v.toFixed(dp)) : v;
+function feedCSV(){
+  const q = v => { const s = String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const H = ["Symbol", "Description", "Sector", "Industry", "Price", ...DSS_COLS.map(c => c[0]), ...FEED_X.map(c => c[0]), ...FEED_RA.map(c => c[0]), ...FEED_TAS, ...FEED_PL, ...FEED_B];
+  const L = [H.map(q).join(",")];
+  for (const o of feedRows()) {
+    const r = o.r, d = o.d, last = r ? r.last : (d ? d.close : null);
+    L.push([o.sym, r ? r.desc || "" : "", r ? r.sector || "" : "", r ? r.industry || "" : "", fv(last, 4), ...DSS_COLS.map(([, k, dp]) => d ? fv(d[k], dp) : ""), ...FEED_X.map(([, k, dp]) => fv(o.six[k], dp)),
+      ...FEED_RA.map(([, k, dp]) => d ? fv(d.ra[k], dp) : ""), ...tasCells(o.sym, d, o.th), ...PL_COLS.map(([, k, dp]) => d && d.pl ? fv(d.pl[k], dp) : ""), ...o.b.map(v => fv(v))].map(q).join(","));
+  }
+  return L.join("\n");
+}
+// stored bars should end the session before today's bar (or at the last finished session when there's no today's bar)
+function feedStale(){
+  if (!HIST.nD) return null;
+  const ts = todaySource(), last = HIST.dates[HIST.nD - 1];
+  const want = ts ? prevWkday(addDays(ts.date, -1)) : lastDoneSession();
+  return last < want ? {last, want} : null;
+}
+function feedName(){ const ts = todaySource(), to = ts ? ts.date : HIST.dates[HIST.nD - 1] || (S.snap && S.snap.asOf) || fmtDate(new Date()); return `deep-space-feed-${to}-${S.mode === "pm" ? "premarket" : "regular"}.csv`; }
+function feedExport(){
+  if (!S.snap) { toast("Load your files first"); return; }
+  if (!S.has.hist) { toast("The feed needs the price history — load it first (Screens or Data check)"); return; }
+  const st = feedStale();
+  if (st && !confirm(`The stored price history ends ${st.last}, but the bars should run to ${st.want}. The feed's numbers would be built on a gap. Export anyway? (Better: Data check → update the price history first.)`)) return;
+  download(feedName(), feedCSV(), "text/csv"); toast(`Feed saved: ${feedName()}`);
+}
+
+/* ---------------- compare with real TradingView exports (Deep Space Screener · TAS · REACCEL) ---------------- */
+// TradingView writes ">" in plot titles as "&gt;" — decode before matching; an "Indicator name: " prefix is dropped.
+const dssNorm = s => String(s || "").replace(/&gt;/g, ">").replace(/&lt;/g, "<").replace(/&amp;/g, "&").toLowerCase().replace(/^.*?:\s*(?=[a-z$%])/, m => /screener|tas|reaccel|deep space/.test(m) ? "" : m).replace(/[^a-z0-9%$σ]+/g, "");
+const CMP_T = {
+  dss: {name: "Deep Space Screener", test: h => /p1 fail code/.test(h) && /setup quality/.test(h), cols: DSS_COLS.map(([h, k, dp]) => ({h, f: d => d[k], int: dp == null, key: k}))},
+  tas: {name: "Thematic Acceleration Screener", test: h => /sort key/.test(h) && /accel/.test(h), cols: TAS_COLS.map(([h, k, dp]) => ({h, f: d => d.tas ? d.tas[k] : NaN, int: dp == null, key: k}))},
+  ra: {name: "REACCEL", test: h => /rs accel20/.test(h), cols: [["REACCEL", "ok"], ["Structure (1 early / 2 >50S)", "st"], ["RS Accel20 pp", "acc", 3], ["Perf 1M %", "r1", 2], ["Perf 3M %", "r3", 2], ["Perf 6M %", "r6", 2],
+    ["RS 1M pp", "q1", 3], ["RS 3M pp", "q3", 3], ["RS 6M pp", "q6", 3], ["Off 52W High %", "off", 2]].map(([h, k, dp]) => ({h, f: d => d.ra[k], int: dp == null, key: k}))}
+};
+const cmpType = text => { const h = String(text).replace(/^﻿/, "").split("\n")[0].replace(/&gt;/g, ">").toLowerCase(); return Object.keys(CMP_T).find(k => CMP_T[k].test(h)) || null; };
+const isDssFile = text => cmpType(text) === "dss";
+function dssCompare(name, text){
+  const type = cmpType(text) || "dss", T = CMP_T[type];
+  const g = parseCSV(String(text).replace(/^﻿/, "")); if (g.length < 2) { toast(name + ": no rows"); return; }
+  const H = g[0].map(dssNorm), symI = H.findIndex(h => h === "symbol" || h === "ticker");
+  if (symI < 0) { toast(name + ": no Symbol column"); return; }
+  const colI = T.cols.map(c => H.indexOf(dssNorm(c.h)));
+  const res = {type, kind: T.name, name, at: Date.now(), rows: 0, both: 0, cols: T.cols.map(c => ({...c, n: 0, same: 0, diffs: []})), tierDiff: [], tierN: 0, tierSame: 0, notHere: [], noHist: [], conf: {}, theme: null};
+  const thI = H.indexOf(dssNorm("Theme ID")); if (type === "tas" && thI >= 0) res.theme = {n: 0, same: 0, zeroTV: 0, zeroBoard: 0, diffs: []};
+  for (const row of g.slice(1)) {
+    let sym = String(row[symI] || "").trim(); if (!sym) continue; if (sym.includes(":")) sym = sym.split(":").pop();
+    res.rows++;
+    const r = S.rowBySym && S.rowBySym.get(sym);
+    if (!r && !(HIST.idx && HIST.idx.has(sym))) { res.notHere.push(sym); continue; }
+    const d = dssOf(sym); if (!d) { res.noHist.push(sym); continue; }
+    res.both++;
+    res.cols.forEach((c, j) => {
+      if (colI[j] < 0) return; const raw = row[colI[j]], tv = raw === "" || raw == null ? null : num(raw), mine = c.f(d);
+      if (tv == null && !fin(mine)) return;
+      c.n++;
+      const ok = c.int ? fin(mine) && tv != null && Math.round(mine) === Math.round(tv) : fin(mine) && tv != null && Math.abs(mine - tv) <= Math.max(0.02 * Math.abs(tv), c.key === "key" ? 50 : 0.05);
+      if (ok) c.same++; else c.diffs.push([sym, tv, fin(mine) ? mine : null]);
+    });
+    if (type === "dss") { const ti = colI[0], fi = colI[1];
+      if (ti >= 0 && row[ti] !== "") { const tv = Math.round(num(row[ti])); res.tierN++; const id = tv + "→" + d.tier; res.conf[id] = (res.conf[id] || 0) + 1; if (tv === d.tier) res.tierSame++; else res.tierDiff.push([sym, tv, d.tier, fi >= 0 ? num(row[fi]) : null, d.fail]); } }
+    if (res.theme) { const tv = Math.round(num(row[thI])), th = tasTheme(sym, r ? r.industry : null); res.theme.n++; if (tv === th.id) res.theme.same++; else res.theme.diffs.push([sym, tv, th.id]); if (tv === 0) res.theme.zeroTV++; if (th.id === 0) res.theme.zeroBoard++; }
+  }
+  res.missingCols = T.cols.filter((c, j) => colI[j] < 0).map(c => c.h);
+  DSF.cmp = DSF.cmp && typeof DSF.cmp === "object" && !DSF.cmp.type ? DSF.cmp : {};
+  DSF.cmp[type] = res;
+  if (S.ui.tab !== "data") goTab("data"); else renderTab("data");
+  toast(`Compared ${res.both} tickers with ${name} (${T.name})`);
+}
+const _loadNewF = loadNew;
+loadNew = async function(files){
+  const arr = [...files], texts = await readFiles(arr), cmp = [], rest = [];
+  arr.forEach((f, i) => (cmpType(texts[i].text) ? cmp : rest).push(i));
+  cmp.forEach(i => { if (S.snap && S.has.hist) dssCompare(texts[i].name, texts[i].text); else toast(`${texts[i].name} is a TradingView screener export — load your files and the price history first, then compare it on Data check`); });
+  if (rest.length) return _loadNewF(rest.map(i => arr[i]));
+};
+
+/* ---------------- Data check card + Export button ---------------- */
+$("snapBtn").insertAdjacentHTML("afterend", `<button class="btn" id="feedBtn" title="Deep Space feed: one CSV with the Deep Space Screener columns, 6.0X, REACCEL, TAS, Power List and board context — for the daily MAP/BRIEF">Feed CSV</button>`);
+$("feedBtn").onclick = () => feedExport();
+document.body.insertAdjacentHTML("beforeend", `<input type="file" id="fileDss" accept=".csv,text/csv" multiple class="hidden">`);
+$("fileDss").onchange = async e => { const fs = [...e.target.files]; e.target.value = ""; for (const f of fs) { const t = await f.text(); if (!cmpType(t)) { toast(`${f.name} isn't a Deep Space Screener, TAS or REACCEL export`); continue; } dssCompare(f.name, t); } };
+function cmpHTML(R, any){
+  const colRows = R.cols.filter(c => c.n).map(c => `<tr><td class="l">${esc(c.h)}</td><td>${c.n}</td><td class="${c.same / c.n >= 0.95 ? "pos" : c.same / c.n >= 0.8 ? "" : "neg"}"><b>${dssPct(c.same, c.n)}</b></td><td class="l small">${c.diffs.slice(0, 4).map(([s, a, b]) => `${esc(s)} ${a == null ? "—" : +(+a).toFixed(2)} vs ${b == null ? "—" : +b.toFixed(2)}`).join(" · ")}</td></tr>`).join("");
+  const conf = Object.entries(R.conf).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k.replace("→", " → ")}: ${v}`).join(" · ");
+  return `<h4 style="margin:12px 0 4px">${esc(R.kind)} · compared with <b>${esc(R.name)}</b></h4>
+    <div class="small">${R.rows} rows in that file · <b>${R.both}</b> scored by the board · ${R.notHere.length} not in this board's files or history${R.noHist.length ? ` · ${R.noHist.length} with too little stored history` : ""}${R.missingCols.length ? ` · columns not in that export: ${R.missingCols.map(esc).join(", ")}` : ""}</div>
+    ${R.type === "dss" ? `<div class="kpis" style="margin:8px 0"><div class="kpi card"><div class="k">Same Tier</div><div class="v ${R.tierN && R.tierSame / R.tierN >= 0.95 ? "pos" : "neg"}">${dssPct(R.tierSame, R.tierN)}</div><div class="n">${R.tierSame} of ${R.tierN} · Pine → board: ${esc(conf)}</div></div></div>` : ""}
+    ${R.theme ? `<div class="small" style="margin:6px 0"><b>Theme ID</b>: board and TradingView agree on ${R.theme.same} of ${R.theme.n}. TradingView left <b>${R.theme.zeroTV}</b> unmapped (its baked-in list is from an older universe), the board left <b>${R.theme.zeroBoard}</b> (no override and no industry match). ${R.theme.diffs.slice(0, 20).map(([s, a, b]) => `${esc(s)} ${a}→${b}`).join(" · ")}</div>` : ""}
+    <div class="tscroll" style="max-height:360px"><table class="mini"><thead><tr><th class="l">Column</th><th>Compared</th><th>Match</th><th class="l">First differences (TradingView vs board)</th></tr></thead><tbody>${colRows}</tbody></table></div>
+    ${R.tierDiff.length ? `<div class="small" style="margin-top:6px"><b>Tier differs</b> (TradingView tier/fail code → board tier/fail code): ${R.tierDiff.slice(0, 60).map(([s, a, b, fa, fb]) => `<span class="tk" data-sym="${esc(s)}">${esc(s)} ${a}/${fa ?? "?"} → ${b}/${fb}</span>`).join(" ")}${R.tierDiff.length > 60 ? ` and ${R.tierDiff.length - 60} more` : ""}</div>` : ""}`;
+}
+function renderFeedCard(){
+  const tab = $("tab-data"); if (!tab) return;
+  let box = $("feedBox"); if (!box) { const at = tab.querySelector(":scope > p.lede"); (at || tab).insertAdjacentHTML(at ? "afterend" : "afterbegin", `<div class="card g1" id="feedBox"></div>`); box = $("feedBox"); }
+  if (!S.snap) { box.innerHTML = ""; return; }
+  const head = `<div class="hd"><h2>Deep Space feed</h2><span class="sub">one CSV for the daily MAP/BRIEF: Deep Space Screener (38 columns), 6.0X, REACCEL, TAS with live themes, Power List and board context</span><span class="spacer"></span>
+    <button class="btn sm primary" data-feed="csv" ${S.has.hist ? "" : "disabled"}>Export feed CSV</button><button class="btn sm" data-feed="cmp" ${S.has.hist ? "" : "disabled"}>Compare with TradingView exports…</button></div>`;
+  if (!S.has.hist) { box.innerHTML = head + `<div class="bd"><div class="empty" style="padding:4px 0">The feed is built from the stored daily bars. <button class="btn sm" data-hist="full">Load price history</button></div></div>`; return; }
+  const rows = S.stocks.map(r => ({r, d: dssOf(r.sym)})).filter(o => o.d);
+  const cnt = k => { const c = {}; rows.forEach(o => { const v = k(o); c[v] = (c[v] || 0) + 1; }); return c; };
+  const t60 = cnt(o => o.d.tier), t6x = cnt(o => dss6x(o.r, o.d).tier ?? "—"), sq = cnt(o => o.d.sq);
+  const ts = todaySource(), any = rows[0] && rows[0].d;
+  const tierLine = (c) => [4, 3, 2, 0].map(k => `<b>${c[k] || 0}</b> ${({4: "Tier 4 · ready", 3: "Tier 3 · pullback", 2: "Tier 2 · developing", 0: "Tier 0"})[k]}`).join(" · ");
+  const top = rows.filter(o => o.d.tier === 4).sort((a, b) => (b.d.key || -1e9) - (a.d.key || -1e9)).slice(0, 24);
+  const top6 = rows.filter(o => dss6x(o.r, o.d).tier === 4).sort((a, b) => (b.d.key || -1e9) - (a.d.key || -1e9)).slice(0, 24);
+  const chip = o => `<span class="tk" data-sym="${esc(o.r.sym)}">${esc(o.r.sym)} <b>${o.d.sq}</b></span>`;
+  const reg = DSF.reg ? ({0: "Chop", 1: "Neutral", 2: "Strong"})[DSF.reg.code] ?? "n/a" : "n/a";
+  // themes right now: proxy vs QQQ, health, and who leads inside each theme in this file
+  const q = dssOf("QQQ"), byT = new Map();
+  rows.forEach(o => { const th = tasTheme(o.r.sym, o.r.industry); if (th.layer !== 3) return; const j = tasJoin(o.d, th); if (!byT.has(th.id)) byT.set(th.id, {n: 0, lead: [], pick: [], nl: []}); const g = byT.get(th.id); g.n++; if (j && !j.missing) { if (j.state === "LEADER" || j.state === "EMERGING") g.lead.push(o.r.sym); if (j.pick) g.pick.push(o.r.sym); if (j.newLeader) g.nl.push(o.r.sym); } });
+  const tRows = TAS_THEMES.map(t => { const p = dssOf(t[1]), P = p && p.tas, rs4 = P && q && q.tas ? P.r21 - q.tas.r21 : NaN, hl = P ? (rs4 > 0 ? 1 : 0) + (P.stage === 2 ? 1 : 0) : null, g = byT.get(t[0]) || {n: 0, lead: [], pick: [], nl: []}; return {t, P, rs4, hl, g}; })
+    .sort((a, b) => (b.hl ?? -1) - (a.hl ?? -1) || (b.rs4 || -1e9) - (a.rs4 || -1e9));
+  const unm = byT.get(0) ? byT.get(0).n : 0;
+  const themeT = `<details class="tp-fold" style="margin-top:8px"><summary><b>TAS themes right now</b> — ${tRows.filter(x => x.hl === 2).length} strong · ${unm} names in your file unmapped</summary>
+    <table class="mini" style="margin-top:6px"><thead><tr><th class="l">Theme</th><th class="l">Proxy</th><th>Proxy 4W</th><th>vs QQQ</th><th>Stage</th><th>Health</th><th>Names</th><th class="l">Leading / emerging inside (MAP picks in bold)</th></tr></thead><tbody>
+    ${tRows.map(({t, P, rs4, hl, g}) => `<tr><td class="l">${t[0]} · ${esc(t[2])}</td><td class="l">${t[1]}</td><td>${P ? sg(P.r21, 1) + "%" : "—"}</td><td class="${rs4 > 0 ? "pos" : "neg"}">${fin(rs4) ? sg(rs4, 1) : "—"}</td><td>${P && fin(P.stage) ? P.stage : "—"}</td><td>${hl == null ? "—" : ["Weak", "Neutral", "<b>Strong</b>"][hl]}</td><td>${g.n}</td><td class="l small">${g.lead.slice(0, 14).map(s => g.pick.includes(s) ? `<b>${esc(s)}</b>` : esc(s)).join(" ")}${g.nl.length ? ` · new leaders: ${g.nl.map(esc).join(" ")}` : ""}</td></tr>`).join("")}</tbody></table>
+    <div class="small dim" style="margin-top:4px">Themes are resolved live from your file's Industry column with the same rules as tools/build-tas-map.py (overrides first, then industry) — no weekly script edit. Proxy ETFs and the index tape are read from the stored bars even when your files don't carry them, and are added to the feed as extra rows.</div></details>`;
+  const C = DSF.cmp && !DSF.cmp.type ? DSF.cmp : {};
+  const cmp = ["dss", "tas", "ra"].filter(k => C[k]).map(k => cmpHTML(C[k], any)).join("") + (Object.keys(C).length ? `<div class="small dim" style="margin-top:6px">Numbers match when within 2% (or 0.05) of TradingView's; whole-number columns must be equal. Expect small gaps from data (TradingView vs Massive bars, splits, volume) and names sitting right on a line. Compare files from the same session: this board's bars run to ${esc(any ? any.to : "—")}.</div>` : "");
+  const stale = feedStale();
+  box.innerHTML = head + `<div class="bd">${stale ? `<div class="note" style="margin-bottom:8px;color:var(--neg)"><b>Price history is behind:</b> it ends ${esc(stale.last)} but should run to ${esc(stale.want)} (a holiday can make this a false alarm). Update it before exporting — numbers built across a gap are wrong. <button class="btn sm" data-hist="upd">Update price history</button></div>` : ""}
+    <div class="small">Bars to <b>${esc(any ? any.to : "—")}</b>${ts ? ` (stored history + today's bar from ${ts.src === "csv" ? "your file" : ts.src === "live" ? "live mode" : "the board"})` : " (stored history — no newer bar in this file)"} · QQQ regime <b>${esc(reg)}</b> · ${rows.length} stocks scored · screener defaults (zone 0.75, StopFit 1.25, ADR 3%, $20M)</div>
+    <table class="mini" style="margin-top:8px"><tbody>
+      <tr><td class="l"><b>Spec 6.0</b> (Deep Space Screener)</td><td class="l">${tierLine(t60)}</td></tr>
+      <tr><td class="l"><b>Spec 6.0X</b> (Pivot script gates)</td><td class="l">${tierLine(t6x)}${t6x["—"] ? ` · ${t6x["—"]} not known` : ""}</td></tr>
+      <tr><td class="l">Setup Quality</td><td class="l">${[5, 4, 3, 2, 1, 0].map(k => `<b>${sq[k] || 0}</b> at ${k}`).join(" · ")}</td></tr></tbody></table>
+    ${top.length ? `<div class="small" style="margin-top:8px">Tier 4 (6.0), by RS Rank Key · Setup Quality in bold: ${top.map(chip).join("")}</div>` : ""}
+    ${top6.length ? `<div class="small" style="margin-top:4px">Tier 4 (6.0X): ${top6.map(chip).join("")}</div>` : ""}
+    <div class="small dim" style="margin-top:6px">6.0X ladder (confirmed 18 Oct): Tier 4 = liquidity, RS state, weekly above a rising 10W and above a rising 50 SMA, plus above the 21 EMA, within 0.5 ADR of the 9 or 21, and no more than 4 ADR above the 50. Tier 3 = the same with one of the last three missing. LoD and room are daily estimates in the file, never gates. Setup Quality is the same 0–5 score for both.</div>
+    ${themeT}${cmp}</div>`;
+}
+$("tab-data").addEventListener("click", e => { const b = e.target.closest("[data-feed]"); if (!b) return; if (b.dataset.feed === "csv") feedExport(); else $("fileDss").click(); });
+const _renderTabF = renderTab;
+renderTab = function(t){ _renderTabF(t); if (t === "data") { try { renderFeedCard(); } catch (e) { console.warn("feed card", e); } if (WS && typeof buildSecs === "function") buildSecs(t); } };
 </script>
 </body>
 </html>
