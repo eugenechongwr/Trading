@@ -436,6 +436,28 @@ tr.thin td,.tk.thin{opacity:.5}
 .trhist{display:grid;gap:4px;font-size:12px}
 .trconf{border-collapse:collapse;font-size:12px;margin:4px 0}
 .trconf td,.trconf th{padding:3px 10px 3px 0;text-align:left;border-bottom:1px solid var(--line)}
+/* ---------------- Weinstein stages + leveraged ETFs ---------------- */
+.wsp{display:inline-block;min-width:26px;text-align:center;padding:1px 6px;border-radius:6px;font-weight:700;font-size:11.5px;background:var(--c);color:#111}
+.wsp.sm{font-size:10.5px;padding:0 5px;min-width:0;margin-left:3px}
+.wsbar{display:flex;height:22px;border-radius:6px;overflow:hidden;margin:2px 0 8px}
+.wsbar span{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#111}
+.wsleg{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:11.5px;color:var(--ink-2)}
+.wsleg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.wsck{display:grid;grid-template-columns:minmax(220px,320px) minmax(0,1fr);gap:16px}
+.wsck textarea{width:100%;font-family:var(--mono);font-size:12px}
+@media (max-width:900px){.wsck{grid-template-columns:1fr}}
+.lvrow{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin:6px 0 0!important}
+.lvrow .lbl{margin-right:2px}
+.lvc{font-size:11.5px;border-radius:6px;padding:2px 7px;background:var(--surface-2);border:1px solid var(--line);cursor:pointer;white-space:nowrap}
+.lvc a{color:inherit;text-decoration:none}
+.lvc.long{border-color:color-mix(in oklab,var(--st1) 50%,var(--line))}.lvc.short{border-color:color-mix(in oklab,var(--down) 50%,var(--line))}
+.lvc i{font-style:normal;color:var(--ink-3);font-size:10.5px}
+.flag.lvf{background:var(--up-soft);color:var(--ink)}
+/* ---------------- Spec 6 × Pivot side by side ---------------- */
+.s6cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+@media (max-width:1000px){.s6cols{grid-template-columns:1fr}}
+.s6cols .lbl{display:block;margin-bottom:5px}
+.s6w{margin-bottom:3px}
 /* ---------------- self-check + compact ticker-panel notes ---------------- */
 .scv{display:flex;flex-direction:column;gap:3px;border-radius:9px;padding:10px 12px;margin-bottom:10px;border-left:4px solid}
 .scv b{font-size:16px}.scv span{font-size:12px;color:var(--ink-2)}
@@ -5128,9 +5150,11 @@ function tpBuild(r){
   const st = statusOf(r), z = r.zLo != null ? sizeGrade(r) : null, vs = vsOf(r);
   const ctx = `<div class="tp-ctx">
     <span class="cx" data-goto="market" title="Open the Market tab"><i>Market</i><b class="${tp ? tp.cls : ""}">${tp ? tp.bucket : "No breadth file"}</b><small>MAP: ${esc(mr.v || "not set")}</small></span><span class="arr">›</span>
-    <span class="cx"><i>Sector</i><b>${esc(r.sector || "—")}</b><small>${esc(r.etf ? "ETF" : "")}</small></span><span class="arr">›</span>
+    ${r.etf ? `<span class="cx" data-goto="etfs" title="Open the ETFs tab"><i>ETF group</i><b>${esc(r.group || "—")}</b><small>${esc(r.sector && r.sector !== r.group ? r.sector : "your ETF file")}</small></span><span class="arr">›</span>
+    <span class="cx"><i>ETF</i><b>${r.lev ? "Leveraged / inverse" : `RS ${r.rs ?? "—"} among your ETFs`}</b><small>${r.lev ? "listed, never ranked" : r.estr ? esc(ESTR[r.estr].name) : "structure only"}</small></span></div>`
+    : `<span class="cx"><i>Sector</i><b>${esc(r.sector || "—")}</b><small></small></span><span class="arr">›</span>
     ${g ? `<span class="cx" data-gopen="${esc(g.name)}" title="Open the group"><i>Group</i><b>${esc(g.name)}</b><small>${gi >= 0 ? `#${gi + 1} of ${ranked.length} · RS ${g.grs} · ${esc(g.state)}` : `${g.n} names · not ranked`}</small></span><span class="arr">›</span>` : ""}
-    <span class="cx"><i>Stock</i><b>${r.gRank ? `#${r.gRank} of ${r.gN} in group` : esc(r.sym)}</b><small>RS ${r.rs ?? "—"}${r.etf ? "" : ` · ${esc(st.t)}`}</small></span></div>`;
+    <span class="cx"><i>Stock</i><b>${r.gRank ? `#${r.gRank} of ${r.gN} in group` : esc(r.sym)}</b><small>RS ${r.rs ?? "—"} · ${esc(st.t)}</small></span></div>`}`;
   const lv = r.zLo != null && !r.etf ? `<div class="tp-lv"><span>Zone <b>${f2(r.zLo)} – ${f2(r.zHi)}</b></span><span>Last <b>${f2(r.last)}</b></span><span class="s">Widest stop <b>${f2(r.stop)}</b></span><span class="tgtc" data-tgtc>${tgtChips(r)}</span>${z ? `<span>Grade <b>${z.g}</b>${z.step ? ` (SMA gate −${z.step})` : ""}</span>` : ""}<span>ADR <b>${f2(r.adr)}%</b></span>${vs ? `<span>Volatility <b>${VSL[vs.k].n}</b></span>` : ""}${r.ss ? `<span>Short score <b>${r.ss.n}/7</b></span>` : ""}${r.erIn != null ? `<span>Earnings <b>${r.erIn}d</b></span>` : ""}${tgtSeg()}</div>` : "";
   const i = WSI.list.indexOf(r.sym);
   const nav = `<div class="tp-nav">${WSI.hist.length > 1 ? `<button class="btn sm" data-tpb title="Back (Backspace)">← Back</button>` : ""}${i >= 0 && WSI.list.length > 1 ? `<button class="btn sm" data-tps="-1" ${i ? "" : "disabled"} title="Previous in the list (←)">‹</button><span class="small">${i + 1} / ${WSI.list.length}</span><button class="btn sm" data-tps="1" ${i < WSI.list.length - 1 ? "" : "disabled"} title="Next in the list (→)">›</button>` : ""}</div>`;
@@ -5399,6 +5423,17 @@ function selfCheck(){
     const capped = CFG.perGroup > 0 && (gc[r.group] || 0) >= CFG.perGroup;
     F(capped || (pl.length >= CFG.planN && (r.rs ?? 0) <= minRs), r.sym, "Left off the plan without a reason", `RS ${r.rs}, not listed`, "in the plan");
   });
+  // Spec 6 × Pivot side-by-side list (when on): every name passes the location gates and the plan's shared filters
+  if (typeof s6On === "function" && s6On()) {
+    const L6 = s6List(), g6 = {};
+    L6.forEach((o, i) => { g6[o.r.group] = (g6[o.r.group] || 0) + 1;
+      F(o.x.pass && Object.values(o.x.g).every(v => v === true), o.r.sym, "Spec 6 × Pivot list: all location gates pass", o.x.why || "pass", "pass");
+      F(o.x.z9 <= 0.5 + 1e-12 || o.x.z21 <= 0.5 + 1e-12, o.r.sym, "Spec 6 × Pivot zone within 0.5 ADR of the 9 or 21", `${o.x.z9.toFixed(2)} | ${o.x.z21.toFixed(2)}`, "≤ 0.5");
+      F((o.r.rs ?? 0) >= CFG.rsMin, o.r.sym, "Spec 6 × Pivot list RS floor", o.r.rs, `≥ ${CFG.rsMin}`);
+      if (i) F((L6[i - 1].r.rs ?? 0) >= (o.r.rs ?? 0), o.r.sym, "Spec 6 × Pivot list ranked by RS", o.r.rs, "highest first"); });
+    F(L6.length <= CFG.planN, "—", "Spec 6 × Pivot list within the list size", L6.length, `≤ ${CFG.planN}`);
+    if (CFG.perGroup > 0) for (const g in g6) F(g6[g] <= CFG.perGroup, g, "Spec 6 × Pivot max per group", g6[g], `≤ ${CFG.perGroup}`);
+  }
   // rule settings vs the written spec (Chart & Entry Spec v6.0) — a change here is allowed, just visible
   const sp = (l, ok, v, want) => R.spec.push({l, ok, v, want});
   const zz = (CFG.zones && CFG.zones[CFG.zMode]) || DEFAULTS.zones[CFG.zMode];
@@ -5448,6 +5483,672 @@ navBadges = function(){
 };
 const _renderTab2 = renderTab;
 renderTab = function(t){ if (t === "data" && S.snap) renderSelfCheck(); _renderTab2(t); };   // card first, so the jump list sees it
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   SCANS (18 Oct) — REACCEL and EP 9M. Screens, flags and filter criteria only: they change what is shown, never
+   rankings, states or the plan.
+   REACCEL = indicators/screener/reaccel-screener v0.1 gates, with the v0.2 acceleration test from its README
+   (RS1M − (RS3M − RS1M) / 2 ≥ 5 pp) and names that reported in the last 5 days left out (a gap can pass gate 4 alone).
+   RS here is the CSV's % return minus the benchmark's (CFG.bench, QQQ by default), same as the Pine (QQQ).
+   EP 9M = Stockbee's 9-million-share episodic pivot: 9M+ shares in a session, price ≥ $3, and at least 3× normal
+   volume ("far above its normal volume"). A raw 9M spike is not a buy — see the screen's note.
+   ===================================================================== */
+const RA = {perf6: 40, rs6: 10, p3lo: -20, p3hi: 15, offLo: 8, offHi: 35, acc: 5};
+function reaccelOf(r){
+  if (r.etf || r.last == null || r.perf6m == null || r.perf3m == null || r.vs_p6m == null || r.vs_p3m == null || r.vs_p1m == null
+    || r.s200 == null || r.s50 == null || r.e21 == null || r.offHigh == null) return null;
+  const P = r.last, off = -r.offHigh, acc = r.vs_p1m - (r.vs_p3m - r.vs_p1m) / 2;
+  const g = [
+    r.perf6m >= RA.perf6 && r.vs_p6m >= RA.rs6,                                                     // 1 former leader
+    r.perf3m >= RA.p3lo && r.perf3m <= RA.p3hi && off >= RA.offLo && off <= RA.offHi,                // 2 reset
+    P > r.s200 && r.s50 > r.s200,                                                                    // 3 structure alive
+    P > r.e21 && r.vs_p1m > 0 && acc >= RA.acc                                                       // 4 turning
+  ];
+  const er = !!r.postER;
+  return {ok: g.every(Boolean) && !er, g, acc, er, struct: P > r.s50 ? 2 : 1};
+}
+const EP9 = {vol: 9e6, px: 3, mult: 3, days: 10, avgN: 50};
+function ep9Of(r){
+  if (r.etf || r.vol == null || r.last == null) return null;
+  const mult = r.rvol != null ? r.rvol : (r.avgv30 ? r.vol / r.avgv30 : null);
+  if (mult == null) return null;
+  return {ok: r.vol >= EP9.vol && r.last >= EP9.px && mult >= EP9.mult, mult};
+}
+// most recent EP 9M day in the stored history (last 10 sessions): volume vs its own prior 50-session average
+const EP9H = {key: "", map: new Map()};
+function ep9Hist(r){
+  if (r.etf || !S.has.hist) return null;
+  const k = HIST.nD + "|" + (HIST.dates[HIST.nD - 1] || "");
+  if (EP9H.key !== k) { EP9H.key = k; EP9H.map = new Map(); }
+  if (EP9H.map.has(r.sym)) return EP9H.map.get(r.sym);
+  const i = HIST.idx.get(r.sym), nD = HIST.nD; let out = null;
+  if (i != null) {
+    const o = i * nD;
+    for (let t = nD - 1; t >= Math.max(EP9.avgN, nD - EP9.days); t--) {
+      const v = HIST.V[o + t], c = HIST.C[o + t]; if (!(v >= EP9.vol) || !(c >= EP9.px)) continue;
+      let s = 0, n = 0; for (let u = t - EP9.avgN; u < t; u++) { const x = HIST.V[o + u]; if (isFinite(x)) { s += x; n++; } }
+      const avg = n >= 20 ? s / n : null;
+      if (avg && v / avg >= EP9.mult) { out = {ago: nD - 1 - t, date: HIST.dates[t], vol: v, mult: v / avg, hi: HIST.Hh[o + t], lo: HIST.L[o + t], close: c}; break; }
+    }
+  }
+  EP9H.map.set(r.sym, out); return out;
+}
+const fmtVol = v => v >= 1e9 ? (v / 1e9).toFixed(2) + "B" : v >= 1e6 ? (v / 1e6).toFixed(1) + "M" : Math.round(v).toLocaleString();
+SCREENS.push(
+  {k: "reaccel", t: "REACCEL — former leader re-accelerating", d: `Led over 6 months (+${RA.perf6}% and ${RA.rs6}+ points ahead of the benchmark), reset for about 3 (3M between ${RA.p3lo}% and +${RA.p3hi}%, ${RA.offLo}–${RA.offHi}% off the 52-week high), long-term structure intact (above the 200 SMA, 50 over 200), and turning: above the 21 EMA, ahead of the benchmark over 1M, last month's RS pace ${RA.acc}+ points faster than the prior two. Names that reported in the last 5 days are left out. A candidate list, not an entry.`,
+    need: ["perf6m", "perf3m", "perf1m", "hi52", "s200"], f: r => { const x = reaccelOf(r); return !!(x && x.ok); }},
+  {k: "ep9", t: "EP 9M — 9 million shares", d: () => `${S.mode === "pm" ? "Last session" : "Today"}: ${EP9.vol / 1e6}M+ shares, price $${EP9.px}+, and ${EP9.mult}×+ normal volume. Stockbee's volume-first episodic pivot. A raw 9M spike is not a buy: a 2020–26 backtest of ~5,000 of them found the median trade lost money; the edge needed a real catalyst (earnings, FDA, a launch) and a stop under the day's low. Check the news first.`,
+    need: ["vol", "rvol"], f: r => { const x = ep9Of(r); return !!(x && x.ok); }},
+  {k: "ep9r", t: "EP 9M in the last 10 sessions", d: `A ${EP9.vol / 1e6}M+ share day at ${EP9.mult}×+ its prior 50-session average volume within the last ${EP9.days} sessions, price $${EP9.px}+ — the delayed entry: let it consolidate 2–5 days, then buy the break of that range. Needs the price history.`,
+    need: ["hist"], f: r => !!ep9Hist(r)}
+);
+Object.assign(SC_CAT, {reaccel: "Leadership", ep9: "Today", ep9r: "Setups"});
+const _scCrit = [
+  {k: "reaccel", cat: "Strength", l: "REACCEL — former leader re-accelerating", t: r => { const x = reaccelOf(r); return x ? x.ok : null; }},
+  {k: "ep9", cat: "Today", l: "EP 9M today (9M+ shares, 3×+ normal, $3+)", t: r => { const x = ep9Of(r); return x ? x.ok : null; }},
+  {k: "ep9r", cat: "Today", l: "EP 9M within the last 10 sessions", need: HH, t: r => S.has.hist ? !!ep9Hist(r) : null}
+];
+_scCrit.forEach(c => { CRIT.push(c); CRIT_BY[c.k] = c; });
+const _flags1 = flagsHTML;
+flagsHTML = function(r){
+  const ra = reaccelOf(r), e = ep9Of(r), eh = !(e && e.ok) && ep9Hist(r);
+  return _flags1(r)
+    + (ra && ra.ok ? `<span class="flag good" title="Former leader re-accelerating: 6M leader, 3M reset, structure intact, RS pace ${sg(ra.acc, 1)} points">REACCEL</span>` : "")
+    + (e && e.ok ? `<span class="flag post" title="${fmtVol(r.vol)} shares, ${e.mult.toFixed(1)}× normal — check for a real catalyst">EP 9M</span>` : "")
+    + (eh ? `<span class="flag post" title="${fmtVol(eh.vol)} shares on ${eh.date} (${eh.mult.toFixed(1)}× its 50-day average)">EP 9M ${eh.ago}d</span>` : "");
+};
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   STOCKBEE MARKET MONITOR (18 Oct) — Market tab card, both layouts. A cross-check beside the tape read; MAP stays
+   the regime authority. Counts per completed session from the stored whole-market daily bars, using the scan
+   formulas Stockbee publishes ("How I get the Market Monitor Numbers", stockbee.blogspot.com 2014/08):
+     4% up / down      100*(C−C1)/C1 ≥ 4 (≤ −4) AND V ≥ 100,000 AND V > V1
+     25% quarter       100*((C+.01)−(MINC65+.01))/(MINC65+.01) ≥ 25 (vs MAXC65 ≤ −25) AND AVGC20*AVGV20 ≥ 250,000
+     25% / 50% month   C20 ≥ 5 AND AVGC20*AVGV20 ≥ 250,000 AND 100*(C−C20)/C20 ≥ 25 / 50 (≤ −25 / −50)
+     13% in 34 days    vs MINC34 ≥ 13 (vs MAXC34 ≤ −13) AND AVGC20*AVGV20 ≥ 250,000
+     T2108             share of the universe closing above its 40-day average
+   MINC/MAXC/AVG windows include the current bar (TC2000 convention). Universe = active common stocks (Massive
+   reference list, type CS, cached a week). Splits: Massive's split list; where the stored bars still jump by the
+   split ratio across the execution date, earlier bars are rescaled in this card's own copy (HIST is untouched).
+   ===================================================================== */
+const SB = {cs: null, splits: null, busy: false, msg: "", key: "", res: null, show: 20};
+(function(){ const a = store.get("adrb.sbCS", null); if (a && a.syms) SB.cs = a; const b = store.get("adrb.sbSplits", null); if (b && b.list) SB.splits = b; })();
+const daysSince = iso => iso ? (Date.now() - new Date(iso).getTime()) / 864e5 : Infinity;
+async function mgetAll(path, params, cap = 40){
+  const out = []; let p = path, q = params, n = 0;
+  while (p && n++ < cap) {
+    const j = await mget(p, q); (j.results || []).forEach(x => out.push(x));
+    if (!j.next_url) break;
+    const u = new URL(j.next_url); p = u.pathname; q = Object.fromEntries([...u.searchParams].filter(([k]) => k !== "apiKey"));
+  }
+  return out;
+}
+async function sbLoad(force){
+  if (SB.busy || !newsKey()) return;
+  const needCS = force || !SB.cs || daysSince(SB.cs.at) > 7;
+  const from = HIST.dates[0] || "";
+  const needSp = force || !SB.splits || daysSince(SB.splits.at) > 1 || (from && SB.splits.from > from);
+  if (!needCS && !needSp) return;
+  SB.busy = true; SB.msg = "Loading the common-stock list and splits from Massive…"; sbPaint();
+  try {
+    if (needCS) {
+      const L = await mgetAll("/v3/reference/tickers", {market: "stocks", type: "CS", active: "true", limit: "1000"});
+      SB.cs = {at: new Date().toISOString(), syms: L.map(x => x.ticker).filter(s => SYM_OK.test(s)).join(" ")};
+      store.set("adrb.sbCS", SB.cs);
+    }
+    if (needSp && from) {
+      const L = await mgetAll("/stocks/v1/splits", {"execution_date.gte": from, limit: "5000"});
+      SB.splits = {at: new Date().toISOString(), from, list: L.filter(x => x.ticker && x.execution_date && x.split_from > 0 && x.split_to > 0).map(x => [x.ticker, x.execution_date, x.split_from, x.split_to])};
+      store.set("adrb.sbSplits", SB.splits);
+    }
+    SB.msg = "";
+  } catch (e) { SB.msg = "Massive: " + (e.msg || "error") + " — the monitor uses every symbol in the history until the list loads."; }
+  SB.busy = false; SB.key = ""; sbPaint();
+}
+// rescale earlier bars where the stored history still jumps by a split ratio (fetched before the split happened)
+function sbAdjusted(){
+  const nD = HIST.nD, C = HIST.C, V = HIST.V, fix = new Map();
+  const sp = (SB.splits ? SB.splits.list : []).filter(x => HIST.idx.has(x[0])).sort((a, b) => a[1] < b[1] ? -1 : 1);
+  let n = 0;
+  for (const [t, d, from, to] of sp) {
+    const f = to / from; if (!(f > 0) || Math.abs(Math.log(f)) < Math.log(1.15)) continue;     // stock dividends / tiny ratios
+    const tE = HIST.dates.findIndex(x => x >= d); if (tE <= 0) continue;
+    const i = HIST.idx.get(t), o = i * nD;
+    let c = fix.get(t); const cc = c ? c.c : C.subarray(o, o + nD), vv = c ? c.v : V.subarray(o, o + nD);
+    let tp = tE - 1; while (tp >= 0 && !isFinite(cc[tp])) tp--; if (tp < 0 || !isFinite(cc[tE])) continue;
+    const obs = Math.log(cc[tE] / cc[tp]), exp = Math.log(1 / f);
+    if (Math.abs(obs - exp) >= Math.abs(exp) / 2) continue;                                     // already adjusted
+    if (!c) { c = {c: Float64Array.from(cc), v: Float64Array.from(vv)}; fix.set(t, c); }
+    for (let u = 0; u < tE; u++) { c.c[u] /= f; c.v[u] *= f; }
+    n++;
+  }
+  return {fix, n};
+}
+function sbCompute(){
+  const nD = HIST.nD, csSet = SB.cs ? new Set(SB.cs.syms.split(" ")) : null;
+  const {fix, n: nFix} = sbAdjusted();
+  const Z = () => new Int32Array(nD);
+  const K = {u4: Z(), d4: Z(), uq: Z(), dq: Z(), um25: Z(), dm25: Z(), um50: Z(), dm50: Z(), u34: Z(), d34: Z(), ab40: Z(), n40: Z(), uni: Z()};
+  const W = 65, cbuf = new Float64Array(nD), vbuf = new Float64Array(nD);
+  const mono = (arr, t, win, cmp, dq, st) => {                                                   // monotonic deque helper
+    while (st.h < st.t && dq[st.h] <= t - win) st.h++;
+    while (st.h < st.t && cmp(arr[dq[st.t - 1]], arr[t])) st.t--;
+    dq[st.t++] = t; return arr[dq[st.h]];
+  };
+  const dqs = [new Int32Array(nD), new Int32Array(nD), new Int32Array(nD), new Int32Array(nD)];
+  let nSyms = 0;
+  for (let i = 0; i < HIST.nS; i++) {
+    const s = HIST.syms[i]; if (csSet && !csSet.has(s)) continue;
+    nSyms++;
+    const f = fix.get(s), o = i * nD;
+    for (let t = 0; t < nD; t++) { cbuf[t] = f ? f.c[t] : HIST.C[o + t]; vbuf[t] = f ? f.v[t] : HIST.V[o + t]; }
+    const st = [{h: 0, t: 0}, {h: 0, t: 0}, {h: 0, t: 0}, {h: 0, t: 0}];
+    let sc20 = 0, sv20 = 0, n20 = 0, sc40 = 0, n40 = 0, nv = 0;
+    for (let t = 0; t < nD; t++) {
+      const c = cbuf[t], v = vbuf[t];
+      if (!isFinite(c)) { st.forEach(x => { x.h = x.t = 0; }); sc20 = sv20 = n20 = sc40 = n40 = nv = 0; continue; }   // a gap restarts the windows
+      nv++;
+      sc20 += c; sv20 += isFinite(v) ? v : 0; n20++; if (n20 > 20) { sc20 -= cbuf[t - 20]; sv20 -= isFinite(vbuf[t - 20]) ? vbuf[t - 20] : 0; n20 = 20; }
+      sc40 += c; n40++; if (n40 > 40) { sc40 -= cbuf[t - 40]; n40 = 40; }
+      const mn65 = mono(cbuf, t, W, (a, b) => a >= b, dqs[0], st[0]), mx65 = mono(cbuf, t, W, (a, b) => a <= b, dqs[1], st[1]);
+      const mn34 = mono(cbuf, t, 34, (a, b) => a >= b, dqs[2], st[2]), mx34 = mono(cbuf, t, 34, (a, b) => a <= b, dqs[3], st[3]);
+      K.uni[t]++;
+      const liq = n20 === 20 && (sc20 / 20) * (sv20 / 20) >= 250000;
+      if (nv >= 2) { const c1 = cbuf[t - 1], v1 = vbuf[t - 1], ch = 100 * (c - c1) / c1;
+        if (v >= 100000 && v > v1) { if (ch >= 4) K.u4[t]++; else if (ch <= -4) K.d4[t]++; } }
+      if (liq && nv >= W) { if (100 * ((c + .01) - (mn65 + .01)) / (mn65 + .01) >= 25) K.uq[t]++; if (100 * ((c + .01) - (mx65 + .01)) / (mx65 + .01) <= -25) K.dq[t]++; }
+      if (liq && nv >= 34) { if (100 * ((c + .01) - (mn34 + .01)) / (mn34 + .01) >= 13) K.u34[t]++; if (100 * ((c + .01) - (mx34 + .01)) / (mx34 + .01) <= -13) K.d34[t]++; }
+      if (liq && nv > 20) { const c20 = cbuf[t - 20]; if (c20 >= 5) { const m = 100 * (c - c20) / c20; if (m >= 25) K.um25[t]++; if (m <= -25) K.dm25[t]++; if (m >= 50) K.um50[t]++; if (m <= -50) K.dm50[t]++; } }
+      if (n40 === 40) { K.n40[t]++; if (c > sc40 / 40) K.ab40[t]++; }
+    }
+  }
+  const rows = [];
+  const sum = (a, t, n) => { let s = 0; for (let k = Math.max(0, t - n + 1); k <= t; k++) s += a[k]; return s; };
+  for (let t = W; t < nD; t++) {
+    const r5u = sum(K.u4, t, 5), r5d = sum(K.d4, t, 5), r10u = sum(K.u4, t, 10), r10d = sum(K.d4, t, 10);
+    rows.push({d: HIST.dates[t], u4: K.u4[t], d4: K.d4[t], r5: r5d ? r5u / r5d : null, r10: r10d ? r10u / r10d : null, uq: K.uq[t], dq: K.dq[t], rq: K.dq[t] ? K.uq[t] / K.dq[t] : null,
+      um25: K.um25[t], dm25: K.dm25[t], um50: K.um50[t], dm50: K.dm50[t], u34: K.u34[t], d34: K.d34[t], uni: K.uni[t], t2108: K.n40[t] ? 100 * K.ab40[t] / K.n40[t] : null});
+  }
+  return {rows: rows.reverse(), nSyms, nFix, cs: !!csSet};
+}
+function sbPaint(){
+  const box = $("sbBox"); if (!box || !S.snap) return;
+  const key = [HIST.nD, HIST.dates[HIST.nD - 1], SB.cs ? SB.cs.at : "", SB.splits ? SB.splits.at : ""].join("|");
+  if (S.has.hist && !SB.busy && SB.key !== key) { SB.key = key; try { SB.res = sbCompute(); } catch (e) { SB.res = null; SB.msg = "Couldn't compute: " + e.message; } }
+  const R = S.has.hist ? SB.res : null, L = R ? R.rows : [], top = L[0];
+  const rc = v => v == null ? "" : v >= 1 ? "pos" : "neg";
+  const heat = (u, d) => { const t = u + d; if (!t) return ""; const a = Math.round(Math.abs(u - d) / t * 55); return `background:color-mix(in oklab, ${u >= d ? "var(--up)" : "var(--down)"} ${a}%, transparent)`; };
+  const f1 = v => v == null ? "—" : v.toFixed(2), pct = v => v == null ? "—" : v.toFixed(0) + "%";
+  const tile = (k, v, n, c = "") => `<div class="kpi card"><div class="k">${k}</div><div class="v ${c}">${v}</div><div class="n">${n}</div></div>`;
+  box.innerHTML = `<div class="hd"><h2>Stockbee market monitor</h2><span class="sub">breadth counts per session from your stored whole-market bars · a cross-check, MAP decides</span><span class="spacer"></span>
+      <span class="seg" id="sbShow">${[20, 60, 0].map(n => `<button data-n="${n}" class="${SB.show === n ? "on" : ""}">${n ? n + " days" : "All"}</button>`).join("")}</span>
+      ${newsKey() ? `<button class="btn sm" id="sbRe" ${SB.busy ? "disabled" : ""}>Refresh stock list &amp; splits</button>` : ""}</div>
+    <div class="bd">${!S.has.hist ? `<div class="empty" style="padding:4px 0">Needs the price history (Screens → Load price history).</div>` : !top ? `<div class="empty" style="padding:4px 0">Needs 66+ stored sessions.</div>` : `
+      <div class="kpis" style="margin-bottom:10px">
+        ${tile(`Up 4% / down 4% · ${esc(top.d)}`, `<span class="pos">${top.u4}</span> / <span class="neg">${top.d4}</span>`, "on rising volume, 100k+ shares")}
+        ${tile("5-day ratio", f1(top.r5), "4% ups ÷ 4% downs, 5 sessions", rc(top.r5))}
+        ${tile("10-day ratio", f1(top.r10), "4% ups ÷ 4% downs, 10 sessions", rc(top.r10))}
+        ${tile("Quarter ratio (primary)", f1(top.rq), `${top.uq} up 25%+ vs ${top.dq} down 25%+ in 65 days`, rc(top.rq))}
+        ${tile("T2108", pct(top.t2108), "share above the 40-day average")}
+        ${tile("Universe", top.uni.toLocaleString(), R.cs ? "active common stocks" : "every symbol in the history")}
+      </div>
+      <div class="tscroll" style="max-height:460px"><table class="mini sbt"><thead><tr><th class="l">Session</th><th>Up 4%</th><th>Down 4%</th><th>5d ratio</th><th>10d ratio</th><th>Up 25% Q</th><th>Down 25% Q</th><th>Q ratio</th><th>Up 25% M</th><th>Down 25% M</th><th>Up 50% M</th><th>Down 50% M</th><th>Up 13% 34d</th><th>Down 13% 34d</th><th>Universe</th><th>T2108</th></tr></thead><tbody>
+      ${(SB.show ? L.slice(0, SB.show) : L).map(x => `<tr><td class="l">${esc(x.d)}</td><td style="${heat(x.u4, x.d4)}">${x.u4}</td><td style="${heat(x.u4, x.d4)}">${x.d4}</td><td class="${rc(x.r5)}">${f1(x.r5)}</td><td class="${rc(x.r10)}">${f1(x.r10)}</td><td style="${heat(x.uq, x.dq)}">${x.uq}</td><td style="${heat(x.uq, x.dq)}">${x.dq}</td><td class="${rc(x.rq)}"><b>${f1(x.rq)}</b></td><td style="${heat(x.um25, x.dm25)}">${x.um25}</td><td style="${heat(x.um25, x.dm25)}">${x.dm25}</td><td style="${heat(x.um50, x.dm50)}">${x.um50}</td><td style="${heat(x.um50, x.dm50)}">${x.dm50}</td><td style="${heat(x.u34, x.d34)}">${x.u34}</td><td style="${heat(x.u34, x.d34)}">${x.d34}</td><td>${x.uni.toLocaleString()}</td><td>${pct(x.t2108)}</td></tr>`).join("")}</tbody></table></div>`}
+      <div class="small" style="margin-top:6px">${SB.busy || SB.msg ? `<b>${esc(SB.msg)}</b> · ` : ""}Stockbee's own scan formulas (4% on rising volume ≥ 100k; quarter vs the 65-day low/high; month vs 20 sessions ago; 34-day vs the 34-day low/high; $250k average dollar volume). Completed sessions only — today appears after the history updates.
+      ${R ? ` · ${R.cs ? `${R.nSyms.toLocaleString()} common stocks in the history` : "common-stock list not loaded — ETFs and others included"} · ${R.nFix} split${R.nFix === 1 ? "" : "s"} corrected in the stored bars` : ""}</div></div>`;
+  $("sbShow") && ($("sbShow").onclick = e => { const b = e.target.closest("button"); if (b) { SB.show = +b.dataset.n; sbPaint(); } });
+  $("sbRe") && ($("sbRe").onclick = () => sbLoad(true));
+}
+// card on the Market tab, right after the tape read
+$("mkTape").insertAdjacentHTML("afterend", `<div class="card g1" id="sbBox"></div>`);
+const _renderTab3 = renderTab;
+renderTab = function(t){ if (t === "market" && S.snap) { sbPaint(); if (S.has.hist) sbLoad(false); } _renderTab3(t); };
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   SPEC 6.0 × PIVOT — SIDE BY SIDE (18 Oct). Off by default (localStorage adrb.s6p). Never changes the plan: it shows
+   which names indicators/structure/spec6-pivot-entry's location gates let through next to today's rules.
+   Daily port of that script's detail() at price px = the board's last price:
+     1 weekly   last completed week's close > its 10-week SMA, and that SMA rising (vs a week earlier)
+     2 21E      px > daily 21 EMA (hard veto)
+     3 50S↑     px > daily 50 SMA, and the 50 SMA (previous completed day) above its value 5 sessions earlier
+     4 zone     min(|px − 9 EMA|, |px − 21 EMA|) ≤ 0.5 ADR
+     5 ext      (px − 50 SMA) / 50 SMA in ADR ≤ 4 — waived for 5 days after earnings (the script's gap-reset switch)
+   ADR as the script: 100 × (mean(high/low, 20 completed sessions) − 1), one ADR = that % of the last completed close.
+   Developing 9/21 EMA and 50 SMA at px (premarket files carry yesterday's values, so they are rolled to px).
+   Pass = the script's WATCH: location gates pass. Its stop is the 30-min pullback low − 0.05 ADR, which only the chart
+   knows, so LoD (≤ 0.6 ADR) and room to the first resistance (≥ 2R; nearest of the 10-day high, today's high and
+   unbroken 5/5 daily swing highs) are shown as estimates with the stop at today's low − 0.05 ADR.
+   Theme gate (manual in the script) is left to MAP. Triggers (T1–T4) stay on the TradingView chart.
+   ===================================================================== */
+const S6 = {zone: 0.5, ext: 4, lod: 0.6, room: 2, buf: 0.05, adrN: 20, slope: 5, wk: 10, hiN: 10, sw: 5, swMax: 25};
+const s6On = () => !!store.get("adrb.s6p", false);
+const S6H = {key: "", map: new Map()};
+function s6Hist(r){
+  if (!S.has.hist || !S.snap) return null;
+  const asOf = S.snap.asOf, key = HIST.nD + "|" + HIST.dates[HIST.nD - 1] + "|" + asOf;
+  if (S6H.key !== key) { S6H.key = key; S6H.map = new Map(); }
+  if (S6H.map.has(r.sym)) return S6H.map.get(r.sym);
+  const i = HIST.idx.get(r.sym), nD = HIST.nD; let out = null;
+  if (i != null) {
+    const o = i * nD, C = t => HIST.C[o + t], H = t => HIST.Hh[o + t], L = t => HIST.L[o + t];
+    let tP = nD - 1; while (tP >= 0 && HIST.dates[tP] >= asOf) tP--;            // last completed session before the file's session
+    const fin = (a, b) => { for (let t = a; t <= b; t++) if (!isFinite(C(t)) || !isFinite(H(t)) || !isFinite(L(t))) return false; return a >= 0; };
+    if (tP >= 60 && fin(tP - 59, tP)) {
+      let s = 0; for (let t = tP - S6.adrN + 1; t <= tP; t++) s += H(t) / L(t);
+      const adrPct = 100 * (s / S6.adrN - 1), adrAbs = adrPct / 100 * C(tP);
+      const mean = (a, b) => { let x = 0; for (let t = a; t <= b; t++) x += C(t); return x / (b - a + 1); };
+      const s50p1 = mean(tP - 49, tP), s50pN = mean(tP - 49 - S6.slope, tP - S6.slope), sum49 = s50p1 * 50 - C(tP - 49);
+      let hiN = -Infinity; for (let t = tP - S6.hiN + 1; t <= tP; t++) hiN = Math.max(hiN, H(t));
+      // unbroken daily swing highs: high above the 5 bars either side, confirmed 5 bars later, dropped once a later high exceeds it
+      const sw = [];
+      for (let k = Math.max(S6.sw, tP - 250); k <= tP - S6.sw; k++) {
+        const h = H(k); if (!isFinite(h)) continue; let piv = true;
+        for (let u = k - S6.sw; u <= k + S6.sw && piv; u++) if (u !== k && !(H(u) < h)) piv = false;
+        if (!piv) continue;
+        let broken = false; for (let u = k + S6.sw + 1; u <= tP; u++) if (H(u) > h) { broken = true; break; }
+        if (!broken) sw.push(h);
+      }
+      // weekly: completed weeks only (week key before the file's week)
+      const wkNow = weekKey(asOf), wc = [];
+      let prev = null; for (let t = 0; t <= tP; t++) { if (!isFinite(C(t)) || HIST.wk[t] >= wkNow) continue; if (HIST.wk[t] !== prev) { wc.push(C(t)); prev = HIST.wk[t]; } else wc[wc.length - 1] = C(t); }
+      let wk = null;
+      if (wc.length >= S6.wk + 1) { const sma = e => { let x = 0; for (let k = e - S6.wk + 1; k <= e; k++) x += wc[k]; return x / S6.wk; }; const n = wc.length - 1, w1 = sma(n), w2 = sma(n - 1); wk = {c: wc[n], s1: w1, s2: w2, ok: wc[n] > w1 && w1 > w2}; }
+      out = {adrPct, adrAbs, s50p1, s50pN, sum49, hiN, sw: sw.slice(-S6.swMax), wk, prevClose: C(tP), date: HIST.dates[tP]};
+    }
+  }
+  S6H.map.set(r.sym, out); return out;
+}
+function s6Of(r){
+  if (r.etf || r.last == null || r.e9 == null || r.e21 == null) return null;
+  const h = s6Hist(r), px = r.last, pm = S.mode === "pm";
+  const adrPct = h ? h.adrPct : r.adr, adrAbs = h ? h.adrAbs : (r.adr && (r.prevClose ?? px) ? r.adr / 100 * (r.prevClose ?? px) : null);
+  if (!adrPct || !adrAbs) return null;
+  const dev = (prev, p) => prev + 2 / (p + 1) * (px - prev);
+  const e9 = pm ? dev(r.e9, 9) : r.e9, e21 = pm ? dev(r.e21, 21) : r.e21;
+  const s50 = h ? (h.sum49 + px) / 50 : r.s50;
+  const g = {
+    wk: h && h.wk ? h.wk.ok : null,
+    e21: px > e21,
+    s50: s50 == null ? null : (px > s50 && (h ? h.s50p1 > h.s50pN : null)),
+    zone: Math.min(Math.abs(px - e9), Math.abs(px - e21)) / adrAbs <= S6.zone + 1e-12,
+    ext: s50 == null ? null : (!!r.postER || (px - s50) / Math.abs(s50) * 100 / adrPct <= S6.ext + 1e-12)
+  };
+  const z9 = Math.abs(px - e9) / adrAbs, z21 = Math.abs(px - e21) / adrAbs, ext = s50 == null ? null : (px - s50) / Math.abs(s50) * 100 / adrPct;
+  const order = [["wk", "weekly 10W"], ["e21", "under the 21 EMA"], ["s50", "50 SMA"], ["zone", "zone"], ["ext", "extension"]];
+  const fail = order.find(([k]) => g[k] === false), unknown = order.find(([k]) => g[k] == null);
+  // estimates: stop at today's low − 0.05 ADR (the chart uses the 30-min pullback low)
+  const lo = pm ? null : r.lo1d, stop = lo != null ? lo - S6.buf * adrAbs : null, risk = stop != null ? px - stop : null;
+  const lod = lo != null ? (px - lo) / adrAbs : null;
+  const levels = h ? [h.hiN, ...(pm ? [] : [r.hi1d]), ...h.sw].filter(v => v != null && v > px) : [];
+  const res = levels.length ? Math.min(...levels) : null, room = risk > 0 && res != null ? (res - px) / risk : null;
+  return {g, pass: !fail && !unknown, why: fail ? fail[1] : unknown ? `needs ${unknown[0] === "wk" || unknown[0] === "s50" ? "the price history" : "data"}` : "", z9, z21, ext, e9, e21, s50, adrPct, adrAbs,
+    lod, lodOk: lod == null ? null : lod <= S6.lod, stop, res, room, roomOk: risk > 0 ? (res == null || room >= S6.room) : null, h};
+}
+// the side-by-side list: same pool, RS floor, earnings, group cap and list size as the plan — only the location rules differ
+function s6List(){
+  const pool = S.stocks.filter(r => (!CFG.liqOnly || !r.thin) && gOK(r));
+  const cands = pool.filter(r => (r.rs ?? 0) >= CFG.rsMin && (!CFG.hideER || !r.erSoon)).map(r => ({r, x: s6Of(r)})).filter(o => o.x && o.x.pass).sort((a, b) => (b.r.rs ?? 0) - (a.r.rs ?? 0));
+  const perG = {}, list = [];
+  for (const o of cands) { if (list.length >= CFG.planN) break; if (CFG.perGroup > 0 && (perG[o.r.group] || 0) >= CFG.perGroup) continue; perG[o.r.group] = (perG[o.r.group] || 0) + 1; list.push(o); }
+  return list;
+}
+function renderS6(){
+  const box = $("s6pBox"); if (!box) return;
+  if (!s6On()) { box.innerHTML = `<div class="hd"><h2>Spec 6.0 × Pivot — side by side</h2><span class="sub">off · shows which names your new Spec 6 × Pivot location rules let through next to today's rules. Never changes the plan.</span><span class="spacer"></span><button class="btn sm" id="s6Tog">Turn on</button></div>`; $("s6Tog").onclick = () => { store.set("adrb.s6p", true); renderS6(); }; return; }
+  const L = s6List(), plan = S.plan.plan, inP = new Set(plan.map(r => r.sym)), inS = new Set(L.map(o => o.r.sym));
+  const both = plan.filter(r => inS.has(r.sym)), onlyP = plan.filter(r => !inS.has(r.sym)), onlyS = L.filter(o => !inP.has(o.r.sym));
+  const why = r => { const x = s6Of(r); return x ? x.why || "list size / group cap" : "no data"; };
+  const ck = v => v == null ? `<span class="dim">·</span>` : v ? `<span class="ok-t">✓</span>` : `<span class="neg">✗</span>`;
+  const fx = v => v == null ? "—" : v.toFixed(2) + "×";
+  box.innerHTML = `<div class="hd"><h2>Spec 6.0 × Pivot — side by side</h2><span class="sub">location gates of your Spec 6 × Pivot script (its WATCH) · same RS floor, earnings, group cap and list size as the plan · the plan itself is unchanged</span><span class="spacer"></span><button class="btn sm" id="s6Tog">Turn off</button></div>
+    <div class="bd">
+      <div class="s6cols">
+        <div><div class="lbl">Both rule sets · ${both.length}</div>${both.map(r => tkChip(r, r.rs ?? "")).join("") || `<span class="dim">none</span>`}</div>
+        <div><div class="lbl">Only today's rules · ${onlyP.length}</div>${onlyP.map(r => `<div class="s6w">${tkChip(r, r.rs ?? "")} <span class="small">S6×P: ${esc(why(r))}</span></div>`).join("") || `<span class="dim">none</span>`}</div>
+        <div><div class="lbl">Only Spec 6 × Pivot · ${onlyS.length}</div>${onlyS.map(o => `<div class="s6w">${tkChip(o.r, o.r.rs ?? "")} <span class="small">today: ${esc(o.r.state ? ST[o.r.state].name : "—")}</span></div>`).join("") || `<span class="dim">none</span>`}</div>
+      </div>
+      ${L.length ? `<div class="tscroll" style="max-height:420px;margin-top:10px"><table class="mini"><thead><tr><th class="l">Ticker</th><th>RS</th><th class="l">Group</th><th>Weekly</th><th>&gt; 21E</th><th>50S ↑</th><th>Zone 9 | 21</th><th>Ext</th><th>LoD est.</th><th>Room est.</th><th>Resistance</th><th>Grade</th><th class="l">Today's rules</th></tr></thead><tbody>
+        ${L.map(({r, x}) => `<tr data-sym="${esc(r.sym)}"><td class="l sym">${esc(r.sym)}</td><td>${rsBadge(r.rs)}</td><td class="l small">${esc(r.group)}</td><td>${ck(x.g.wk)}</td><td>${ck(x.g.e21)}</td><td>${ck(x.g.s50)}</td><td>${fx(x.z9)} | ${fx(x.z21)}</td><td>${fx(x.ext)}${r.postER ? " R" : ""}</td><td>${x.lod == null ? "—" : `${ck(x.lodOk)} ${fx(x.lod)}`}</td><td>${x.room == null ? (x.roomOk ? `${ck(true)} clear` : "—") : `${ck(x.roomOk)} ${x.room.toFixed(2)}R`}</td><td>${x.res == null ? "—" : f2(x.res)}</td><td>${sizeGrade(r).g}</td><td class="l">${statusPill(r)}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty">No name passes the Spec 6 × Pivot location gates with the plan's RS floor right now.</div>`}
+      <div class="small" style="margin-top:6px">Gates at the last price: weekly close above a rising 10-week SMA · above the daily 21 EMA · above a rising 50 SMA · within ${S6.zone} ADR of the 9 or the 21 EMA · ≤ ${S6.ext} ADR above the 50 SMA (R = waived after earnings). ADR = the script's 20-session high/low average. <b>LoD and room are estimates</b> with the stop at today's low − ${S6.buf} ADR — the script uses the 30-min pullback low. Triggers (T1 reversal break etc.) stay on your TradingView chart.${S.has.hist ? "" : " <b>Load the price history</b> for the weekly and 50-SMA-rising gates."}</div>
+    </div>`;
+  $("s6Tog").onclick = () => { store.set("adrb.s6p", false); renderS6(); };
+  box.querySelector("tbody")?.addEventListener("click", e => { const tr = e.target.closest("tr[data-sym]"); if (tr) openDrawer(tr.dataset.sym); });
+}
+$("shortBox").insertAdjacentHTML("beforebegin", `<div class="card g1" id="s6pBox"></div>`);
+const _renderTab4 = renderTab;
+renderTab = function(t){ _renderTab4(t); if (t === "plan" && S.snap) renderS6(); };
+// ticker panel (workspace): the gate table under Plan & checks when the comparison is on
+if (WS) {
+  const _tpBuild1 = tpBuild;
+  tpBuild = function(r){
+    _tpBuild1(r);
+    if (!s6On() || r.etf) return;
+    const x = s6Of(r), pane = document.querySelector('#drawer .tp-pane[data-p="plan"]'); if (!x || !pane) return;
+    const row = (t, ok, v) => `<div class="chk"><span class="ic ${ok == null ? "na" : ok ? "ok" : "no"}">${ok == null ? "·" : ok ? "✓" : "✕"}</span><div>${t}</div><div class="small">${v}</div></div>`;
+    pane.querySelector(".tkt")?.insertAdjacentHTML("afterend", `<div class="s6p"><h4 style="margin:10px 0 2px;font-size:12px">Spec 6.0 × Pivot — ${x.pass ? `<span class="ok-t">WATCH (location passes)</span>` : `<span class="neg">NO · ${esc(x.why)}</span>`}</h4>
+      ${row("1 · Weekly close above a rising 10-week SMA", x.g.wk, x.h && x.h.wk ? `${f2(x.h.wk.c)} vs ${f2(x.h.wk.s1)}` : "needs history")}
+      ${row("2 · Above the daily 21 EMA (hard veto)", x.g.e21, f2(x.e21))}
+      ${row("3 · Above a rising daily 50 SMA", x.g.s50, x.s50 == null ? "—" : f2(x.s50))}
+      ${row(`4 · Within ${S6.zone} ADR of the 9 or 21 EMA`, x.g.zone, `${x.z9.toFixed(2)}× | ${x.z21.toFixed(2)}×`)}
+      ${row(`5 · ≤ ${S6.ext} ADR above the 50 SMA${r.postER ? " (waived after earnings)" : ""}`, x.g.ext, x.ext == null ? "—" : x.ext.toFixed(2) + "×")}
+      ${row(`9 · LoD ≤ ${S6.lod} ADR (estimate, today's low)`, x.lodOk, x.lod == null ? "—" : x.lod.toFixed(2) + "×")}
+      ${row(`10 · Room to first resistance ≥ ${S6.room}R (estimate)`, x.roomOk, x.room == null ? (x.roomOk ? "clear" : "—") : `${x.room.toFixed(2)}R to ${f2(x.res)}`)}
+      <div class="small">ADR ${x.adrPct.toFixed(2)}% · stop estimate ${x.stop == null ? "—" : f2(x.stop)} (today's low − ${S6.buf} ADR; the chart uses the 30-min pullback low). Trigger on TradingView.</div></div>`);
+  };
+}
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   WEINSTEIN STAGES (18 Oct) — a reference label in the style of Deepvue's column: 1A · 1 · 2A · 2 · 3A · 3 · 4 · 4B- · N/A.
+   Deepvue's formula is not published. This follows what Deepvue and Stan Weinstein have said about it:
+     • Deepvue sets stages with the 10-week and 40-week averages (= 50-day and 200-day here; daily bars, as Deepvue updates
+       intraday): Stage 2 = price above both, both rising; Stage 4 = price below both, both falling (deepvue.com Stage 2 screener).
+     • Stage 4 needs "a couple of closes below the 50-day" before it is called (Deepvue webinar with Weinstein).
+     • A Stage 2 stock that breaks its 10-week (50-day) is an early top, 3A; a reclaim puts it back in Stage 2 (same webinar).
+     • 4B-: a beaten-down Stage 4 stock that stops making lows and pops through its still-falling 50-day, with "daylight" up
+       to the 150-day — the cycle low is likely in (same webinar; NFLX example).
+     • 2A / 1A: the first weeks of a new Stage 2 / Stage 1 ("the very first weeks of a new Stage 2 show as the palest green").
+     • A flat long average only means a top after an advance, and a base after a decline (MarkitTick Weinstein Stage Cycle
+       Tracker's memory rule): 2 → 3 when the 150-day stops rising; 4 → 1 when it stops falling.
+   Thresholds live in WSG. Not Deepvue's numbers — expect most names to match and the transitional labels to differ more.
+   The Data check card compares it with labels pasted from Deepvue, so the match rate is measured, not assumed.
+   ===================================================================== */
+const WSG = {n50: 50, n150: 150, n200: 200, slope50: 10, slope200: 20, slope150: 20, flat: 0.5, conf4: 2, fresh: 20, a3: 10, rng: 60,
+  db: 10, base: 10, minBars: 230};
+const WSL = {
+  "1A": {n: "1A", t: "Early base", c: "#9ad0f5", d: "Transitioning from a decline into a base: the long average has stopped falling."},
+  "1": {n: "1", t: "Basing", c: "#5ea8e6", d: "Sideways after a decline; the long average is flat. Wait for the breakout."},
+  "2A": {n: "2A", t: "Early advance", c: "#9fe0b5", d: "The first weeks of a new Stage 2: above rising 10- and 40-week averages after a base."},
+  "2": {n: "2", t: "Advancing", c: "#1baf7a", d: "Above rising 10- and 40-week (50/200-day) averages — the only stage to be long."},
+  "3A": {n: "3A", t: "Early top", c: "#f3d67a", d: "A Stage 2 stock has closed under its 10-week (50-day) average. A reclaim puts it back in Stage 2."},
+  "3": {n: "3", t: "Topping", c: "#eda100", d: "After an advance the long average has flattened and price is chopping around it."},
+  "4": {n: "4", t: "Declining", c: "#e34948", d: "Below falling 10- and 40-week averages, confirmed by closes under the 50-day."},
+  "4B-": {n: "4B-", t: "Late decline", c: "#f0a3b6", d: "Still Stage 4, but it has stopped making lows and popped through a falling 50-day with room up to the 150-day — the cycle low may be in."},
+  "N/A": {n: "N/A", t: "Not enough history", c: "var(--chip)", d: "Needs about 230 sessions of stored bars, and a clear trend at some point in them."}
+};
+const WS_ORDER = ["2A", "2", "1A", "1", "3A", "3", "4B-", "4", "N/A"];
+// one symbol's label from its daily closes / highs / lows (oldest first); returns the label for the last bar
+function wsStage(c, h, l){
+  const n = c.length; if (n < WSG.minBars) return {lab: "N/A", since: 0};
+  const sma = p => { const o = new Float64Array(n).fill(NaN); let s = 0, k = 0; for (let t = 0; t < n; t++) { if (!isFinite(c[t])) { s = 0; k = 0; continue; } s += c[t]; k++; if (k > p) { s -= c[t - p]; k = p; } if (k === p) o[t] = s / p; } return o; };
+  const s50 = sma(WSG.n50), s150 = sma(WSG.n150), s200 = sma(WSG.n200);
+  let st = null, lab = "N/A", since = 0, b50 = 0, hadUp = false, hadDn = false, start = 0, from = null, a3 = 0, cuts = 0;
+  for (let t = WSG.n200 + WSG.slope200; t < n; t++) {
+    const p = c[t]; if (!isFinite(p) || !isFinite(s200[t]) || !isFinite(s200[t - WSG.slope200]) || !isFinite(s150[t - WSG.slope150])) continue;
+    b50 = p < s50[t] ? b50 + 1 : 0;
+    const up50 = s50[t] > s50[t - WSG.slope50], up200 = s200[t] > s200[t - WSG.slope200];
+    const sl150 = (s150[t] / s150[t - WSG.slope150] - 1) * 100, flat150 = Math.abs(sl150) < WSG.flat;
+    const two = p > s50[t] && p > s200[t] && up50 && up200;
+    const four = p < s50[t] && p < s200[t] && !up50 && !up200 && b50 >= WSG.conf4;
+    let lo = Infinity, hi = -Infinity; for (let u = Math.max(0, t - WSG.rng); u < t; u++) { if (l[u] < lo) lo = l[u]; if (h[u] > hi) hi = h[u]; }
+    const prev = st, go = (s, f, a) => { st = s; from = f; start = t; if (a != null) a3 = a; };
+    const brkUp = p > hi && p > s50[t] && p > s150[t] && sl150 > -WSG.flat && up50;              // breakout from a range
+    const brkDn = p < lo && p < s50[t] && p < s150[t] && sl150 < WSG.flat;                         // breakdown from a range
+    if (p > hi) cuts = 0;                                                                          // a new high resets the undercut count
+    if (st === 2) { if (four) go(4, 2); else if (p < s50[t]) { cuts++; go(3, 2, t); } else if (!two && hadUp && flat150) go(3, 2, -1); }
+    // 3A → 2 on a quick reclaim of the 50-day — only the first undercut since the last high; repeated undercuts = a top
+    else if (st === 3) { if (four || brkDn) go(4, 3); else if ((cuts <= 1 && a3 >= 0 && t - start < WSG.a3 && p > s50[t] && up50) || (brkUp && p > s200[t])) go(2, 3); }
+    else if (st === 4) { if (two || brkUp) go(2, 4); else if (hadDn && (flat150 || (p > s50[t] && !(s150[t] > s50[t] * (1 + WSG.db / 100))))) go(1, 4); }
+    else if (st === 1) { if (brkUp || two) go(2, 1); else if (brkDn) go(4, 1); }
+    else if (st == null) { if (two) { st = 2; from = null; start = -1e9; } else if (four) { st = 4; from = null; start = -1e9; } }
+    if (st !== prev) { hadUp = false; hadDn = false; }
+    if (sl150 >= WSG.flat) hadUp = true; if (sl150 <= -WSG.flat) hadDn = true;
+    // labels
+    if (st === 2) lab = (from === 1 || from === 4) && t - start < WSG.fresh ? "2A" : "2";
+    else if (st === 3) lab = a3 >= 0 && t - a3 < WSG.a3 && p < s50[t] && p > s200[t] ? "3A" : "3";
+    else if (st === 1) lab = t - start < WSG.fresh ? "1A" : "1";
+    else if (st === 4) {
+      let lo2 = Infinity, loB = Infinity; for (let u = t - WSG.base; u <= t; u++) lo2 = Math.min(lo2, l[u]); for (let u = Math.max(0, t - WSG.rng); u < t - WSG.base; u++) loB = Math.min(loB, l[u]);
+      lab = p > s50[t] && !up50 && s150[t] > s50[t] * (1 + WSG.db / 100) && lo2 >= loB * 0.995 ? "4B-" : "4";
+    } else lab = "N/A";
+    since = st == null ? 0 : start < 0 ? null : t - start;
+  }
+  return {lab, since, s50: s50[n - 1], s150: s150[n - 1], s200: s200[n - 1]};
+}
+const WSC = {key: "", map: new Map()};
+function stageOf(r){
+  if (!S.has.hist) return null;
+  const ts = todaySource(), key = HIST.nD + "|" + HIST.dates[HIST.nD - 1] + "|" + (ts ? ts.date + ts.src : "");
+  if (WSC.key !== key) { WSC.key = key; WSC.map = new Map(); }
+  if (WSC.map.has(r.sym)) return WSC.map.get(r.sym);
+  const i = HIST.idx.get(r.sym), nD = HIST.nD; let out = {lab: "N/A", since: 0};
+  if (i != null) {
+    const x = ts ? ts.get(r.sym) : null, n = nD + (x ? 1 : 0), o = i * nD;
+    const c = new Float64Array(n), h = new Float64Array(n), l = new Float64Array(n);
+    for (let t = 0; t < nD; t++) { c[t] = HIST.C[o + t]; h[t] = HIST.Hh[o + t]; l[t] = HIST.L[o + t]; }
+    if (x) { c[nD] = x.c; h[nD] = x.h; l[nD] = x.l; }
+    let k = 0; while (k < n && !isFinite(c[k])) k++;                                      // start at the first stored bar
+    out = wsStage(c.subarray(k), h.subarray(k), l.subarray(k));
+  }
+  WSC.map.set(r.sym, out); return out;
+}
+const stagePill = r => { const s = stageOf(r); if (!s) return `<span class="dim small">${S.has.hist ? "—" : "load price history"}</span>`; const L = WSL[s.lab]; return `<span class="wsp" style="--c:${L.c}" title="Stage ${L.n} · ${esc(L.t)}: ${esc(L.d)}${s.since != null && s.lab !== "N/A" ? ` · ${s.since} sessions in this stage` : ""}">${L.n}</span>`; };
+const stageRank = r => { const s = stageOf(r); return s ? -WS_ORDER.indexOf(s.lab) : null; };
+// table columns (stocks: history group; ETFs: ETF group), filter, screens, ticker panel
+const _COLS1 = COLS;
+COLS = function(){ const C = _COLS1();
+  C.push({k: "wstage", l: "Stage", h: "Weinstein · Deepvue style", g: "hx", cls: "l", need: "hist", v: stageRank, f: stagePill},
+         {k: "wstageE", l: "Stage", h: "Weinstein · Deepvue style", g: "etf", cls: "l", need: "hist", v: stageRank, f: stagePill});
+  return C; };
+{ const c = {k: "wstage", cat: "Structure", l: "Weinstein stage is", type: "multi", p: ["2A", "2"], need: HH, opts: () => WS_ORDER.map(k => [k, `${k} · ${WSL[k].t}`]), t: (r, p) => { const s = stageOf(r); return s ? p.includes(s.lab) : null; }};
+  CRIT.push(c); CRIT_BY[c.k] = c; }
+SCREENS.push(
+  {k: "ws2a", t: "Stage 2A — fresh advance", d: "The first weeks of a new Stage 2: above rising 10- and 40-week averages after a base or a decline. Weinstein's favourite entry window. Deepvue-style label — a reference, not a signal.", need: ["hist"], f: r => { const s = stageOf(r); return !!s && s.lab === "2A"; }},
+  {k: "ws4b", t: "Stage 4B- — cycle low may be in", d: "Still in a decline, but no new low lately and it has popped through a falling 50-day with room up to the 150-day. Weinstein watches these for the next Stage 1 → 2. Early by design.", need: ["hist"], f: r => { const s = stageOf(r); return !!s && s.lab === "4B-"; }},
+  {k: "ws3a", t: "Stage 3A — leader breaking its 10-week", d: "A Stage 2 stock that has closed under its 50-day (10-week). Weinstein's early-top warning; a reclaim puts it back in Stage 2.", need: ["hist"], f: r => { const s = stageOf(r); return !!s && s.lab === "3A"; }}
+);
+Object.assign(SC_CAT, {ws2a: "Leadership", ws4b: "Setups", ws3a: "Weakness (shorts)"});
+const _flags2 = flagsHTML;
+flagsHTML = function(r){ const s = S.has.hist ? stageOf(r) : null; return _flags2(r) + (s && s.lab !== "N/A" ? ` <span class="wsp sm" style="--c:${WSL[s.lab].c}" title="Weinstein stage ${s.lab} · ${esc(WSL[s.lab].t)} (Deepvue-style reference)">S${s.lab}</span>` : ""); };
+
+/* ---------------- stage distribution (Market) + match against Deepvue (Data check) ---------------- */
+function stageDistHTML(rows){
+  const cnt = {}; WS_ORDER.forEach(k => cnt[k] = 0); rows.forEach(r => { const s = stageOf(r); if (s) cnt[s.lab]++; });
+  const tot = rows.length || 1;
+  return `<div class="wsbar">${WS_ORDER.filter(k => cnt[k]).map(k => `<span style="flex:${cnt[k]};background:${WSL[k].c}" title="Stage ${k} · ${WSL[k].t}: ${cnt[k]}">${cnt[k] / tot >= 0.04 ? k : ""}</span>`).join("")}</div>
+    <div class="wsleg">${WS_ORDER.map(k => `<span><i style="background:${WSL[k].c}"></i>${k} ${WSL[k].t} <b>${cnt[k]}</b></span>`).join("")}</div>`;
+}
+const STGREF = {txt: store.get("adrb.stageRef", "") || ""};
+function stageRefParse(txt){
+  const out = new Map(), norm = v => { v = String(v || "").trim().toUpperCase().replace(/^STAGE\s*/, "").replace(/\s+/g, ""); return v === "4B" ? "4B-" : WSL[v] ? v : v === "NA" ? "N/A" : null; };
+  const lines = String(txt).split(/\r?\n/).filter(x => x.trim());
+  if (!lines.length) return out;
+  const head = parseCSV(lines[0])[0] || [], hi = head.map(x => x.trim().toLowerCase());
+  const iS = hi.findIndex(x => /^(symbol|ticker)$/.test(x)), iG = hi.findIndex(x => /stage/.test(x));
+  if (iS >= 0 && iG >= 0) { for (const L of lines.slice(1)) { const row = parseCSV(L)[0] || []; const s = String(row[iS] || "").trim().toUpperCase().replace(/^.*:/, ""), g = norm(row[iG]); if (s && g) out.set(s, g); } return out; }
+  for (const L of lines) { const m = L.trim().split(/[\s,;\t]+/); if (m.length >= 2) { const s = m[0].toUpperCase().replace(/^.*:/, ""), g = norm(m.slice(1).join("")); if (s && g) out.set(s, g); } }
+  return out;
+}
+const mainOf = k => k === "N/A" ? "N/A" : k[0];
+function renderStageCheck(){
+  let box = $("wsBox");
+  if (!box) { const sc = $("scBox"); (sc || $("tab-data").querySelector(".lede")).insertAdjacentHTML("afterend", `<div class="card g1" id="wsBox"></div>`); box = $("wsBox"); }
+  const ref = stageRefParse(STGREF.txt), rows = [...ref.entries()].map(([s, g]) => { const r = S.rowBySym && S.rowBySym.get(s), m = r ? stageOf(r) : null; return {s, g, b: m ? m.lab : null}; });
+  const cmp = rows.filter(x => x.b && x.b !== "N/A" && x.g !== "N/A"), ex = cmp.filter(x => x.b === x.g).length, mn = cmp.filter(x => mainOf(x.b) === mainOf(x.g)).length;
+  const pc0 = (a, b) => b ? Math.round(a / b * 100) + "%" : "—";
+  const conf = {}; cmp.forEach(x => { const k = x.g + "→" + x.b; conf[k] = (conf[k] || 0) + 1; });
+  box.innerHTML = `<div class="hd"><h2>Weinstein stages vs Deepvue</h2><span class="sub">paste Deepvue's labels to measure how closely the board's stages match — the board's labels are a reference approximation</span></div>
+    <div class="bd"><div class="wsck"><div><textarea id="wsRef" rows="7" spellcheck="false" placeholder="One per line: NVDA 2&#10;AAPL 3A&#10;or paste a Deepvue CSV export with Symbol and Stage columns">${esc(STGREF.txt)}</textarea>
+      <div style="display:flex;gap:8px;margin-top:6px"><button class="btn sm" id="wsRun">Compare</button><button class="btn sm" id="wsClr">Clear</button></div></div>
+      <div>${!S.has.hist ? `<div class="empty">Needs the price history.</div>` : !ref.size ? `<div class="small">Paste 30–50 tickers with Deepvue's Stage column (1A, 1, 2A, 2, 3A, 3, 4, 4B-). The board shows the exact-label match rate and the main-stage match rate (1A counts as 1, 4B- as 4), then the misses so the rules can be tuned.</div>` : `
+        <div class="kpis" style="margin:0 0 8px"><div class="kpi card"><div class="k">Same label</div><div class="v">${pc0(ex, cmp.length)}</div><div class="n">${ex} of ${cmp.length} compared</div></div>
+          <div class="kpi card"><div class="k">Same main stage</div><div class="v">${pc0(mn, cmp.length)}</div><div class="n">1A = 1, 2A = 2, 3A = 3, 4B- = 4</div></div>
+          <div class="kpi card"><div class="k">Not compared</div><div class="v">${rows.length - cmp.length}</div><div class="n">not in your file, or N/A</div></div></div>
+        <div class="small" style="margin-bottom:4px">Misses — Deepvue → board: ${Object.entries(conf).filter(([k]) => k.split("→")[0] !== k.split("→")[1]).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<b>${esc(k)}</b> ×${n}`).join(" · ") || "none"}</div>
+        <div>${cmp.filter(x => x.b !== x.g).map(x => S.rowBySym.has(x.s) ? tkChip(S.rowBySym.get(x.s), `${x.g}→${x.b}`) : "").join("")}</div>`}</div></div>
+      <div class="small" style="margin-top:6px">How the board labels: Stage 2 = above rising 50- and 200-day (Deepvue's 10- and 40-week) averages; Stage 4 = below both, both falling, after 2+ closes under the 50-day; 3A = a Stage 2 name closing under its 50-day; 3 = the 150-day flattening after an advance; 1 = the 150-day flattening after a decline; 2A / 1A = the first ${WSG.fresh} sessions of a new Stage 2 / 1; 4B- = no new low for ${WSG.base} sessions and back above a falling 50-day with the 150-day ${WSG.db}%+ above it.</div></div>`;
+  $("wsRun").onclick = () => { STGREF.txt = $("wsRef").value; store.set("adrb.stageRef", STGREF.txt); renderStageCheck(); };
+  $("wsClr").onclick = () => { STGREF.txt = ""; store.set("adrb.stageRef", null); renderStageCheck(); };
+}
+const _renderTab5 = renderTab;
+renderTab = function(t){
+  if (t === "data" && S.snap) renderStageCheck();
+  _renderTab5(t);
+  if (t === "market" && S.snap) {
+    let b = $("wsDist"); if (!b) { $("mkTape").insertAdjacentHTML("afterend", `<div class="card g1" id="wsDist"></div>`); b = $("wsDist"); }
+    b.innerHTML = `<div class="hd"><h2>Weinstein stages across your list</h2><span class="sub">Deepvue-style labels from the stored bars · stocks only · a reference, not a signal</span></div><div class="bd">${S.has.hist ? stageDistHTML(S.stocks) : `<div class="empty" style="padding:4px 0">Needs the price history.</div>`}</div>`;
+  }
+};
+if (WS) {
+  const _tpB = tpBuild;
+  tpBuild = function(r){
+    _tpB(r);
+    const s = stageOf(r), ctx = document.querySelector("#drawer .tp-ctx"); if (!s || !ctx) return;
+    const L = WSL[s.lab];
+    ctx.insertAdjacentHTML("beforeend", `<span class="arr">·</span><span class="cx" title="${esc(L.d)}"><i>Weinstein stage</i><b><span class="wsp" style="--c:${L.c}">${L.n}</span> ${esc(L.t)}</b><small>${s.since != null && s.lab !== "N/A" ? `${s.since} sessions · ` : ""}Deepvue-style reference</small></span>`);
+  };
+}
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   LEVERAGED ETFs (18 Oct) — which leveraged / inverse funds track a stock or ETF, filtered by liquidity.
+   List: Massive /v3/reference/tickers type ETF (paged, cached a week in localStorage adrb.levEtf). Each fund's name is
+   parsed (levParse): leverage from "2X"/"3x"/"1X" or ProShares Ultra (2×) / UltraPro (3×) / UltraShort (2× short);
+   direction from Bull / Long vs Bear / Short / Inverse; underlying = a ticker named in the fund name (NVDA, BRKB → BRK.B),
+   a company name (Apple, Tesla, NVIDIA…), or an index/sector phrase mapped to its usual ETF (Semiconductor → SMH/SOXX,
+   S&P 500 → SPY, Russell 2000 → IWM…) — LEV_IDX. Liquidity = mean(close × volume) over the last 20 stored sessions;
+   shown only at or above the floor (localStorage adrb.levMin, default $50M) so spreads stay tight.
+   Shown in the ticker panel (both layouts), as a flag and a filter, on the ETFs tab, and ticker search resolves a
+   leveraged fund to its underlying. Display only.
+   ===================================================================== */
+const LEV = {list: null, busy: false, msg: "", min: +(store.get("adrb.levMin", 50) ?? 50)};
+(function(){ const a = store.get("adrb.levEtf", null); if (a && a.list) LEV.list = a; })();
+const LEV_NAMES = {APPLE: "AAPL", TESLA: "TSLA", NVIDIA: "NVDA", MICROSOFT: "MSFT", AMAZON: "AMZN", NETFLIX: "NFLX", PALANTIR: "PLTR", COINBASE: "COIN", MICROSTRATEGY: "MSTR", ALPHABET: "GOOGL", GOOGLE: "GOOGL", BROADCOM: "AVGO", ROBINHOOD: "HOOD"};
+// index / sector phrases → the ETFs that carry them (first one in your files wins). Most specific first.
+const LEV_IDX = [
+  [/junior gold/i, ["GDXJ"]], [/gold miners/i, ["GDX"]], [/\bgold\b(?! miners)/i, ["GLD", "IAU"]], [/\bsilver\b/i, ["SLV"]],
+  [/semiconductor/i, ["SMH", "SOXX"]], [/nasdaq biotech/i, ["IBB"]], [/biotech/i, ["XBI", "IBB"]], [/regional banks/i, ["KRE"]],
+  [/oil & gas exp|oil and gas exp/i, ["XOP"]], [/\benergy\b/i, ["XLE"]], [/financial/i, ["XLF"]], [/technology/i, ["XLK"]],
+  [/s&p 500 high beta/i, ["SPHB"]], [/s&p 500 equal|s&p 500 equal weight/i, ["RSP"]], [/s&p ?500|\bs&p500\b/i, ["SPY", "VOO", "IVV"]],
+  [/qqq equal/i, ["QQQE"]], [/\bqqq\b|nasdaq-?100/i, ["QQQ"]], [/dow ?30|\bdow\b(?! jones internet)/i, ["DIA"]],
+  [/russell ?2000|small cap|small-cap/i, ["IWM"]], [/mid ?cap ?400|mid cap|mid-cap/i, ["MDY", "IJH"]],
+  [/china internet|chinese internet/i, ["KWEB"]], [/dow jones internet|\binternet\b/i, ["FDN"]], [/ftse china|china 50|\bchina\b/i, ["FXI", "MCHI"]],
+  [/homebuilders/i, ["XHB", "ITB"]], [/\bretail\b/i, ["XRT"]], [/real estate/i, ["XLRE", "IYR"]], [/utilities/i, ["XLU"]],
+  [/industrials/i, ["XLI"]], [/aerospace/i, ["ITA", "XAR"]], [/transport/i, ["IYT", "XTN"]], [/emerging markets/i, ["EEM", "VWO"]],
+  [/health ?care/i, ["XLV"]], [/pharmaceutical/i, ["XPH"]], [/consumer discretionary/i, ["XLY"]], [/consumer staples/i, ["XLP"]],
+  [/materials/i, ["XLB"]], [/communication services/i, ["XLC"]], [/cloud computing/i, ["SKYY"]], [/20\+ year treasury/i, ["TLT"]],
+  [/7-10 year treasury/i, ["IEF"]], [/brazil/i, ["EWZ"]], [/\bindia\b/i, ["INDA"]], [/south korea/i, ["EWY"]], [/mexico/i, ["EWW"]],
+  [/japan/i, ["EWJ"]], [/europe/i, ["VGK", "FEZ"]], [/uranium/i, ["URA", "URNM"]], [/\bbitcoin\b/i, ["IBIT"]], [/\bether\b/i, ["ETHA"]],
+  [/copper/i, ["CPER", "COPX"]], [/magnificent 7|mag ?7/i, ["MAGS"]], [/fang\+?/i, ["FNGS"]]
+];
+const LEV_SKIP = /buffer|income|option|dividend|municipal|bond|risk parity|ultra-small|ultra short (?!qqq|s&p|dow|russell)|defined|treasury bill|t-bill/i;
+const LEV_STOP = new Set(["ETF", "ETFS", "ETN", "ETNS", "US", "USA", "MSCI", "CSI", "FTSE", "NYSE", "S&P", "AI", "DAILY", "LONG", "SHORT", "BULL", "BEAR", "TRUST", "SHARES", "ULTRA", "TARGET", "INDEX", "PLUS", "TOP", "MEGA", "DRAM", "K-1"]);
+function levParse(t, name){
+  const nm = String(name || ""), u = nm.toUpperCase();
+  let lev = null, short = /\b(bear|short|inverse)\b|-\d(\.\d+)?x/i.test(nm);
+  const mx = nm.match(/(?:^|[\s(-])-?(\d(?:\.\d+)?)\s?x\b/i);
+  if (mx) lev = +mx[1];
+  else if (/proshares\s+ultrapro\b/i.test(nm)) lev = 3;
+  else if (/proshares\s+ultrashort\b/i.test(nm)) { lev = 2; short = true; }
+  else if (/proshares\s+ultra\b/i.test(nm)) lev = 2;
+  if (lev == null || LEV_SKIP.test(nm) && !mx) return null;
+  if (/proshares\s+ultra\b/i.test(nm) && !/ultrashort/i.test(nm)) short = /\bshort\b/i.test(nm.replace(/ultra\s+short/i, ""));
+  // underlying: tickers named in the fund name, company names, then index phrases
+  const cands = [];
+  // tickers are written in capitals inside the fund name; ordinary words are not (an all-caps name gives only short tokens)
+  for (const tok of nm.split(/[\s,()/]+/)) { const k = tok.replace(/[^A-Za-z0-9.&+-]/g, ""); if (/^[A-Z]{1,5}(\.[A-Z])?$/.test(k) && !LEV_STOP.has(k)) cands.push(k === "BRKB" ? "BRK.B" : k); }
+  for (const w in LEV_NAMES) if (u.includes(w)) cands.push(LEV_NAMES[w]);
+  let idx = null; for (const [re, list] of LEV_IDX) if (re.test(nm)) { idx = list; break; }
+  return {t, lev, dir: short ? "short" : "long", cands: [...new Set(cands)], idx};
+}
+async function levLoad(force){
+  if (LEV.busy || !newsKey()) return;
+  if (!force && LEV.list && daysSince(LEV.list.at) <= 7) return;
+  LEV.busy = true; LEV.msg = "Loading the ETF list from Massive…"; levRepaint();
+  try {
+    const L = await mgetAll("/v3/reference/tickers", {market: "stocks", type: "ETF", active: "true", limit: "1000"}, 20);
+    const list = L.map(x => levParse(x.ticker, x.name)).filter(Boolean).map(o => [o.t, o.lev, o.dir === "short" ? 1 : 0, o.cands.join(" "), o.idx ? o.idx.join(" ") : ""]);
+    LEV.list = {at: new Date().toISOString(), n: L.length, list}; store.set("adrb.levEtf", LEV.list); LEV.msg = "";
+  } catch (e) { LEV.msg = "Massive: " + (e.msg || "error"); }
+  LEV.busy = false; LEV.idx = null; levRepaint();
+}
+// $ volume from the stored bars: mean(close × volume), last 20 sessions
+const LEVDV = {key: "", map: new Map()};
+function dvOf(sym){
+  if (!HIST.nD) return null;
+  const k = HIST.nD + "|" + HIST.dates[HIST.nD - 1]; if (LEVDV.key !== k) { LEVDV.key = k; LEVDV.map = new Map(); }
+  if (LEVDV.map.has(sym)) return LEVDV.map.get(sym);
+  const i = HIST.idx.get(sym), nD = HIST.nD; let v = null;
+  if (i != null) { let s = 0, n = 0; for (let t = nD - 20; t < nD; t++) { const c = HIST.C[i * nD + t], q = HIST.V[i * nD + t]; if (isFinite(c) && isFinite(q)) { s += c * q; n++; } } v = n >= 10 ? s / n : null; }
+  LEVDV.map.set(sym, v); return v;
+}
+// underlying symbol → its funds. Resolved against the symbols the board knows (your files + the stored history)
+function levIndex(){
+  if (!LEV.list) return new Map();
+  const key = LEV.list.at + "|" + (S.rows ? S.rows.length : 0) + "|" + HIST.nD;
+  if (LEV.idx && LEV.idxKey === key) return LEV.idx;
+  const known = s => (S.rowBySym && S.rowBySym.has(s)) || HIST.idx.has(s), m = new Map(), self = new Set(LEV.list.list.map(x => x[0]));
+  for (const [t, lev, sh, cs, ix] of LEV.list.list) {
+    let und = cs ? cs.split(" ").find(s => s !== t && !self.has(s) && known(s)) : null;
+    if (!und && ix) und = ix.split(" ").find(s => S.rowBySym && S.rowBySym.has(s)) || ix.split(" ")[0];
+    if (!und) continue;
+    if (!m.has(und)) m.set(und, []);
+    m.get(und).push({t, lev, dir: sh ? "short" : "long", und});
+  }
+  LEV.idx = m; LEV.idxKey = key; LEV.byFund = new Map([...m.values()].flat().map(f => [f.t, f])); return m;
+}
+function levFor(sym){
+  const all = (levIndex().get(sym) || []).map(f => ({...f, dv: dvOf(f.t)}));
+  const ok = f => f.dv != null && f.dv >= LEV.min * 1e6;
+  const liquid = all.filter(ok).sort((a, b) => (a.dir === b.dir ? 0 : a.dir === "long" ? -1 : 1) || b.dv - a.dv);
+  return {liquid, thin: all.filter(f => !ok(f)), all};
+}
+const fmtDv = v => v == null ? "no volume data" : v >= 1e9 ? "$" + (v / 1e9).toFixed(1) + "B/day" : "$" + Math.round(v / 1e6) + "M/day";
+function levChips(sym){
+  const L = levFor(sym);
+  if (!L.all.length) return "";
+  const chip = f => { const r = S.rowBySym && S.rowBySym.get(f.t); return `<span class="lvc ${f.dir}" ${r ? `data-sym="${esc(f.t)}"` : ""} title="${esc(f.t)}: ${f.lev}× ${f.dir} ${esc(f.und)} · ${fmtDv(f.dv)}${r ? "" : " · not in your files — opens TradingView"}">${r ? "" : `<a href="https://www.tradingview.com/chart/?symbol=${encodeURIComponent(f.t)}" target="_blank" rel="noopener">`}<b>${esc(f.t)}</b> ${f.lev}× ${f.dir === "long" ? "long" : "short"} <i>${fmtDv(f.dv)}</i>${r ? "" : "</a>"}</span>`; };
+  return `<div class="lvrow"><span class="lbl">Leveraged</span>${L.liquid.map(chip).join("") || `<span class="small dim">none trade $${LEV.min}M+/day</span>`}${L.thin.length ? `<span class="small dim" title="${esc(L.thin.map(f => `${f.t} ${f.lev}× ${f.dir} · ${fmtDv(f.dv)}`).join("\n"))}">+${L.thin.length} below $${LEV.min}M/day</span>` : ""}</div>`;
+}
+function levRepaint(){ if (S.snap && S.ui.tab === "etfs") renderLevCard(); }
+function renderLevCard(){
+  let box = $("levBox"); if (!box) { $("etfLevBox").insertAdjacentHTML("afterend", `<div class="card g1" id="levBox"></div>`); box = $("levBox"); }
+  const m = levIndex(), mine = [...m.keys()].filter(s => S.rowBySym && S.rowBySym.has(s)).map(s => ({r: S.rowBySym.get(s), L: levFor(s)})).filter(o => o.L.liquid.length)
+    .sort((a, b) => (b.r.etf - a.r.etf) || ((b.r.rs ?? 0) - (a.r.rs ?? 0)));
+  box.innerHTML = `<div class="hd"><h2>Leveraged ETFs for your names</h2><span class="sub">funds that track a stock or ETF in your files, with at least the minimum average daily $ volume (20 sessions) so spreads stay tight</span><span class="spacer"></span>
+      <span class="small">Min $</span><input type="number" id="levMin" value="${LEV.min}" min="0" step="10" style="width:64px"><span class="small">M/day</span>${newsKey() ? `<button class="btn sm" id="levRe" ${LEV.busy ? "disabled" : ""}>Refresh list</button>` : ""}</div>
+    <div class="bd">${!newsKey() ? `<div class="empty" style="padding:4px 0">Needs your Massive key (Settings) to load the ETF list.</div>` : !LEV.list ? `<div class="empty" style="padding:4px 0">${esc(LEV.msg || "Loading…")}</div>` : !HIST.nD ? `<div class="empty" style="padding:4px 0">Needs the price history for $ volume.</div>` : `
+      <div class="small" style="margin-bottom:6px">${LEV.list.list.length} leveraged / inverse funds among ${LEV.list.n.toLocaleString()} ETFs · ${mine.length} of your names have one at $${LEV.min}M+/day${LEV.msg ? ` · ${esc(LEV.msg)}` : ""}</div>
+      <div class="tscroll" style="max-height:440px"><table class="mini"><thead><tr><th class="l">Name</th><th>RS</th><th class="l">Group</th><th class="l">Leveraged funds</th></tr></thead><tbody>
+      ${mine.map(({r, L}) => `<tr><td class="l sym" data-sym="${esc(r.sym)}">${esc(r.sym)}</td><td>${rsBadge(r.rs)}</td><td class="l small">${esc(r.group)}</td><td class="l">${levChips(r.sym).replace(/^<div class="lvrow"><span class="lbl">Leveraged<\/span>/, "").replace(/<\/div>$/, "")}</td></tr>`).join("") || `<tr><td colspan="4" class="l dim">None at this floor.</td></tr>`}</tbody></table></div>`}</div>`;
+  $("levMin") && ($("levMin").onchange = e => { LEV.min = Math.max(0, +e.target.value || 0); store.set("adrb.levMin", LEV.min); renderLevCard(); });
+  $("levRe") && ($("levRe").onclick = () => levLoad(true));
+}
+const _renderTab6 = renderTab;
+renderTab = function(t){ _renderTab6(t); if (t === "etfs" && S.snap) { renderLevCard(); levLoad(false); } };
+// ticker panel / drawer: the funds right under the header
+const _openDrawer2 = openDrawer;
+openDrawer = function(sym){
+  _openDrawer2(sym);
+  const dr = $("drawer"); if (!dr.classList.contains("open") || !LEV.list) return;
+  const html = levChips(sym); if (!html) return;
+  const at = dr.querySelector(".tp-lv") || dr.querySelector(".tp-ctx") || dr.querySelector("h3")?.nextElementSibling;
+  if (at) at.insertAdjacentHTML("afterend", html);
+};
+if (newsKey() && !LEV.list) setTimeout(() => levLoad(false), 4000);
+document.addEventListener("click", e => { if (e.target.closest("a")) return; const el = e.target.closest(".lvc[data-sym], #levBox td[data-sym]"); if (el) openDrawer(el.dataset.sym); });
+// flag + filter
+const _flags3 = flagsHTML;
+flagsHTML = function(r){ if (!LEV.list || !HIST.nD) return _flags3(r); const L = levFor(r.sym), lg = L.liquid.filter(f => f.dir === "long"); return _flags3(r) + (lg.length ? `<span class="flag lvf" title="Liquid leveraged long: ${esc(lg.map(f => `${f.t} ${f.lev}×`).join(", "))}">${esc(lg[0].t)} ${lg[0].lev}×</span>` : ""); };
+{ const c = {k: "levok", cat: "Lists", l: "Has a leveraged long ETF trading $" + LEV.min + "M+/day", need: () => !!LEV.list && HIST.nD > 0, t: r => !LEV.list || !HIST.nD ? null : levFor(r.sym).liquid.some(f => f.dir === "long")}; CRIT.push(c); CRIT_BY[c.k] = c; }
+// ticker search: a leveraged fund opens its underlying
+if (WS) {
+  const q = $("tkQ");
+  q && q.addEventListener("keydown", e => {
+    if (e.key !== "Enter" || !LEV.list) return;
+    const v = q.value.trim().toUpperCase(); if (!v || (S.rowBySym && S.rowBySym.has(v))) return;
+    levIndex(); const f = LEV.byFund && LEV.byFund.get(v);
+    if (f && S.rowBySym && S.rowBySym.has(f.und)) { e.stopImmediatePropagation(); e.preventDefault(); q.value = ""; q.blur(); WSI.list = []; openDrawer(f.und); toast(`${v} is a ${f.lev}× ${f.dir} fund on ${f.und}`); }
+  }, true);
+}
 </script>
 </body>
 </html>
