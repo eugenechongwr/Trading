@@ -143,6 +143,16 @@ td.dim,.dim{color:var(--ink-3)}
 .lists{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:flex-end}
 .lists label{display:flex;flex-direction:column;gap:3px;flex:1 1 260px;min-width:0}
 .lists input{width:100%;font-family:var(--mono);text-transform:uppercase}
+.mlc{display:inline-block;min-width:16px;padding:0 5px;border-radius:8px;background:var(--chip);font-size:10.5px;font-weight:700;text-align:center}
+.mlc:empty{display:none}.mlc.over{background:var(--warn-soft);color:var(--med)}
+.flag.mapb{background:var(--up-soft);color:var(--up)} .flag.stalk{background:var(--warn-soft);color:var(--med)}
+.ml-hd{border-top:1px solid var(--line);margin-top:6px}.ml-hd:first-child{border-top:0;margin-top:0}
+.ml-t::after{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;margin-left:7px;vertical-align:1px}
+.ml-t.ml-A::after{background:var(--good)} .ml-t.ml-B::after{background:var(--up)} .ml-t.ml-S::after{background:var(--med)}
+.ml-pill{font-size:11px;font-weight:650;padding:1px 7px;border-radius:9px;white-space:nowrap}
+.ml-pill.ml-A{background:var(--good-soft);color:var(--good)} .ml-pill.ml-B{background:var(--up-soft);color:var(--up)} .ml-pill.ml-S{background:var(--warn-soft);color:var(--med)}
+.ml-k{border-top:3px solid var(--line)} .ml-k.ml-A{border-top-color:var(--good)} .ml-k.ml-B{border-top-color:var(--up)} .ml-k.ml-S{border-top-color:var(--med)}
+.ml-k .v small{font-size:11px;font-weight:500;color:var(--ink-3)}
 .news{font-size:11.5px;color:var(--ink-2);margin-top:4px;white-space:normal;line-height:1.4}
 .news a{color:var(--ink);text-decoration:none}
 .news a:hover{text-decoration:underline}
@@ -440,6 +450,44 @@ tr.thin td,.tk.thin{opacity:.5}
 .wsp{display:inline-block;min-width:26px;text-align:center;padding:1px 6px;border-radius:6px;font-weight:700;font-size:11.5px;background:var(--c);color:#111}
 .wsp.sm{font-size:10.5px;padding:0 5px;min-width:0;margin-left:3px}
 .wsbar{display:flex;height:22px;border-radius:6px;overflow:hidden;margin:2px 0 8px}
+.gstage button{min-width:26px;font-weight:650}
+.t2lo{color:var(--good)!important;font-weight:700}
+/* Market breadth + Stage analysis (18 Oct) */
+.mb-up{color:var(--up)} .mb-dn{color:var(--down)}
+.sbnote{margin:0 0 10px;padding:8px 10px;border-radius:8px;background:var(--warn-soft);font-size:12px}
+.mbgrid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px 26px;margin:2px 0 12px}
+@media (max-width:1250px){.mbgrid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.mbg-h{display:flex;justify-content:space-between;align-items:baseline;font-weight:600;font-size:12.5px}
+.mbg-h b{font-size:15px;font-variant-numeric:tabular-nums}
+.mbg-t{height:8px;border-radius:5px;background:var(--surface-3);overflow:hidden;margin:6px 0 4px}
+.mbg-t i{display:block;height:100%;border-radius:5px}
+.mbg-n{display:flex;justify-content:space-between;font-size:11.5px;color:var(--up);font-variant-numeric:tabular-nums}
+.mbg-n span:last-child{color:var(--down)}
+.mbs{border-top:1px solid var(--line);margin-top:4px;padding-top:10px}
+.mbs-h{display:flex;gap:10px;align-items:baseline;margin-bottom:6px}
+.mbs-bar{display:flex;height:12px;border-radius:7px;overflow:hidden;background:var(--surface-3)}
+.mbs-bar span.na{background:var(--surface-3)}
+.mbs-k{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:8px 0 6px;text-align:center}
+.mbs-k span{font-size:12px;font-weight:650}.mbs-k b{display:block;font-weight:500;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.mbs-k small{display:block;color:var(--ink-3);font-size:11px}
+.mbs-k i,.sa-memg .lbl i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
+.mbs-svg{width:100%;height:auto;display:block}
+.mbs-svg text{font-size:10px;fill:var(--ink-3)} .mbs-svg text.lv{font-size:11px;font-weight:650}
+.mbs-svg .gl{stroke:var(--line);stroke-width:1}
+.sat td,.sat th{white-space:nowrap}
+.sa-bar{display:flex;height:10px;border-radius:6px;overflow:hidden;min-width:160px;background:var(--surface-3)}
+.sa-row{cursor:pointer}.sa-row:hover td{background:var(--surface-2)}.sa-row.open td{background:var(--surface-2)}
+.sa-hot{color:var(--c);font-weight:700}
+.sa-sort{cursor:pointer;user-select:none}.sa-sort.on{color:var(--ink)}.sa-sort.on::after{content:" ▾"}
+.sa-h{font-size:11px;font-weight:650;padding:1px 7px;border-radius:9px}
+.sa-strong{color:var(--good);background:var(--good-soft)} .sa-healthy{color:var(--up);background:var(--up-soft)}
+.sa-neutral{color:var(--med);background:var(--warn-soft)} .sa-weak{color:var(--down);background:var(--down-soft)}
+.sa-all td{border-top:1px solid var(--line-strong);font-weight:600}
+.sa-mem td{background:var(--surface-2)}
+.sa-memg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;white-space:normal;text-align:left;padding:4px 2px}
+.sa-memg .lbl{display:block;margin-bottom:4px}
+td.t2lo{background:color-mix(in oklab, var(--good) 22%, transparent)}
+.gstage button.on{background:var(--c);color:#111}
 .wsbar span{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#111}
 .wsleg{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:11.5px;color:var(--ink-2)}
 .wsleg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
@@ -458,6 +506,23 @@ tr.thin td,.tk.thin{opacity:.5}
 @media (max-width:1000px){.s6cols{grid-template-columns:1fr}}
 .s6cols .lbl{display:block;margin-bottom:5px}
 .s6w{margin-bottom:3px}
+/* Board plan vs Pivot script (18 Oct) */
+.s6intro{font-size:12.5px;color:var(--ink-2);margin:0 0 10px;max-width:1100px}
+.s6c{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--surface-2)}
+.s6c-h{display:flex;align-items:center;gap:8px}.s6n{font-weight:700;font-size:12px;padding:0 7px;border-radius:9px;background:var(--chip)}
+.s6c-b{margin-top:6px}
+.s6t .s6g{font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-2);border-bottom:2px solid var(--accent)}
+.s6t td{vertical-align:middle}
+.rcks{display:inline-flex;gap:3px;flex-wrap:wrap;vertical-align:middle}
+.rck{font-size:10.5px;font-weight:650;padding:1px 5px;border-radius:5px;border:1px solid transparent;line-height:15px}
+.rck.ok{background:var(--good-soft);color:var(--good)} .rck.no{background:var(--down-soft);color:var(--down)} .rck.na{background:var(--chip);color:var(--ink-3)}
+.s6v{font-size:11px;font-weight:650;padding:1px 7px;border-radius:9px;white-space:nowrap}
+.v-both{background:var(--good-soft);color:var(--good)} .v-plan{background:var(--up-soft);color:var(--up)} .v-pivot{background:var(--warn-soft);color:var(--med)}
+.rules2 .r2{display:grid;grid-template-columns:1fr 1fr;gap:6px 28px}
+.rules2 .r2 > div:not(.r2diff){min-width:0}
+.rules2 .r2diff{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px 18px;border-top:1px solid var(--line);padding-top:8px;font-size:12px}
+.rules2 .r2diff i{font-style:normal;font-weight:650;margin-right:4px}
+@media (max-width:1000px){.rules2 .r2{grid-template-columns:1fr}}
 /* ---------------- self-check + compact ticker-panel notes ---------------- */
 .scv{display:flex;flex-direction:column;gap:3px;border-radius:9px;padding:10px 12px;margin-bottom:10px;border-left:4px solid}
 .scv b{font-size:16px}.scv span{font-size:12px;color:var(--ink-2)}
@@ -1284,7 +1349,7 @@ const LISTS = {focus: new Set(), held: new Set(), focusTxt: "", heldTxt: ""};
 function setLists(focusTxt, heldTxt){
   LISTS.focusTxt = focusTxt || ""; LISTS.heldTxt = heldTxt || "";
   LISTS.focus = new Set(parseTickers(LISTS.focusTxt)); LISTS.held = new Set(parseTickers(LISTS.heldTxt));
-  store.set("adrb.lists", {focus: LISTS.focusTxt, held: LISTS.heldTxt});
+  store.set("adrb.lists", {...(store.get("adrb.lists", {}) || {}), focus: LISTS.focusTxt, held: LISTS.heldTxt});   // keeps the B / stalk lists
 }
 (function(){ const o = store.get("adrb.lists", {}) || {}; setLists(o.focus, o.held); })();
 const ESTR = {
@@ -2736,19 +2801,21 @@ async function mget(path, params = {}){
 // one session of whole-market daily bars, packed small (split/dividend-adjusted)
 async function fetchDay(d){
   const j = await mget(`/v2/aggs/grouped/locale/us/market/stocks/${d}`, {adjusted: "true"});
-  const R = (j.results || []).filter(x => x && SYM_OK.test(x.T) && x.c >= 1 && x.h > 0 && x.l > 0);
-  const n = R.length, c = new Float32Array(n), h = new Float32Array(n), l = new Float32Array(n), v = new Float32Array(n);
-  R.forEach((x, i) => { c[i] = x.c; h[i] = x.h; l[i] = x.l; v[i] = x.v || 0; });
-  return {d, n, syms: R.map(x => x.T).join(" "), c, h, l, v};
+  // every price (stocks under $1 too, since 18 Oct): Stockbee's monitor counts them; p1 marks days stored this way
+  const R = (j.results || []).filter(x => x && SYM_OK.test(x.T) && x.c > 0 && x.h > 0 && x.l > 0);
+  const n = R.length, c = new Float32Array(n), h = new Float32Array(n), l = new Float32Array(n), v = new Float32Array(n), o = new Float32Array(n);
+  R.forEach((x, i) => { c[i] = x.c; h[i] = x.h; l[i] = x.l; v[i] = x.v || 0; o[i] = x.o > 0 ? x.o : NaN; });
+  return {d, n, syms: R.map(x => x.T).join(" "), c, h, l, v, o, p1: 1};
 }
 function histBuild(recs){
   recs = recs.filter(r => r.n > 0).sort((a, b) => a.d < b.d ? -1 : 1).slice(-HIST_DAYS);
   const idx = new Map(), syms = [], lists = recs.map(r => r.syms.split(" "));
   lists.forEach(L => L.forEach(s => { if (!idx.has(s)) { idx.set(s, syms.length); syms.push(s); } }));
   const nD = recs.length, nS = syms.length, N = nS * nD;
-  const C = new Float32Array(N).fill(NaN), Hh = new Float32Array(N).fill(NaN), L = new Float32Array(N).fill(NaN), V = new Float32Array(N).fill(NaN);
-  recs.forEach((r, t) => lists[t].forEach((s, i) => { const o = idx.get(s) * nD + t; C[o] = r.c[i]; Hh[o] = r.h[i]; L[o] = r.l[i]; V[o] = r.v[i]; }));
-  Object.assign(HIST, {dates: recs.map(r => r.d), syms, idx, nD, nS, C, Hh, L, V, hl: null, status: nD ? "ready" : "none"});
+  const C = new Float32Array(N).fill(NaN), Hh = new Float32Array(N).fill(NaN), L = new Float32Array(N).fill(NaN), V = new Float32Array(N).fill(NaN), O = new Float32Array(N).fill(NaN);
+  recs.forEach((r, t) => lists[t].forEach((s, i) => { const o = idx.get(s) * nD + t; C[o] = r.c[i]; Hh[o] = r.h[i]; L[o] = r.l[i]; V[o] = r.v[i]; if (r.o) O[o] = r.o[i]; }));
+  // O = opening prices; days stored before opens were kept stay NaN (the Market breadth card refetches recent ones)
+  Object.assign(HIST, {dates: recs.map(r => r.d), syms, idx, nD, nS, C, Hh, L, V, O, oDays: new Set(recs.filter(r => r.o).map(r => r.d)), p1Days: new Set(recs.filter(r => r.p1).map(r => r.d)), hl: null, status: nD ? "ready" : "none"});
   HIST.wk = HIST.dates.map(weekKey);
 }
 const histEmpty = () => new Set(store.get("adrb.histEmpty", []));
@@ -2787,7 +2854,7 @@ async function histLive(quiet){
     if (!quiet) toast("Pulling the whole-market snapshot from Massive…");
     const j = await mget("/v2/snapshot/locale/us/markets/stocks/tickers");
     const map = new Map(); let at = 0;
-    for (const x of j.tickers || []) { const d = x.day || {}; if (!SYM_OK.test(x.ticker || "") || !(d.c > 0) || !(d.v > 0) || !(d.h > 0) || !(d.l > 0)) continue; map.set(x.ticker, {c: d.c, h: d.h, l: d.l, v: d.v}); if (x.updated) at = Math.max(at, x.updated / 1e6); }
+    for (const x of j.tickers || []) { const d = x.day || {}; if (!SYM_OK.test(x.ticker || "") || !(d.c > 0) || !(d.v > 0) || !(d.h > 0) || !(d.l > 0)) continue; map.set(x.ticker, {c: d.c, h: d.h, l: d.l, v: d.v, o: d.o > 0 ? d.o : NaN}); if (x.updated) at = Math.max(at, x.updated / 1e6); }
     if (!map.size) { if (!quiet) toast("Massive snapshot has no session data yet (before the open?)"); return; }
     const p = etParts(at || Date.now());
     HIST.live = {date: p.d, at: at || Date.now(), hm: p.hm, map}; HIST.hl = null;
@@ -3074,7 +3141,7 @@ function openDrawer(sym){
     <div class="small" style="margin:2px 0 4px">${newsLinks(r.sym)}</div>
     ${newsSlot(r.sym, "list")}
     <div id="dSocial" class="news"></div>
-    <h4 style="margin:12px 0 2px;font-size:12px">Entry checks — Chart &amp; Entry Spec v6.0</h4>
+    <h4 style="margin:12px 0 2px;font-size:12px">Board plan · Chart &amp; Entry Spec v6.0 — entry checks</h4>
     ${chk(g && g.state !== "—" ? g.state !== "Lagging" : null, "1 · Leading name / group", g && g.state !== "—" ? `Group ${g.state.toLowerCase()} (RS ${g.grs}); stock RS ${r.rs}. Stage 2 and theme grade come from MAP/BRIEF.` : "From MAP / BRIEF")}
     ${CFG.zMode === "band" ? chk(r.vetoStrict == null ? null : !r.vetoStrict, "2 · Price above daily 9 and 21 EMA (hard veto)", `9 EMA ${f2(r.e9)} · 21 EMA ${f2(r.e21)}`)
       : chk(null, "2 · 9 / 21 order — not a gate in this buy-zone mode", `9 EMA ${f2(r.e9)} · 21 EMA ${f2(r.e21)} · mode ${zm().n} only rules a name out under the 50 SMA or past the extension cap`)}
@@ -4533,7 +4600,7 @@ function snapshotObj(){
   } : null;
   return {kind: "deep-space-snapshot", v: 1, savedAt: new Date().toISOString(), board: "Deep Space Board v4",
     note: "Raw CSVs, settings, lists, MAP call, filters and a summary. No API keys and no price history.",
-    files: curFiles(), settings: diff, lists: {focus: LISTS.focusTxt, held: LISTS.heldTxt}, mapCall: store.get("adrb.mapRegime", null),
+    files: curFiles(), settings: diff, lists: {focus: LISTS.focusTxt, held: LISTS.heldTxt, b: typeof MAPL !== "undefined" ? MAPL.bTxt : "", stalk: typeof MAPL !== "undefined" ? MAPL.stalkTxt : ""}, mapCall: store.get("adrb.mapRegime", null),
     filters: GF, ui: {session: $("modeSel").value, basis: S.basis, ipTime: S.ui.ipTime || null}, summary};
 }
 const snapName = () => { const d = new Date(), p = n => String(n).padStart(2, "0"); return `deep-space-snapshot-${fmtDate(d)}-${p(d.getHours())}${p(d.getMinutes())}.json`; };
@@ -4594,7 +4661,8 @@ async function openSnapshot(file){
     const d = o.settings || {};
     history.replaceState(null, "", Object.keys(d).length ? "#s=" + encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(d))))) : location.pathname + location.search);
     CFG = structuredClone(DEFAULTS); loadCfg(); refreshStates(); $("zModeSel").value = CFG.zMode;
-    if (o.lists) { setLists(o.lists.focus, o.lists.held); $("focusIn").value = LISTS.focusTxt; $("heldIn").value = LISTS.heldTxt; }
+    if (o.lists) { setLists(o.lists.focus, o.lists.held); $("focusIn").value = LISTS.focusTxt; $("heldIn").value = LISTS.heldTxt;
+      if (typeof setLists2 === "function" && ("b" in o.lists || "stalk" in o.lists)) { setLists2(o.lists.b, o.lists.stalk); $("bIn").value = MAPL.bTxt; $("stalkIn").value = MAPL.stalkTxt; mlCounts(); } }
     if (o.mapCall) store.set("adrb.mapRegime", o.mapCall);
     if (o.filters) { const g = o.filters; GF = {...structuredClone(GF_DEF), ...g, gates: {...GF_DEF.gates, ...(g.gates || {})}, crit: structuredClone(g.crit || {})}; gfSave(); }
     if (o.ui && ["auto", "pm", "rth"].includes(o.ui.session)) $("modeSel").value = o.ui.session;
@@ -5683,21 +5751,22 @@ function sbPaint(){
   const rc = v => v == null ? "" : v >= 1 ? "pos" : "neg";
   const heat = (u, d) => { const t = u + d; if (!t) return ""; const a = Math.round(Math.abs(u - d) / t * 55); return `background:color-mix(in oklab, ${u >= d ? "var(--up)" : "var(--down)"} ${a}%, transparent)`; };
   const f1 = v => v == null ? "—" : v.toFixed(2), pct = v => v == null ? "—" : v.toFixed(0) + "%";
+  const t2c = v => v != null && v < 20 ? "t2lo" : "";                                          // T2108 under 20%: green
   const tile = (k, v, n, c = "") => `<div class="kpi card"><div class="k">${k}</div><div class="v ${c}">${v}</div><div class="n">${n}</div></div>`;
-  box.innerHTML = `<div class="hd"><h2>Stockbee market monitor</h2><span class="sub">breadth counts per session from your stored whole-market bars · a cross-check, MAP decides</span><span class="spacer"></span>
+  box.innerHTML = `<div class="hd"><h2>Market monitor</h2><span class="sub">Stockbee's breadth counts per session from your stored whole-market bars · T2108 under 20% is green (washed out) · a cross-check, MAP decides</span><span class="spacer"></span>
       <span class="seg" id="sbShow">${[20, 60, 0].map(n => `<button data-n="${n}" class="${SB.show === n ? "on" : ""}">${n ? n + " days" : "All"}</button>`).join("")}</span>
       ${newsKey() ? `<button class="btn sm" id="sbRe" ${SB.busy ? "disabled" : ""}>Refresh stock list &amp; splits</button>` : ""}</div>
     <div class="bd">${!S.has.hist ? `<div class="empty" style="padding:4px 0">Needs the price history (Screens → Load price history).</div>` : !top ? `<div class="empty" style="padding:4px 0">Needs 66+ stored sessions.</div>` : `
       <div class="kpis" style="margin-bottom:10px">
-        ${tile(`Up 4% / down 4% · ${esc(top.d)}`, `<span class="pos">${top.u4}</span> / <span class="neg">${top.d4}</span>`, "on rising volume, 100k+ shares")}
+        ${tile("Up 4% / down 4%", `<span class="pos">${top.u4}</span> / <span class="neg">${top.d4}</span>`, `${esc(top.d)} · on rising volume, 100k+ shares`)}
         ${tile("5-day ratio", f1(top.r5), "4% ups ÷ 4% downs, 5 sessions", rc(top.r5))}
         ${tile("10-day ratio", f1(top.r10), "4% ups ÷ 4% downs, 10 sessions", rc(top.r10))}
         ${tile("Quarter ratio (primary)", f1(top.rq), `${top.uq} up 25%+ vs ${top.dq} down 25%+ in 65 days`, rc(top.rq))}
-        ${tile("T2108", pct(top.t2108), "share above the 40-day average")}
+        ${tile("T2108", pct(top.t2108), top.t2108 != null && top.t2108 < 20 ? "under 20% — washed out, Stockbee's oversold zone" : "share above the 40-day average", t2c(top.t2108))}
         ${tile("Universe", top.uni.toLocaleString(), R.cs ? "active common stocks" : "every symbol in the history")}
       </div>
       <div class="tscroll" style="max-height:460px"><table class="mini sbt"><thead><tr><th class="l">Session</th><th>Up 4%</th><th>Down 4%</th><th>5d ratio</th><th>10d ratio</th><th>Up 25% Q</th><th>Down 25% Q</th><th>Q ratio</th><th>Up 25% M</th><th>Down 25% M</th><th>Up 50% M</th><th>Down 50% M</th><th>Up 13% 34d</th><th>Down 13% 34d</th><th>Universe</th><th>T2108</th></tr></thead><tbody>
-      ${(SB.show ? L.slice(0, SB.show) : L).map(x => `<tr><td class="l">${esc(x.d)}</td><td style="${heat(x.u4, x.d4)}">${x.u4}</td><td style="${heat(x.u4, x.d4)}">${x.d4}</td><td class="${rc(x.r5)}">${f1(x.r5)}</td><td class="${rc(x.r10)}">${f1(x.r10)}</td><td style="${heat(x.uq, x.dq)}">${x.uq}</td><td style="${heat(x.uq, x.dq)}">${x.dq}</td><td class="${rc(x.rq)}"><b>${f1(x.rq)}</b></td><td style="${heat(x.um25, x.dm25)}">${x.um25}</td><td style="${heat(x.um25, x.dm25)}">${x.dm25}</td><td style="${heat(x.um50, x.dm50)}">${x.um50}</td><td style="${heat(x.um50, x.dm50)}">${x.dm50}</td><td style="${heat(x.u34, x.d34)}">${x.u34}</td><td style="${heat(x.u34, x.d34)}">${x.d34}</td><td>${x.uni.toLocaleString()}</td><td>${pct(x.t2108)}</td></tr>`).join("")}</tbody></table></div>`}
+      ${(SB.show ? L.slice(0, SB.show) : L).map(x => `<tr><td class="l">${esc(x.d)}</td><td style="${heat(x.u4, x.d4)}">${x.u4}</td><td style="${heat(x.u4, x.d4)}">${x.d4}</td><td class="${rc(x.r5)}">${f1(x.r5)}</td><td class="${rc(x.r10)}">${f1(x.r10)}</td><td style="${heat(x.uq, x.dq)}">${x.uq}</td><td style="${heat(x.uq, x.dq)}">${x.dq}</td><td class="${rc(x.rq)}"><b>${f1(x.rq)}</b></td><td style="${heat(x.um25, x.dm25)}">${x.um25}</td><td style="${heat(x.um25, x.dm25)}">${x.dm25}</td><td style="${heat(x.um50, x.dm50)}">${x.um50}</td><td style="${heat(x.um50, x.dm50)}">${x.dm50}</td><td style="${heat(x.u34, x.d34)}">${x.u34}</td><td style="${heat(x.u34, x.d34)}">${x.d34}</td><td>${x.uni.toLocaleString()}</td><td class="${t2c(x.t2108)}">${pct(x.t2108)}</td></tr>`).join("")}</tbody></table></div>`}
       <div class="small" style="margin-top:6px">${SB.busy || SB.msg ? `<b>${esc(SB.msg)}</b> · ` : ""}Stockbee's own scan formulas (4% on rising volume ≥ 100k; quarter vs the 65-day low/high; month vs 20 sessions ago; 34-day vs the 34-day low/high; $250k average dollar volume). Completed sessions only — today appears after the history updates.
       ${R ? ` · ${R.cs ? `${R.nSyms.toLocaleString()} common stocks in the history` : "common-stock list not loaded — ETFs and others included"} · ${R.nFix} split${R.nFix === 1 ? "" : "s"} corrected in the stored bars` : ""}</div></div>`;
   $("sbShow") && ($("sbShow").onclick = e => { const b = e.target.closest("button"); if (b) { SB.show = +b.dataset.n; sbPaint(); } });
@@ -5831,7 +5900,7 @@ if (WS) {
     if (!s6On() || r.etf) return;
     const x = s6Of(r), pane = document.querySelector('#drawer .tp-pane[data-p="plan"]'); if (!x || !pane) return;
     const row = (t, ok, v) => `<div class="chk"><span class="ic ${ok == null ? "na" : ok ? "ok" : "no"}">${ok == null ? "·" : ok ? "✓" : "✕"}</span><div>${t}</div><div class="small">${v}</div></div>`;
-    pane.querySelector(".tkt")?.insertAdjacentHTML("afterend", `<div class="s6p"><h4 style="margin:10px 0 2px;font-size:12px">Spec 6.0 × Pivot — ${x.pass ? `<span class="ok-t">WATCH (location passes)</span>` : `<span class="neg">NO · ${esc(x.why)}</span>`}</h4>
+    pane.querySelector(".tkt")?.insertAdjacentHTML("afterend", `<div class="s6p"><h4 style="margin:10px 0 2px;font-size:12px">Pivot script · Spec 6.0 × Pivot — ${x.pass ? `<span class="ok-t">WATCH (location passes)</span>` : `<span class="neg">NO · ${esc(x.why)}</span>`}</h4>
       ${row("1 · Weekly close above a rising 10-week SMA", x.g.wk, x.h && x.h.wk ? `${f2(x.h.wk.c)} vs ${f2(x.h.wk.s1)}` : "needs history")}
       ${row("2 · Above the daily 21 EMA (hard veto)", x.g.e21, f2(x.e21))}
       ${row("3 · Above a rising daily 50 SMA", x.g.s50, x.s50 == null ? "—" : f2(x.s50))}
@@ -5873,9 +5942,11 @@ const WSL = {
   "4B-": {n: "4B-", t: "Late decline", c: "#f0a3b6", d: "Still Stage 4, but it has stopped making lows and popped through a falling 50-day with room up to the 150-day — the cycle low may be in."},
   "N/A": {n: "N/A", t: "Not enough history", c: "var(--chip)", d: "Needs about 230 sessions of stored bars, and a clear trend at some point in them."}
 };
-const WS_ORDER = ["2A", "2", "1A", "1", "3A", "3", "4B-", "4", "N/A"];
+const WS_ORDER = ["2A", "2", "1A", "1", "3A", "3", "4B-", "4", "N/A"];          // best-first: the Stage column sorts by this
+const WS_SEQ = ["1", "1A", "2", "2A", "3", "3A", "4", "4B-", "N/A"];            // reading order: Stage 1 on the left … Stage 4 on the right
+const WS_MAIN = {"1": "1", "1A": "1", "2": "2", "2A": "2", "3": "3", "3A": "3", "4": "4", "4B-": "4", "N/A": null};
 // one symbol's label from its daily closes / highs / lows (oldest first); returns the label for the last bar
-function wsStage(c, h, l){
+function wsStage(c, h, l, codes){
   const n = c.length; if (n < WSG.minBars) return {lab: "N/A", since: 0};
   const sma = p => { const o = new Float64Array(n).fill(NaN); let s = 0, k = 0; for (let t = 0; t < n; t++) { if (!isFinite(c[t])) { s = 0; k = 0; continue; } s += c[t]; k++; if (k > p) { s -= c[t - p]; k = p; } if (k === p) o[t] = s / p; } return o; };
   const s50 = sma(WSG.n50), s150 = sma(WSG.n150), s200 = sma(WSG.n200);
@@ -5909,6 +5980,7 @@ function wsStage(c, h, l){
       lab = p > s50[t] && !up50 && s150[t] > s50[t] * (1 + WSG.db / 100) && lo2 >= loB * 0.995 ? "4B-" : "4";
     } else lab = "N/A";
     since = st == null ? 0 : start < 0 ? null : t - start;
+    if (codes) codes[t] = st || 0;                                                               // main stage per day (1–4), for the trend chart
   }
   return {lab, since, s50: s50[n - 1], s150: s150[n - 1], s200: s200[n - 1]};
 }
@@ -5937,7 +6009,7 @@ COLS = function(){ const C = _COLS1();
   C.push({k: "wstage", l: "Stage", h: "Weinstein · Deepvue style", g: "hx", cls: "l", need: "hist", v: stageRank, f: stagePill},
          {k: "wstageE", l: "Stage", h: "Weinstein · Deepvue style", g: "etf", cls: "l", need: "hist", v: stageRank, f: stagePill});
   return C; };
-{ const c = {k: "wstage", cat: "Structure", l: "Weinstein stage is", type: "multi", p: ["2A", "2"], need: HH, opts: () => WS_ORDER.map(k => [k, `${k} · ${WSL[k].t}`]), t: (r, p) => { const s = stageOf(r); return s ? p.includes(s.lab) : null; }};
+{ const c = {k: "wstage", cat: "Structure", l: "Weinstein stage is", type: "multi", p: ["2A", "2"], need: HH, opts: () => WS_SEQ.map(k => [k, `${k} · ${WSL[k].t}`]), t: (r, p) => { const s = stageOf(r); return s ? p.includes(s.lab) : null; }};
   CRIT.push(c); CRIT_BY[c.k] = c; }
 SCREENS.push(
   {k: "ws2a", t: "Stage 2A — fresh advance", d: "The first weeks of a new Stage 2: above rising 10- and 40-week averages after a base or a decline. Weinstein's favourite entry window. Deepvue-style label — a reference, not a signal.", need: ["hist"], f: r => { const s = stageOf(r); return !!s && s.lab === "2A"; }},
@@ -5952,8 +6024,8 @@ flagsHTML = function(r){ const s = S.has.hist ? stageOf(r) : null; return _flags
 function stageDistHTML(rows){
   const cnt = {}; WS_ORDER.forEach(k => cnt[k] = 0); rows.forEach(r => { const s = stageOf(r); if (s) cnt[s.lab]++; });
   const tot = rows.length || 1;
-  return `<div class="wsbar">${WS_ORDER.filter(k => cnt[k]).map(k => `<span style="flex:${cnt[k]};background:${WSL[k].c}" title="Stage ${k} · ${WSL[k].t}: ${cnt[k]}">${cnt[k] / tot >= 0.04 ? k : ""}</span>`).join("")}</div>
-    <div class="wsleg">${WS_ORDER.map(k => `<span><i style="background:${WSL[k].c}"></i>${k} ${WSL[k].t} <b>${cnt[k]}</b></span>`).join("")}</div>`;
+  return `<div class="wsbar">${WS_SEQ.filter(k => cnt[k]).map(k => `<span style="flex:${cnt[k]};background:${WSL[k].c}" title="Stage ${k} · ${WSL[k].t}: ${cnt[k]}">${cnt[k] / tot >= 0.04 ? k : ""}</span>`).join("")}</div>
+    <div class="wsleg">${WS_SEQ.map(k => `<span><i style="background:${WSL[k].c}"></i>${k} ${WSL[k].t} <b>${cnt[k]}</b></span>`).join("")}</div>`;
 }
 const STGREF = {txt: store.get("adrb.stageRef", "") || ""};
 function stageRefParse(txt){
@@ -5996,6 +6068,23 @@ renderTab = function(t){
     b.innerHTML = `<div class="hd"><h2>Weinstein stages across your list</h2><span class="sub">Deepvue-style labels from the stored bars · stocks only · a reference, not a signal</span></div><div class="bd">${S.has.hist ? stageDistHTML(S.stocks) : `<div class="empty" style="padding:4px 0">Needs the price history.</div>`}</div>`;
   }
 };
+// quick Stage filter in the filter bar — 1 · 2 · 3 · 4, each taking its sub-stages (1A, 2A, 3A, 4B-) along. It sets the same
+// criterion as Filters → Structure → "Weinstein stage is", so it only changes which names show, never ranks or states.
+const _renderGBar1 = renderGBar;
+renderGBar = function(){
+  _renderGBar1();
+  const at = document.querySelector("#gbar .gbar-in > .seg"); if (!at || !S.has.hist) return;
+  const st = GF.crit.wstage, on = new Set(st && st.on ? (st.p || []).map(k => WS_MAIN[k]) : []);
+  const sub = {"1": "1A", "2": "2A", "3": "3A", "4": "4B-"};
+  at.insertAdjacentHTML("afterend", `<span class="lbl">Stage</span><span class="seg gstage" title="Weinstein stage (Deepvue-style reference). Click to show only that stage; click several to combine.">${["1", "2", "3", "4"].map(m => `<button data-gstage="${m}" class="${on.has(m) ? "on" : ""}" style="--c:${WSL[m].c}" title="Stage ${m} · ${esc(WSL[m].t)} (includes ${sub[m]})">${m}</button>`).join("")}</span>`);
+};
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-gstage]"); if (!b) return;
+  const m = b.dataset.gstage, st = GF.crit.wstage, cur = st && st.on ? (st.p || []).slice() : [];
+  const has = cur.some(k => WS_MAIN[k] === m);
+  const p = has ? cur.filter(k => WS_MAIN[k] !== m) : WS_SEQ.filter(k => WS_MAIN[k] === m || cur.includes(k));
+  GF.crit.wstage = {on: p.length > 0, p: p.length ? p : ["2A", "2"]}; gfApply();
+});
 if (WS) {
   const _tpB = tpBuild;
   tpBuild = function(r){
@@ -6148,6 +6237,523 @@ if (WS) {
     levIndex(); const f = LEV.byFund && LEV.byFund.get(v);
     if (f && S.rowBySym && S.rowBySym.has(f.und)) { e.stopImmediatePropagation(); e.preventDefault(); q.value = ""; q.blur(); WSI.list = []; openDrawer(f.und); toast(`${v} is a ${f.lev}× ${f.dir} fund on ${f.und}`); }
   }, true);
+}
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   MARKET BREADTH + STAGE ANALYSIS (18 Oct) — Market tab, both layouts. Display only; MAP stays the regime authority.
+   Market breadth (Deepvue-style card): five paired gauges, each the bullish count ÷ both counts (50% = balance):
+     New highs vs new lows      high ≥ the highest high of the prior 251 sessions / low ≤ the lowest low (52 weeks)
+     Advance vs decline         close above / below the prior close
+     Up from open vs down       close above / below the session's open
+     Up on volume vs down       an up / down day on 2×+ the 50-session average volume (Deepvue doesn't publish its cut-off)
+     Up 4% vs down 4%           close ≥ +4% / ≤ −4% vs the prior close (no volume filter — Stockbee's version is in the monitor)
+   Scope: "Whole market" = the stored whole-market bars (last stored session, or Massive's live bar when it is newer),
+   active common stocks when the list is loaded (same universe and split fix as the Market monitor); "Your list" =
+   today's file (r.newHigh, chg1d, cfo1d, relative volume). Under the gauges: the Weinstein stage split (1A→1, 2A→2,
+   3A→3, 4B-→4) and each stage's share per session — wsStage's own day-by-day state, so the last point equals the
+   board's Stage label.
+   Stage analysis (Deepvue-style table): the same split by sector or industry for the stocks in your file, with the
+   share 10 sessions ago and a Health word. Health is the board's own (Deepvue's isn't published): net = S2% − S4%,
+   compared with the whole list's net — Strong ≥ +20 pts, Healthy ≥ +5, Neutral within ±5, Weak ≤ −5.
+   ===================================================================== */
+const MB = {scope: store.get("adrb.mbScope", "market") === "list" ? "list" : "market", key: "", res: null, busy: false, oBusy: false, oTried: false, msg: ""};
+const SA = {by: store.get("adrb.saBy", "sector") === "industry" ? "industry" : "sector", show: store.get("adrb.saShow", "pct"), min: +(store.get("adrb.saMin", 3) ?? 3), sort: "s2", open: null};
+const MBV = {mult: 2, avgN: 50, hiN: 252, minHi: 200, big: 4, trendN: 120};
+const STG = ["1", "2", "3", "4"];
+const stgC = m => WSL[m].c, stgT = m => WSL[m].t;
+const pc1 = (a, b) => b ? a / b * 100 : null;
+
+// one symbol's bars (oldest first) with the Market monitor's split fix applied to closes, highs, lows, opens and volume
+function mbBars(i, fix, sym){
+  const nD = HIST.nD, o = i * nD, f = fix && fix.get(sym);
+  const c = new Float64Array(nD), h = new Float64Array(nD), l = new Float64Array(nD), v = new Float64Array(nD), op = new Float64Array(nD);
+  for (let t = 0; t < nD; t++) {
+    const k = f ? f.c[t] / HIST.C[o + t] : 1;                                                    // split factor for that day (1 if none)
+    c[t] = f ? f.c[t] : HIST.C[o + t]; h[t] = HIST.Hh[o + t] * k; l[t] = HIST.L[o + t] * k; op[t] = HIST.O ? HIST.O[o + t] * k : NaN; v[t] = f ? f.v[t] : HIST.V[o + t];
+  }
+  return {c, h, l, v, o: op};
+}
+const blank = () => ({nh: 0, nl: 0, adv: 0, dec: 0, ufo: 0, dfo: 0, uov: 0, dov: 0, u4: 0, d4: 0, n: 0, nO: 0, nHi: 0});
+// whole market: gauges for the latest session + stage share per session
+function mbMarket(){
+  const nD = HIST.nD, csSet = SB.cs ? new Set(SB.cs.syms.split(" ")) : null, {fix} = sbAdjusted();
+  const live = HIST.live && HIST.live.date > HIST.dates[nD - 1] ? HIST.live : null;
+  const g = blank(), cnt = Array.from({length: nD}, () => [0, 0, 0, 0, 0]);
+  for (let i = 0; i < HIST.nS; i++) {
+    const sym = HIST.syms[i]; if (csSet && !csSet.has(sym)) continue;
+    const B = mbBars(i, fix, sym);
+    // the session being read: Massive's live bar if newer, else the last stored bar
+    const x = live ? live.map.get(sym) : null, e = live ? nD - 1 : nD - 2;                        // e = last bar before the session read
+    const cur = live ? x : (isFinite(B.c[nD - 1]) ? {c: B.c[nD - 1], h: B.h[nD - 1], l: B.l[nD - 1], v: B.v[nD - 1], o: B.o[nD - 1]} : null);
+    if (cur && e >= 0 && isFinite(B.c[e]) && B.c[e] > 0) mbCount(g, cur, B, e);
+    // stage per stored session (start at the first stored bar, as stageOf does)
+    let k = 0; while (k < nD && !isFinite(B.c[k])) k++;
+    if (nD - k >= WSG.minBars) { const codes = new Uint8Array(nD - k); wsStage(B.c.subarray(k), B.h.subarray(k), B.l.subarray(k), codes); for (let t = 0; t < codes.length; t++) if (codes[t]) cnt[t + k][codes[t]]++; }
+  }
+  return {g, cnt, dates: HIST.dates.slice(), date: live ? live.date : HIST.dates[nD - 1], live: !!live, cs: !!csSet};
+}
+function mbCount(g, cur, B, e){
+  const pc = B.c[e], ch = (cur.c / pc - 1) * 100;
+  g.n++;
+  if (ch > 0) g.adv++; else if (ch < 0) g.dec++;
+  if (ch >= MBV.big) g.u4++; else if (ch <= -MBV.big) g.d4++;
+  if (cur.o > 0) { g.nO++; if (cur.c > cur.o) g.ufo++; else if (cur.c < cur.o) g.dfo++; }
+  let sv = 0, nv = 0; for (let t = Math.max(0, e - MBV.avgN + 1); t <= e; t++) if (isFinite(B.v[t])) { sv += B.v[t]; nv++; }
+  if (nv >= 20 && cur.v >= MBV.mult * sv / nv) { if (ch > 0) g.uov++; else if (ch < 0) g.dov++; }
+  let hi = -Infinity, lo = Infinity, nh = 0; for (let t = Math.max(0, e - MBV.hiN + 2); t <= e; t++) if (isFinite(B.h[t])) { nh++; if (B.h[t] > hi) hi = B.h[t]; if (B.l[t] < lo) lo = B.l[t]; }
+  if (nh >= MBV.minHi) { g.nHi++; if (cur.h >= hi) g.nh++; if (cur.l <= lo) g.nl++; }
+}
+// your list: today's file
+function mbList(){
+  const g = blank(), st = S.stocks;
+  const pm = S.mode === "pm";                                                                  // premarket file: read the last full session
+  for (const r of st) {
+    const ch = pm ? r.chg1d : r.dayPct ?? r.chg1d, fo = pm ? r.cfo1d : r.openPct ?? r.cfo1d;
+    if (ch == null) continue;
+    g.n++;
+    if (ch > 0) g.adv++; else if (ch < 0) g.dec++;
+    if (ch >= MBV.big) g.u4++; else if (ch <= -MBV.big) g.d4++;
+    if (fo != null) { g.nO++; if (fo > 0) g.ufo++; else if (fo < 0) g.dfo++; }
+    const rv = r.rvat ?? r.rvol; if (rv != null && rv >= MBV.mult) { if (ch > 0) g.uov++; else if (ch < 0) g.dov++; }
+    if (r.hi52) { g.nHi++; if (r.newHigh) g.nh++; }
+    if (r.lo52 && ((r.lo1d ?? r.last) <= r.lo52 * 1.001 || r.last <= r.lo52 * 1.001)) g.nl++;
+  }
+  return g;
+}
+// stage codes per session for one of your stocks — same bars as stageOf (stored bars + today's bar), so the last code = its label
+const STGC = {key: "", map: new Map()};
+function stageCodes(r){
+  if (!S.has.hist) return null;
+  const ts = todaySource(), key = HIST.nD + "|" + HIST.dates[HIST.nD - 1] + "|" + (ts ? ts.date + ts.src : "");
+  if (STGC.key !== key) { STGC.key = key; STGC.map = new Map(); }
+  if (STGC.map.has(r.sym)) return STGC.map.get(r.sym);
+  const i = HIST.idx.get(r.sym), nD = HIST.nD; let out = null;
+  if (i != null) {
+    const x = ts ? ts.get(r.sym) : null, n = nD + (ts ? 1 : 0), o = i * nD;
+    const c = new Float64Array(n).fill(NaN), h = new Float64Array(n).fill(NaN), l = new Float64Array(n).fill(NaN);
+    for (let t = 0; t < nD; t++) { c[t] = HIST.C[o + t]; h[t] = HIST.Hh[o + t]; l[t] = HIST.L[o + t]; }
+    if (x) { c[nD] = x.c; h[nD] = x.h; l[nD] = x.l; }
+    const m = x ? n : nD;                                                                        // no bar today → the last stored day is the latest
+    let k = 0; while (k < m && !isFinite(c[k])) k++;
+    const codes = new Uint8Array(n);
+    if (m - k >= WSG.minBars) { const cc = new Uint8Array(m - k); wsStage(c.subarray(k, m), h.subarray(k, m), l.subarray(k, m), cc); codes.set(cc, k); if (!x && ts) codes[nD] = codes[nD - 1]; }
+    out = codes;
+  }
+  STGC.map.set(r.sym, out); return out;
+}
+function listTrack(){
+  const ts = todaySource(), n = HIST.nD + (ts ? 1 : 0), cnt = Array.from({length: n}, () => [0, 0, 0, 0, 0]);
+  for (const r of S.stocks) { const cc = stageCodes(r); if (cc) for (let t = 0; t < n; t++) if (cc[t]) cnt[t][cc[t]]++; }
+  return {cnt, dates: ts ? [...HIST.dates, ts.date] : HIST.dates.slice()};
+}
+// ---------- drawing
+function gaugeHTML(title, up, dn, lu, ld, note){
+  const p = up + dn ? up / (up + dn) * 100 : null, bull = p != null && p >= 50;
+  return `<div class="mbg" title="${esc(note)}"><div class="mbg-h"><span>${title}</span><b class="${p == null ? "dim" : bull ? "mb-up" : "mb-dn"}">${p == null ? "—" : Math.round(p) + "%"}</b></div>
+    <div class="mbg-t"><i style="width:${p == null ? 0 : p.toFixed(1)}%;background:${bull ? "var(--up)" : "var(--down)"}"></i></div>
+    <div class="mbg-n"><span>${up.toLocaleString()} ${lu}</span><span>${dn.toLocaleString()} ${ld}</span></div></div>`;
+}
+function stageStripHTML(c, total){
+  const t = total || 1;
+  return `<div class="mbs-bar">${STG.filter(m => c[m]).map(m => `<span style="flex:${c[m]};background:${stgC(m)}" title="Stage ${m} · ${stgT(m)}: ${c[m]} (${Math.round(c[m] / t * 100)}%)"></span>`).join("")}${c.na ? `<span class="na" style="flex:${c.na}" title="Not enough history: ${c.na}"></span>` : ""}</div>
+    <div class="mbs-k">${STG.map(m => `<div><span><i style="background:${stgC(m)}"></i>Stage ${m}</span><b>${c[m].toLocaleString()} · ${Math.round(c[m] / t * 100)}%</b><small>${stgT(m)}</small></div>`).join("")}</div>`;
+}
+// share of each stage per session — S2 and S4 drawn bold, S1 / S3 thin (Deepvue's chart)
+function stageTrendSVG(tr, nShow, wPx){
+  const rows = [], ds = [], tots = tr.cnt.map(c => c[1] + c[2] + c[3] + c[4]), full = Math.max(0, ...tots);
+  // start once most names have a stage (the first sessions only carry the few with the longest history)
+  tr.cnt.forEach((c, t) => { const tot = tots[t]; if (tot >= 20 && tot >= full * 0.8) { rows.push([1, 2, 3, 4].map(k => c[k] / tot * 100)); ds.push(tr.dates[t]); } });
+  const R = rows.slice(-nShow), D = ds.slice(-nShow);
+  if (R.length < 5) return `<div class="small dim">The stage chart needs about ${WSG.minBars + 5} stored sessions per stock.</div>`;
+  const W = Math.max(500, Math.round(wPx || 1000)), H = 150, padL = 34, padR = 64, padT = 8, padB = 18, mx = Math.min(100, Math.ceil(Math.max(...R.flat()) / 10) * 10 + 5);
+  const X = i => padL + i / (R.length - 1) * (W - padL - padR), Y = v => padT + (1 - v / mx) * (H - padT - padB);
+  const grid = [0, 25, 50, 75, 100].filter(v => v <= mx).map(v => `<line x1="${padL}" x2="${W - padR}" y1="${Y(v)}" y2="${Y(v)}" class="gl"/><text x="${padL - 6}" y="${Y(v) + 3}" text-anchor="end">${v}%</text>`).join("");
+  // end labels: nudged apart so they never overlap
+  const ly = [0, 1, 2, 3].map(k => ({k, y: Y(R[R.length - 1][k]) + 3})).sort((a, b) => a.y - b.y);
+  for (let j = 1; j < ly.length; j++) if (ly[j].y - ly[j - 1].y < 12) ly[j].y = ly[j - 1].y + 12;
+  const over = ly[ly.length - 1].y - (H - padB + 2); if (over > 0) ly.forEach(o => o.y -= over);
+  const labY = Object.fromEntries(ly.map(o => [o.k, o.y]));
+  const line = k => { const d = R.map((r, i) => `${i ? "L" : "M"}${X(i).toFixed(1)},${Y(r[k]).toFixed(1)}`).join(""); const lv = R[R.length - 1][k]; return `<path d="${d}" fill="none" stroke="${stgC(STG[k])}" stroke-width="${k === 1 || k === 3 ? 2.2 : 1.2}" ${k === 1 || k === 3 ? "" : 'stroke-opacity=".75"'}/><text x="${X(R.length - 1) + 6}" y="${labY[k].toFixed(1)}" style="fill:${stgC(STG[k])}" class="lv">S${k + 1} ${Math.round(lv)}%</text>`; };
+  const first = R[0], last = R[R.length - 1], d2 = last[1] - first[1], d4 = last[3] - first[3];
+  return `<svg viewBox="0 0 ${W} ${H}" class="mbs-svg" role="img" aria-label="Stage shares over time">${grid}${[0, 2, 1, 3].map(line).join("")}
+      <text x="${padL}" y="${H - 4}">${esc(D[0])}</text><text x="${W - padR}" y="${H - 4}" text-anchor="end">${esc(D[D.length - 1])}</text></svg>
+    <div class="small">Over ${R.length} sessions: Stage 2 share <b class="${d2 >= 0 ? "mb-up" : "mb-dn"}">${d2 >= 0 ? "+" : ""}${d2.toFixed(0)} pts</b>, Stage 4 share <b class="${d4 <= 0 ? "mb-up" : "mb-dn"}">${d4 >= 0 ? "+" : ""}${d4.toFixed(0)} pts</b>. Stage 2 rising while Stage 4 falls is the market repairing from the bottom up.</div>`;
+}
+// ---------- Market breadth card
+async function mbOpens(force){
+  // refetch recent sessions stored before opening prices were kept (needed for "up from open"); cheap: one call per day
+  if (MB.oBusy || !newsKey() || !HIST.nD) return;
+  const miss = HIST.dates.slice(-(force ? 10 : 3)).filter(d => !HIST.oDays || !HIST.oDays.has(d));
+  if (!miss.length || (!force && MB.oTried)) return;
+  MB.oBusy = true; MB.oTried = true; mbPaint();
+  try { const got = []; for (const d of miss) { const r = await fetchDay(d); if (r.n) got.push(r); } await idbPut(got); histBuild(await idbAll()); MB.key = ""; if (S.snap) { computeAll(); renderAll(); } }
+  catch (e) { MB.msg = "Couldn't fetch opening prices: " + (e.msg || e.message || "error"); }
+  MB.oBusy = false; mbPaint();
+}
+function mbPaint(){
+  const box = $("mbBox"); if (!box || !S.snap) return;
+  const mk = MB.scope === "market";
+  const key = [MB.scope, HIST.nD, HIST.dates[HIST.nD - 1], HIST.live ? HIST.live.at : "", SB.cs ? SB.cs.at : "", SB.splits ? SB.splits.at : "", S.snap.asOf, S.rows.length, HIST.oDays ? HIST.oDays.size : 0, S.mode].join("|");
+  if (MB.key !== key && (!mk || S.has.hist)) { MB.key = key; try { MB.res = mk ? mbMarket() : {g: mbList(), tr: S.has.hist ? listTrack() : null}; } catch (e) { MB.res = null; MB.msg = "Couldn't compute: " + e.message; } }
+  const R = MB.res, g = R && R.g, tr = R ? (mk ? R : R.tr) : null;
+  let sc = null; if (tr && tr.cnt.length) { const c = tr.cnt[tr.cnt.length - 1]; sc = {1: c[1], 2: c[2], 3: c[3], 4: c[4], na: 0}; }
+  if (!mk && S.has.hist && sc) sc.na = S.stocks.filter(r => { const x = stageOf(r); return !x || x.lab === "N/A"; }).length;
+  const tot = sc ? sc[1] + sc[2] + sc[3] + sc[4] : 0;
+  const when = mk ? (R ? `${R.live ? "live bar" : "session"} ${esc(R.date)}` : "") : (S.mode === "pm" ? "last session (premarket file)" : `today's file · ${esc(S.snap.asOf || "")}`);
+  const noOpen = mk && g && g.nO < g.n * 0.5;
+  box.innerHTML = `<div class="hd"><h2>Market breadth</h2><span class="sub">${mk ? `whole market${R ? ` · ${g.n.toLocaleString()} ${R.cs ? "common stocks" : "symbols (stock list not loaded)"}` : ""}` : `your list · ${g ? g.n.toLocaleString() : 0} stocks`} · ${when} · blue = bullish side leads, red = bearish</span><span class="spacer"></span>
+      <span class="seg" id="mbScope"><button data-s="market" class="${mk ? "on" : ""}">Whole market</button><button data-s="list" class="${mk ? "" : "on"}">Your list</button></span></div>
+    <div class="bd">${mk && !S.has.hist ? `<div class="empty" style="padding:4px 0">Whole market needs the price history (Screens → Load price history). <button class="btn sm" data-mbs="list">Show your list instead</button></div>` : !g ? `<div class="empty">${esc(MB.msg || "Nothing to show yet.")}</div>` : `
+      <div class="mbgrid">
+        ${gaugeHTML("New highs vs new lows", g.nh, g.nl, "highs", "lows", mk ? `High at or above the prior 52-week high vs low at or below the 52-week low · ${g.nHi.toLocaleString()} names with 200+ sessions` : "At or through the 52-week high vs at or under the 52-week low (your file's 52-week columns)")}
+        ${gaugeHTML("Advance vs decline", g.adv, g.dec, "advance", "decline", "Close above vs below the prior close")}
+        ${gaugeHTML("Up from open vs down from open", g.ufo, g.dfo, "up", "down", noOpen ? "Opening prices missing for this session — press Fetch opens" : "Close above vs below the session's open")}
+        ${gaugeHTML("Up on volume vs down on volume", g.uov, g.dov, "up", "down", mk ? `Up / down day on ${MBV.mult}×+ the ${MBV.avgN}-session average volume` : `Up / down today with relative volume ${MBV.mult}×+ (at time when the export has it)`)}
+        ${gaugeHTML(`Up ${MBV.big}% vs down ${MBV.big}%`, g.u4, g.d4, "up", "down", `Close ${MBV.big}%+ above vs ${MBV.big}%+ below the prior close (no volume filter; Stockbee's version with volume is in the Market monitor)`)}
+      </div>
+      ${noOpen ? `<div class="small" style="margin:-4px 0 8px"><b>Up from open needs opening prices</b> — your stored days predate them. ${newsKey() ? `<button class="btn sm" id="mbOpen" ${MB.oBusy ? "disabled" : ""}>${MB.oBusy ? "Fetching…" : "Fetch opens (last 10 sessions)"}</button>` : "Add your Massive key in Settings."}</div>` : ""}
+      <div class="mbs">
+        <div class="mbs-h"><b>Stage analysis</b><span class="small">${mk ? (tot ? `${tot.toLocaleString()} names with enough history` : "") : "stocks in your file"} · Weinstein, Deepvue-style reference · 1A→1, 2A→2, 3A→3, 4B-→4</span></div>
+        ${sc && tot ? stageStripHTML(sc, tot) : `<div class="small dim">${S.has.hist ? "Not enough stored history for stages yet." : "Stages need the price history."}</div>`}
+        ${tr ? stageTrendSVG(tr, MBV.trendN, box.clientWidth - 26) : ""}
+      </div>`}
+      <div class="small" style="margin-top:6px">Each gauge is the bullish count ÷ both counts — 50% is the balance point. ${mk ? `Whole market = your stored whole-market bars (same universe and split fix as the Market monitor).` : `Your list = the stocks in today's file.`} "On volume" uses ${MBV.mult}× average volume — Deepvue doesn't publish its cut-off, so expect different counts. A participation read, not a timing signal; MAP decides the regime.${MB.msg ? ` · <b>${esc(MB.msg)}</b>` : ""}</div></div>`;
+  $("mbScope").onclick = e => { const b = e.target.closest("button"); if (!b) return; MB.scope = b.dataset.s; store.set("adrb.mbScope", MB.scope); MB.key = ""; mbPaint(); };
+  box.querySelector("[data-mbs]")?.addEventListener("click", () => { MB.scope = "list"; store.set("adrb.mbScope", "list"); MB.key = ""; mbPaint(); });
+  $("mbOpen") && ($("mbOpen").onclick = () => mbOpens(true));
+  if (mk && noOpen && !MB.oTried) setTimeout(() => mbOpens(false), 50);
+}
+// ---------- Stage analysis by sector / industry (your file)
+function saHealth(net, mkt){
+  const d = net - mkt;
+  return d >= 20 ? ["Strong", "sa-strong"] : d >= 5 ? ["Healthy", "sa-healthy"] : d > -5 ? ["Neutral", "sa-neutral"] : ["Weak", "sa-weak"];
+}
+function saPaint(){
+  const box = $("saBox"); if (!box || !S.snap) return;
+  if (!S.has.hist) { box.innerHTML = `<div class="hd"><h2>Stage analysis by ${SA.by}</h2><span class="sub">Weinstein stages of the stocks in your file, by sector or industry</span></div><div class="bd"><div class="empty" style="padding:4px 0">Needs the price history (Screens → Load price history).</div></div>`; return; }
+  const ts = todaySource(), last = HIST.nD - (ts ? 0 : 1), back = Math.max(0, last - 10);
+  const keyOf = r => (SA.by === "industry" ? r.industry || r.group : r.sector) || "—";
+  const G = new Map(), all = {n: 0, c: [0, 0, 0, 0, 0], b: [0, 0, 0, 0, 0], nb: 0};
+  for (const r of S.stocks) {
+    const s = stageOf(r); if (!s || s.lab === "N/A") continue;
+    const m = +WS_MAIN[s.lab], k = keyOf(r);
+    if (!G.has(k)) G.set(k, {k, n: 0, c: [0, 0, 0, 0, 0], b: [0, 0, 0, 0, 0], nb: 0, rows: []});
+    const g = G.get(k); g.n++; g.c[m]++; g.rows.push(r); all.n++; all.c[m]++;
+    const cc = stageCodes(r); if (cc && cc[back]) { g.b[cc[back]]++; g.nb++; all.b[cc[back]]++; all.nb++; }
+  }
+  const sh = (o, m) => o.n ? o.c[m] / o.n * 100 : 0, shB = (o, m) => o.nb ? o.b[m] / o.nb * 100 : null;
+  const mkt = sh(all, 2) - sh(all, 4);
+  const rows = [...G.values()].filter(g => g.n >= SA.min).map(g => { const s = [0, 1, 2, 3, 4].map(m => sh(g, m)), b2 = shB(g, 2); return {...g, s, d2: b2 == null ? null : s[2] - b2, net: s[2] - s[4], h: saHealth(s[2] - s[4], mkt)}; });
+  const sorters = {s1: x => -x.s[1], s2: x => -x.s[2] * 1000 + x.s[4], s3: x => -x.s[3], s4: x => -x.s[4], d2: x => -(x.d2 ?? -999), n: x => -x.n, k: x => x.k, h: x => -x.net};
+  const f = sorters[SA.sort] || sorters.s2; rows.sort((a, b) => { const x = f(a), y = f(b); return typeof x === "string" ? x.localeCompare(y) : x - y; });
+  const cell = (g, m) => { const v = g.s[m], hot = v > sh(all, m) + 0.5 && v >= 10, txt = SA.show === "count" ? g.c[m] : SA.show === "both" ? `${Math.round(v)}% <small>${g.c[m]}</small>` : Math.round(v) + "%"; return `<td class="${hot ? "sa-hot" : ""}" style="${hot ? `--c:${stgC(STG[m - 1])}` : ""}">${txt}</td>`; };
+  const bar = g => `<div class="sa-bar">${[1, 2, 3, 4].filter(m => g.c[m]).map(m => `<span style="flex:${g.c[m]};background:${stgC(STG[m - 1])}"></span>`).join("")}</div>`;
+  const th = (k, l, cls = "") => `<th class="${cls} sa-sort ${SA.sort === k ? "on" : ""}" data-sak="${k}">${l}</th>`;
+  const members = g => { const by = [1, 2, 3, 4].map(m => g.rows.filter(r => +WS_MAIN[stageOf(r).lab] === m).sort((a, b) => (b.rs ?? 0) - (a.rs ?? 0))); return `<tr class="sa-mem"><td colspan="9"><div class="sa-memg">${by.map((L, j) => `<div><div class="lbl"><i style="background:${stgC(STG[j])}"></i>Stage ${j + 1} · ${L.length}</div>${L.map(r => tkChip(r, `${stageOf(r).lab}${r.rs != null ? " · " + r.rs : ""}`)).join("") || `<span class="dim small">none</span>`}</div>`).join("")}</div></td></tr>`; };
+  const ov = {1: all.c[1], 2: all.c[2], 3: all.c[3], 4: all.c[4], na: 0};
+  box.innerHTML = `<div class="hd"><h2>Stage analysis by ${SA.by}</h2><span class="sub">Weinstein stages of the ${all.n.toLocaleString()} stocks in your file with enough history · Deepvue-style reference · click a row for its names</span><span class="spacer"></span>
+      <span class="seg" id="saBy"><button data-v="sector" class="${SA.by === "sector" ? "on" : ""}">Sector</button><button data-v="industry" class="${SA.by === "industry" ? "on" : ""}">Industry</button></span>
+      <span class="seg" id="saShow"><button data-v="pct" class="${SA.show === "pct" ? "on" : ""}">%</button><button data-v="count" class="${SA.show === "count" ? "on" : ""}">Count</button><button data-v="both" class="${SA.show === "both" ? "on" : ""}">Both</button></span>
+      <label class="small">Min names <select id="saMin">${[1, 3, 5, 10].map(v => `<option ${SA.min === v ? "selected" : ""}>${v}</option>`).join("")}</select></label></div>
+    <div class="bd">
+      <div class="mbs" style="margin-top:0;padding-top:0;border-top:0">${stageStripHTML(ov, all.n)}</div>
+      <div class="tscroll" style="max-height:560px;margin-top:8px"><table class="mini sat"><thead><tr>${th("k", SA.by === "industry" ? "Industry" : "Sector", "l")}<th class="l" style="width:26%">Distribution</th>${th("s1", "S1")}${th("s2", "S2")}${th("s3", "S3")}${th("s4", "S4")}${th("d2", "S2 vs 10d ago")}${th("h", "Health")}${th("n", "Names")}</tr></thead><tbody>
+        ${rows.map(g => `<tr class="sa-row ${SA.open === g.k ? "open" : ""}" data-sag="${esc(g.k)}"><td class="l"><b>${esc(g.k)}</b></td><td class="l">${bar(g)}</td>${cell(g, 1)}${cell(g, 2)}${cell(g, 3)}${cell(g, 4)}<td class="${g.d2 == null ? "dim" : g.d2 > 0.5 ? "mb-up" : g.d2 < -0.5 ? "mb-dn" : ""}">${g.d2 == null ? "—" : (g.d2 > 0 ? "+" : "") + g.d2.toFixed(0) + " pts"}</td><td><span class="sa-h ${g.h[1]}">${g.h[0]}</span></td><td>${g.n}</td></tr>${SA.open === g.k ? members(g) : ""}`).join("") || `<tr><td colspan="9" class="l dim">No ${SA.by} has ${SA.min}+ names with enough history.</td></tr>`}
+        <tr class="sa-all"><td class="l"><b>All stocks in your file</b></td><td class="l">${bar({c: all.c})}</td>${[1, 2, 3, 4].map(m => `<td>${SA.show === "count" ? all.c[m] : Math.round(sh(all, m)) + "%"}</td>`).join("")}<td>${all.nb ? ((sh(all, 2) - shB(all, 2)) > 0 ? "+" : "") + (sh(all, 2) - shB(all, 2)).toFixed(0) + " pts" : "—"}</td><td>—</td><td>${all.n}</td></tr>
+      </tbody></table></div>
+      <div class="small" style="margin-top:6px">Coloured S cells = heavier than the whole list. <b>Health</b> is the board's own read (Deepvue doesn't publish theirs): Stage 2 share minus Stage 4 share, against the same for all your stocks (${mkt >= 0 ? "+" : ""}${mkt.toFixed(0)} pts) — Strong 20+ pts better, Healthy 5+, Neutral within 5, Weak 5+ worse. Industries follow TradingView's industry column. Reference only — never changes the plan.</div></div>`;
+  $("saBy").onclick = e => { const b = e.target.closest("button"); if (!b) return; SA.by = b.dataset.v; SA.open = null; store.set("adrb.saBy", SA.by); saPaint(); };
+  $("saShow").onclick = e => { const b = e.target.closest("button"); if (!b) return; SA.show = b.dataset.v; store.set("adrb.saShow", SA.show); saPaint(); };
+  $("saMin").onchange = e => { SA.min = +e.target.value; store.set("adrb.saMin", SA.min); saPaint(); };
+  box.querySelector("thead").onclick = e => { const t = e.target.closest("[data-sak]"); if (t) { SA.sort = t.dataset.sak; saPaint(); } };
+  box.querySelector("tbody").onclick = e => { if (e.target.closest("[data-sym]")) return; const tr = e.target.closest("[data-sag]"); if (tr) { SA.open = SA.open === tr.dataset.sag ? null : tr.dataset.sag; saPaint(); } };
+}
+// ---------- Market monitor: refetch stored days that left out stocks under $1
+// Checked 18 Oct against Stockbee's sheet (Massive bars, 1–16 Oct): with sub-$1 stocks the 4% counts land within a few
+// names of Stockbee's (15 Oct 493/144 both); without them they read 20–35% low. Days stored before then lack them.
+const SBR = {busy: false, done: 0, total: 0};
+async function sbRefetch(){
+  if (SBR.busy || !newsKey() || !HIST.nD) return;
+  const todo = HIST.dates.filter(d => !HIST.p1Days || !HIST.p1Days.has(d)); if (!todo.length) return;
+  SBR.busy = true; SBR.done = 0; SBR.total = todo.length; sbPaint();
+  const got = [], errs = []; let i = 0;
+  const worker = async () => { while (i < todo.length) { const d = todo[i++]; try { const r = await fetchDay(d); if (r.n) got.push(r); } catch (e) { errs.push(e.msg || "error"); if (/refused/.test(e.msg || "")) i = todo.length; } SBR.done++; if (SBR.done % 10 === 0) sbPaint(); if (got.length >= 20) await idbPut(got.splice(0)); } };
+  try { await Promise.all([worker(), worker(), worker(), worker()]); await idbPut(got); histBuild(await idbAll()); }
+  catch (e) { errs.push(e.message || String(e)); }
+  SBR.busy = false; SB.key = ""; MB.key = "";
+  if (S.snap) { computeAll(); renderAll(); }
+  toast(errs.length ? `${errs.length} day${errs.length > 1 ? "s" : ""} failed (${errs[0]}) — press Refetch again` : `Refetched ${todo.length} sessions with stocks under $1`);
+}
+const _sbPaint1 = sbPaint;
+sbPaint = function(){
+  _sbPaint1();
+  const bd = document.querySelector("#sbBox .bd"); if (!bd || !S.has.hist) return;
+  bd.insertAdjacentHTML("beforeend", `<div class="small" style="margin-top:4px">Checked against Stockbee's own sheet (1–16 Oct, real Massive bars): 4% counts and the 5/10-day ratios match within a few names; month and 34-day counts within ~4%; <b>T2108 is up to 4 points off Stockbee's either way</b> (Worden's own universe) — read it as a direction and confirm an under-20% reading on Stockbee's sheet. Quarter counts not yet cross-checked.</div>`);
+  const miss = HIST.dates.filter(d => !HIST.p1Days || !HIST.p1Days.has(d)).length; if (!miss && !SBR.busy) return;
+  bd.insertAdjacentHTML("afterbegin", `<div class="note sbnote">${SBR.busy ? `<b>Refetching ${SBR.done} / ${SBR.total} sessions…</b> the monitor updates when it finishes.` : `<b>${miss} of ${HIST.nD} stored sessions leave out stocks under $1.</b> Stockbee counts them — on those days the 4% counts read about a quarter low (checked against Stockbee's sheet for 1–16 Oct). ${newsKey() ? `<button class="btn sm" id="sbRefetch">Refetch ${miss} session${miss > 1 ? "s" : ""}</button> <span class="small">one Massive call per day, a few minutes</span>` : "Add your Massive key in Settings to refetch."}`}</div>`);
+  $("sbRefetch") && ($("sbRefetch").onclick = sbRefetch);
+};
+// cards: Tape read → Market breadth → Market monitor → Stage analysis → stages across your list
+$("mkTape").insertAdjacentHTML("afterend", `<div class="card g1" id="mbBox"></div>`);
+$("sbBox").insertAdjacentHTML("afterend", `<div class="card g1" id="saBox"></div>`);
+const _renderTab7 = renderTab;
+renderTab = function(t){
+  _renderTab7(t);
+  if (t === "market" && S.snap) {
+    mbPaint(); saPaint();
+    const d = $("wsDist"); if (d && $("saBox").nextElementSibling !== d) $("saBox").after(d);
+  }
+};
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   SETUPS: TWO RULE SETS, SAME LAYOUT (18 Oct). Display only — the plan, zones and states are unchanged.
+   The Spec 6.0 × Pivot card is rebuilt so each rule set is named plainly and shown the same way:
+     Board plan   = Chart & Entry Spec v6.0, the rules the plan already uses (checksFor)
+     Pivot script = the TradingView Spec 6.0 × Pivot location gates (s6Of)
+   Agreement columns ("Both agree" / "Board plan only" / "Pivot script only") and one table where every row carries
+   both sets of checks. When the comparison is on, the Trade rules card shows both rule sets side by side.
+   ===================================================================== */
+const ck1 = (l, ok, t) => `<span class="rck ${ok == null ? "na" : ok ? "ok" : "no"}" title="${esc(t)}: ${ok == null ? "no data" : ok ? "pass" : "fail"}">${l}</span>`;
+function planChecksHTML(r){
+  const C = Object.fromEntries(checksFor(r).map(c => [c.k, c]));
+  const z = zr();
+  return [ck1("9/21", C["9/21"].ok, "Price above the daily 9 and 21 EMA (hard veto)"), ck1("50", C["50"].ok, "Above the daily 50 SMA"),
+    ck1("zone", C.zone.ok, `In the buy zone: ${z[0]} to +${z[1]} ADR from the ${zm().line}`), ck1("ext", C.ext.ok, `No more than ${CFG.extCap} ADR above the 50 SMA`),
+    ck1("LoD", C.LOD.ok, `Entry under ${CFG.lodCap} ADR above the low of day`), ck1("RS", C.RS.ok, `RS ${CFG.rsMin}+`)].join("");
+}
+function pivotChecksHTML(x){
+  if (!x) return `<span class="dim small">no data</span>`;
+  return [ck1("wk", x.g.wk, "Weekly close above a rising 10-week SMA"), ck1("21E", x.g.e21, "Above the daily 21 EMA (hard veto)"), ck1("50↑", x.g.s50, "Above a rising daily 50 SMA"),
+    ck1("zone", x.g.zone, `Within ${S6.zone} ADR of the daily 9 or 21 EMA (${x.z9.toFixed(2)}× | ${x.z21.toFixed(2)}×)`), ck1("ext", x.g.ext, `No more than ${S6.ext} ADR above the 50 SMA (${x.ext == null ? "—" : x.ext.toFixed(2) + "×"})`),
+    ck1("LoD", x.lodOk, `LoD ≤ ${S6.lod} ADR — estimate with today's low (${x.lod == null ? "—" : x.lod.toFixed(2) + "×"})`), ck1("room", x.roomOk, `Room to the first resistance ≥ ${S6.room}R — estimate (${x.room == null ? (x.roomOk ? "clear" : "—") : x.room.toFixed(2) + "R"})`)].join("");
+}
+renderS6 = function(){
+  const box = $("s6pBox"); if (!box) return;
+  const intro = `<b>Board plan</b> = Chart &amp; Entry Spec v6.0, the rules the plan above already uses. <b>Pivot script</b> = your TradingView Spec 6.0 × Pivot (under forward test). Both pick from the same names with the same RS floor, earnings rule, group cap and list size — only the location rules differ. The plan itself never changes.`;
+  if (!s6On()) { box.innerHTML = `<div class="hd"><h2>Board plan vs Pivot script</h2><span class="sub">off · compares the plan's rules (Chart &amp; Entry Spec v6.0) with your Spec 6.0 × Pivot script on the same names</span><span class="spacer"></span><button class="btn sm" id="s6Tog">Turn on</button></div>`; $("s6Tog").onclick = () => { store.set("adrb.s6p", true); renderS6(); renderRulesCard(); }; return; }
+  const L = s6List(), plan = S.plan.plan, inP = new Set(plan.map(r => r.sym)), inS = new Set(L.map(o => o.r.sym));
+  const both = plan.filter(r => inS.has(r.sym)), onlyP = plan.filter(r => !inS.has(r.sym)), onlyS = L.filter(o => !inP.has(o.r.sym)).map(o => o.r);
+  const why = r => { const x = s6Of(r); return x ? x.why || "list size / group cap" : "no data"; };
+  const deckWhy = new Map(S.plan.deck.map(d => [d.r.sym, d.why]));
+  const boardWhy = r => deckWhy.get(r.sym) || (r.state === 1 || r.state === 2 ? `${ST[r.state].name} · list full or group cap` : r.state ? ST[r.state].name : "—");
+  const rows = [...both.map(r => [r, "both"]), ...onlyP.map(r => [r, "plan"]), ...onlyS.map(r => [r, "pivot"])];
+  const vlab = {both: ["Both agree", "v-both"], plan: ["Board plan only", "v-plan"], pivot: ["Pivot script only", "v-pivot"]};
+  const col = (t, n, sub, body) => `<div class="s6c"><div class="s6c-h"><b>${t}</b><span class="s6n">${n}</span></div><div class="small">${sub}</div><div class="s6c-b">${body || `<span class="dim small">none</span>`}</div></div>`;
+  box.innerHTML = `<div class="hd"><h2>Board plan vs Pivot script</h2><span class="sub">two rule sets on the same names — where they agree</span><span class="spacer"></span><button class="btn sm" id="s6Tog">Turn off</button></div>
+    <div class="bd">
+      <div class="s6intro">${intro}</div>
+      <div class="s6cols">
+        ${col("Both agree", both.length, "in the plan AND pass the Pivot script's location gates — the strongest overlap", both.map(r => tkChip(r, r.rs ?? "")).join(""))}
+        ${col("Board plan only", onlyP.length, "in the plan, but the Pivot script says no — its first failing gate is shown", onlyP.map(r => `<div class="s6w">${tkChip(r, r.rs ?? "")} <span class="small">Pivot: ${esc(why(r))}</span></div>`).join(""))}
+        ${col("Pivot script only", onlyS.length, "pass the Pivot script, but not in the plan — the board's reason is shown", onlyS.map(r => `<div class="s6w">${tkChip(r, r.rs ?? "")} <span class="small">Board: ${esc(boardWhy(r))}</span></div>`).join(""))}
+      </div>
+      ${rows.length ? `<div class="tscroll" style="max-height:440px;margin-top:12px"><table class="mini s6t"><thead>
+          <tr><th class="l" colspan="4"></th><th class="l s6g">Board plan · Chart &amp; Entry Spec v6.0</th><th class="l s6g">Pivot script · Spec 6.0 × Pivot</th></tr>
+          <tr><th class="l">Ticker</th><th>RS</th><th class="l">Group</th><th class="l">Agreement</th><th class="l">Checks · status</th><th class="l">Gates · stop estimate</th></tr></thead><tbody>
+        ${rows.map(([r, v]) => { const x = s6Of(r); return `<tr data-sym="${esc(r.sym)}"><td class="l sym">${esc(r.sym)}</td><td>${rsBadge(r.rs)}</td><td class="l small">${esc(r.group)}</td><td class="l"><span class="s6v ${vlab[v][1]}">${vlab[v][0]}</span></td>
+          <td class="l"><span class="rcks">${planChecksHTML(r)}</span> ${statusPill(r)}</td>
+          <td class="l"><span class="rcks">${pivotChecksHTML(x)}</span> <span class="small">${x && x.stop != null ? `stop ≈ ${f2(x.stop)}` : ""}${x && x.res != null ? ` · res ${f2(x.res)}` : ""}</span></td></tr>`; }).join("")}</tbody></table></div>` : `<div class="empty">Nothing in the plan, and nothing passes the Pivot script with the plan's RS floor right now.</div>`}
+      <div class="small" style="margin-top:6px">Green = pass, red = fail, grey = no data; hover any check for the rule. Pivot gates are read at the last price. <b>Its LoD and room are estimates</b> (stop = today's low − ${S6.buf} ADR) — the script uses the 30-min pullback low, so the chart has the final say. Triggers stay on TradingView.${S.has.hist ? "" : " <b>Load the price history</b> for the weekly and 50-SMA-rising gates."} Both rule sets are written out in the Trade rules card at the bottom of this page.</div>
+    </div>`;
+  $("s6Tog").onclick = () => { store.set("adrb.s6p", false); renderS6(); renderRulesCard(); };
+  box.querySelector("tbody")?.addEventListener("click", e => { if (e.target.closest("[data-sym]:not(tr)")) return; const tr = e.target.closest("tr[data-sym]"); if (tr) openDrawer(tr.dataset.sym); });
+};
+// Trade rules: the plan's rules, and — when the comparison is on — the Pivot script's beside them
+const RULES0 = {html: null};
+function renderRulesCard(){
+  const card = document.querySelector("#tab-plan .card.rules"); if (!card) return;
+  if (RULES0.html == null) RULES0.html = card.innerHTML;
+  if (!s6On()) { card.classList.remove("rules2"); card.innerHTML = RULES0.html; return; }
+  card.classList.add("rules2");
+  card.innerHTML = `<div class="r2">
+    <div>${RULES0.html.replace("<b>Trade rules (Chart &amp; Entry Spec v6.0)</b>", "<b>Board plan — Chart &amp; Entry Spec v6.0</b><div class=\"small\">what the plan, zones and stops on this board use</div>")}</div>
+    <div><b>Pivot script — Spec 6.0 × Pivot</b><div class="small">your TradingView script, under forward test — nothing proven yet</div><ol>
+      <li>Location, all at the fill: weekly close above a rising 10-week SMA · above the daily 21 EMA (hard veto) · above a rising 50 SMA · within ${S6.zone} ADR of the daily 9 <i>or</i> 21 EMA · no more than ${S6.ext} ADR above the 50 SMA.</li>
+      <li>Pullback: two lower 30-min closes seat it; it expires after 13 bars with no new low.</li>
+      <li>Trigger (primary): T1 reversal-candle break — a 30-min bar closes above the prior high in the top half of its range; buy-stop 1 tick over it, next bar only. T2 bottom-candle, T3 first up-candle and T4 (the board's 30-min 21 EMA reclaim) run alongside for the test.</li>
+      <li>Stop = pullback low − ${S6.buf} ADR. At the fill: entry within ${S6.lod} ADR of the low of day (replaces the half-ADR stop cap) and at least ${S6.room}R of room to the first daily resistance.</li>
+      <li>Management: ⅓ off at 2R, stop to entry; the rest exits on a daily close under the 9 EMA; time exit after T+3 if 2R hasn't printed.</li></ol></div>
+    <div class="r2diff"><b>Where they differ</b>
+      <span><i>Zone</i> plan: 0 to +0.5 ADR above the top of the 9/21 band · pivot: within 0.5 ADR of either EMA</span>
+      <span><i>Weekly trend</i> pivot only</span>
+      <span><i>Trigger</i> plan: 30-min close above the 21 EMA · pivot: T1 reversal-candle break</span>
+      <span><i>Stop</i> plan: 30-min pullback low, never wider than ½ ADR · pivot: pullback low − 0.05 ADR, entry ≤ 0.6 ADR off the low</span>
+      <span><i>Room to resistance</i> pivot only (≥ 2R)</span></div></div>`;
+}
+const _renderTab8 = renderTab;
+renderTab = function(t){ _renderTab8(t); if (t === "plan" && S.snap) renderRulesCard(); };
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   MAP A LIST · B LIST · STALK (18 Oct) — Setups, both layouts. Tracking only: never changes the plan, ranks or states.
+     A list  = MAP's focus — the top 5 Claude picked (the existing "MAP focus" box; same data, same MAP flag)
+     B list  = ready, but MAP let them go (kept to see whether the passes would have worked)
+     Stalk   = on deck — not ready, waiting for a pullback
+   Saved in localStorage adrb.lists (keys b, stalk added beside focus, held) and in snapshots.
+   Tracker: each edit logs that file date's lists with the price then (localStorage adrb.mapLog, 90 dates). The card
+   shows every logged name since it was first listed: move now, best and worst since (stored daily highs/lows after
+   that date + today's high/low), all in ADR of the price then — and a per-list average, so A vs B can be compared.
+   ===================================================================== */
+const MAPL = {b: new Set(), stalk: new Set(), bTxt: "", stalkTxt: "", show: store.get("adrb.mapTrackShow", "all")};
+function setLists2(bTxt, sTxt){
+  MAPL.bTxt = bTxt || ""; MAPL.stalkTxt = sTxt || "";
+  MAPL.b = new Set(parseTickers(MAPL.bTxt)); MAPL.stalk = new Set(parseTickers(MAPL.stalkTxt));
+  store.set("adrb.lists", {...(store.get("adrb.lists", {}) || {}), b: MAPL.bTxt, stalk: MAPL.stalkTxt});
+}
+{ const o = store.get("adrb.lists", {}) || {}; setLists2(o.b, o.stalk); }
+// the inputs: A list (the old MAP focus box, relabelled) · B list · Stalk · Held
+{
+  const lab = $("focusIn").closest("label"), held = $("heldIn").closest("label");
+  lab.querySelector(".lbl").innerHTML = `MAP focus · <b>A list</b> <span class="dim">top 5</span> <span class="mlc" id="mlcA"></span>`;
+  $("focusIn").placeholder = "e.g. DDOG CRDO MTSI QLYS NVDA";
+  held.insertAdjacentHTML("beforebegin", `<label><span class="lbl"><b>B list</b> <span class="dim">ready, passed on</span> <span class="mlc" id="mlcB"></span></span><input type="text" id="bIn" placeholder="e.g. ANET VRT" autocomplete="off" spellcheck="false"></label>
+    <label><span class="lbl"><b>On deck / stalk</b> <span class="dim">waiting for a pullback</span> <span class="mlc" id="mlcS"></span></span><input type="text" id="stalkIn" placeholder="e.g. PLTR APP" autocomplete="off" spellcheck="false"></label>`);
+  $("listsBox").querySelector(".hd h2").textContent = "Today's MAP lists and held names";
+  $("listsBox").querySelector(".hd .sub").textContent = "A list = MAP's top 5 · B list = ready but let go · Stalk = waiting for a pullback · type or paste tickers · each edit is logged for the tracker below";
+  $("listsClear").textContent = "Clear all";
+  const bi = $("bIn"), si = $("stalkIn"); bi.value = MAPL.bTxt; si.value = MAPL.stalkTxt;
+  let t = null;
+  const apply = () => { setLists2(bi.value, si.value); mlCounts(); mlogRecord(); if (S.snap) { if (S.ui.tab === "plan") renderTab("plan"); else { renderFocus(); renderMapTrack(); } } };
+  [bi, si].forEach(i => i.addEventListener("input", () => { clearTimeout(t); t = setTimeout(apply, 350); }));
+  // the A list and held boxes keep their own handler; log after it runs
+  let t2 = null;
+  [$("focusIn"), $("heldIn")].forEach(i => i.addEventListener("input", () => { clearTimeout(t2); t2 = setTimeout(() => { mlCounts(); mlogRecord(); renderMapTrack(); }, 400); }));
+  $("listsClear").addEventListener("click", () => { bi.value = ""; si.value = ""; apply(); });
+}
+function mlCounts(){
+  const n = s => s.size ? String(s.size) : "";
+  const a = $("mlcA"); if (a) { a.textContent = n(LISTS.focus); a.classList.toggle("over", LISTS.focus.size > 5); a.title = LISTS.focus.size > 5 ? "MAP's A list is the top 5 — the extras may belong on the B list" : ""; }
+  $("mlcB") && ($("mlcB").textContent = n(MAPL.b)); $("mlcS") && ($("mlcS").textContent = n(MAPL.stalk));
+}
+mlCounts();
+if (typeof SEC_NAMES !== "undefined") Object.assign(SEC_NAMES, {listsBox: "MAP lists & held", focusBox: "MAP lists"});
+// flags: B list and stalk names are tagged wherever MAP / HELD tags show
+const _flags4 = flagsHTML;
+flagsHTML = function(r){ return _flags4(r) + (MAPL.b.has(r.sym) ? `<span class="flag mapb" title="On MAP's B list — ready, passed on">MAP B</span>` : "") + (MAPL.stalk.has(r.sym) ? `<span class="flag stalk" title="On MAP's stalk list — waiting for a pullback">STALK</span>` : ""); };
+{ const c1 = {k: "mapB", cat: "Lists", l: "On MAP's B list", t: r => MAPL.b.has(r.sym)}, c2 = {k: "mapS", cat: "Lists", l: "On MAP's stalk list", t: r => MAPL.stalk.has(r.sym)}; CRIT.push(c1, c2); CRIT_BY[c1.k] = c1; CRIT_BY[c2.k] = c2; }
+// where each list stands now
+renderFocus = function(){
+  const box = $("focusBox"); if (!box) return;
+  const A = [...LISTS.focus], B = [...MAPL.b], SK = [...MAPL.stalk], H = [...LISTS.held];
+  if (!A.length && !B.length && !SK.length && !H.length) { box.innerHTML = `<div class="hd"><h2>MAP lists — where they stand</h2><span class="sub">Type today's A list, B list and stalk names above to see where each one stands in this file.</span></div>`; return; }
+  const by = S.rowBySym || new Map(S.rows.map(r => [r.sym, r]));
+  const part = (syms, key, title, sub, empty) => {
+    const rows = syms.map(s => by.get(s)).filter(Boolean), miss = syms.filter(s => !by.has(s));
+    return `<div class="hd ml-hd"><h2 class="ml-t ml-${key}">${title}</h2><span class="sub">${syms.length ? `${rows.length} of ${syms.length} in this file · ${sub}` : empty}</span></div>
+      ${rows.length ? planList(rows, "ml" + key, true) : ""}${miss.length ? `<div class="fmiss">Not in this file: ${miss.map(esc).join(", ")}</div>` : ""}`;
+  };
+  const hr = H.map(s => by.get(s)).filter(Boolean), hm = H.filter(s => !by.has(s));
+  const addable = hr.filter(r => r.state === 1 || r.state === 2), other = hr.filter(r => !(r.state === 1 || r.state === 2));
+  box.innerHTML = `${part(A, "A", "A list — MAP's top 5", "same checks as the plan", "no A list typed")}
+    ${part(B, "B", "B list — ready, passed on", "kept for tracking: were the passes right?", "no B list typed")}
+    ${part(SK, "S", "On deck / stalk — waiting for a pullback", "the buy zone and how far away it is are on each row", "no stalk names typed")}
+    <div class="hd ml-hd"><h2 class="ml-t">Held — add candidates</h2><span class="sub">held names back in the buy zone or just above it · adding to a held name on a pullback is a priority</span></div>
+    ${addable.length ? planList(addable, "held", true) : `<div class="fmiss">${H.length ? "No held name is in or just above the buy zone right now." : "No held names typed."}</div>`}
+    ${other.length ? `<div class="fmiss">Other held names: ${other.map(r => tkChip(r, r.state ? ST[r.state].name : "—")).join("")}</div>` : ""}
+    ${hm.length ? `<div class="fmiss">Held but not in this file: ${hm.map(esc).join(", ")}</div>` : ""}`;
+};
+// ---------- tracker
+const MLOG = "adrb.mapLog";
+function mlogRecord(){
+  if (!S.snap || !S.snap.asOf) return;
+  const d = S.snap.asOf, log = store.get(MLOG, {}) || {}, prev = log[d] || {}, by = S.rowBySym || new Map(S.rows.map(r => [r.sym, r]));
+  const ent = {};
+  for (const [k, set] of [["A", LISTS.focus], ["B", MAPL.b], ["S", MAPL.stalk]]) {
+    const old = new Map((prev[k] || []).map(x => [x[0], x[1]]));
+    ent[k] = [...set].map(s => { const r = by.get(s); return [s, old.has(s) ? old.get(s) : (r && r.last != null ? +r.last.toFixed(4) : null), r && r.adr != null ? +r.adr.toFixed(3) : null]; });
+  }
+  if (!ent.A.length && !ent.B.length && !ent.S.length) delete log[d]; else log[d] = ent;
+  const keep = Object.keys(log).sort().slice(-90); store.set(MLOG, Object.fromEntries(keep.map(k => [k, log[k]])));
+}
+// best / worst price since a date: stored daily highs and lows after it, plus today's bar when the file is newer
+function mlRange(sym, date){
+  const r = S.rowBySym && S.rowBySym.get(sym); let hi = -Infinity, lo = Infinity, n = 0;
+  const i = HIST.idx ? HIST.idx.get(sym) : null;
+  if (i != null) for (let t = 0; t < HIST.nD; t++) { if (HIST.dates[t] <= date) continue; const h = HIST.Hh[i * HIST.nD + t], l = HIST.L[i * HIST.nD + t]; if (isFinite(h)) { hi = Math.max(hi, h); lo = Math.min(lo, l); n++; } }
+  const last = HIST.dates[HIST.nD - 1] || "";
+  if (r && S.snap && S.snap.asOf > date && S.snap.asOf > last && S.mode !== "pm") { if (r.hi1d != null) hi = Math.max(hi, r.hi1d); if (r.lo1d != null) lo = Math.min(lo, r.lo1d); if (r.last != null) { hi = Math.max(hi, r.last); lo = Math.min(lo, r.last); } n++; }
+  return n ? {hi, lo, n} : null;
+}
+function renderMapTrack(){
+  let box = $("mapTrack"); if (!box) { $("focusBox").insertAdjacentHTML("afterend", `<div class="card g1" id="mapTrack"></div>`); box = $("mapTrack"); }
+  if (!S.snap) return;
+  const log = store.get(MLOG, {}) || {}, dates = Object.keys(log).sort(), by = S.rowBySym || new Map();
+  // first listing of each name per list
+  const first = new Map();
+  for (const d of dates) for (const k of ["A", "B", "S"]) for (const [s, px, adr] of (log[d][k] || [])) { const id = k + ":" + s; if (!first.has(id)) first.set(id, {k, s, d, px, adr, last: d}); else first.get(id).last = d; }
+  const rows = [...first.values()].map(o => {
+    const r = by.get(o.s), adrPct = o.adr ?? (r ? r.adr : null), unit = o.px != null && adrPct ? o.px * adrPct / 100 : null;
+    const now = r ? r.last : null, rg = mlRange(o.s, o.d);
+    return {...o, r, now, pct: o.px && now != null ? (now / o.px - 1) * 100 : null, u: unit && now != null ? (now - o.px) / unit : null,
+      best: unit && rg ? (rg.hi - o.px) / unit : null, worst: unit && rg ? (rg.lo - o.px) / unit : null, sess: rg ? rg.n : 0};
+  }).filter(o => MAPL.show === "all" || o.k === MAPL.show).sort((a, b) => a.d < b.d ? 1 : a.d > b.d ? -1 : "ABS".indexOf(a.k) - "ABS".indexOf(b.k));
+  const KL = {A: "A list", B: "B list", S: "Stalk"};
+  const avg = a => { const v = a.filter(x => x != null); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null; };
+  const all = [...first.values()].map(o => rows.find(x => x.k === o.k && x.s === o.s) || null).filter(Boolean);
+  const sum = k => { const L = (MAPL.show === "all" ? all : rows).filter(o => o.k === k); return {n: L.length, u: avg(L.map(o => o.u)), best: avg(L.map(o => o.best)), up: L.filter(o => o.u != null).length ? L.filter(o => o.u > 0).length / L.filter(o => o.u != null).length * 100 : null}; };
+  const fu = v => v == null ? "—" : (v > 0 ? "+" : "") + v.toFixed(2);
+  const tile = k => { const x = sum(k); return `<div class="kpi card ml-k ml-${k}"><div class="k">${KL[k]} · ${x.n} name${x.n === 1 ? "" : "s"}</div><div class="v ${x.u == null ? "" : x.u >= 0 ? "pos" : "neg"}">${fu(x.u)} <small>ADR</small></div><div class="n">avg move since listed · best ${fu(x.best)} ADR · ${x.up == null ? "—" : Math.round(x.up) + "%"} up</div></div>`; };
+  box.innerHTML = `<div class="hd"><h2>MAP lists tracker</h2><span class="sub">every name since it first went on a list — logged when you edit the lists · moves in ADR of the price then · ${dates.length} file date${dates.length === 1 ? "" : "s"} logged</span><span class="spacer"></span>
+      <span class="seg" id="mlShow">${[["all", "All"], ["A", "A list"], ["B", "B list"], ["S", "Stalk"]].map(([k, l]) => `<button data-k="${k}" class="${MAPL.show === k ? "on" : ""}">${l}</button>`).join("")}</span>
+      <button class="btn sm" id="mlLog" title="Log the lists as they are now for this file's date">Log now</button>${dates.length ? `<button class="btn sm" id="mlClr">Clear log</button>` : ""}</div>
+    <div class="bd">${!dates.length ? `<div class="empty" style="padding:4px 0">Nothing logged yet. Type today's lists above (or press Log now) — each name is tracked from the price it had when it was listed.</div>` : `
+      <div class="kpis" style="margin-bottom:10px">${tile("A")}${tile("B")}${tile("S")}</div>
+      <div class="tscroll" style="max-height:440px"><table class="mini mlt"><thead><tr><th class="l">Listed</th><th class="l">List</th><th class="l">Ticker</th><th>Then</th><th>Now</th><th>Since</th><th>Move</th><th>Best since</th><th>Worst since</th><th>Sessions</th><th class="l">Now</th></tr></thead><tbody>
+      ${rows.map(o => `<tr ${o.r ? `data-sym="${esc(o.s)}"` : ""}><td class="l">${esc(o.d)}${o.last !== o.d ? `<div class="small dim">to ${esc(o.last)}</div>` : ""}</td><td class="l"><span class="ml-pill ml-${o.k}">${KL[o.k]}</span></td><td class="l sym">${esc(o.s)}</td><td>${o.px == null ? "—" : f2(o.px)}</td><td>${o.now == null ? "—" : f2(o.now)}</td>
+        <td class="${o.pct == null ? "" : o.pct >= 0 ? "pos" : "neg"}">${o.pct == null ? "—" : (o.pct >= 0 ? "+" : "") + o.pct.toFixed(1) + "%"}</td><td class="${o.u == null ? "" : o.u >= 0 ? "pos" : "neg"}"><b>${fu(o.u)}</b></td><td class="${o.best == null ? "" : o.best >= 0 ? "pos" : "neg"}">${fu(o.best)}</td><td class="${o.worst == null ? "" : o.worst >= 0 ? "pos" : "neg"}">${fu(o.worst)}</td><td>${o.sess || "—"}</td><td class="l">${o.r ? statusPill(o.r) : `<span class="dim small">not in this file</span>`}</td></tr>`).join("")}</tbody></table></div>`}
+      <div class="small" style="margin-top:6px">Move, best and worst are in ADR of the price when the name was listed (1 ADR = that day's average daily range). Best / worst use the stored daily highs and lows after the listing date${S.has.hist ? "" : " — <b>load the price history</b> for them"}. A plain record of what the lists did — not a backtest: no entry trigger, stop or trim is applied.</div></div>`;
+  $("mlShow").onclick = e => { const b = e.target.closest("button"); if (!b) return; MAPL.show = b.dataset.k; store.set("adrb.mapTrackShow", MAPL.show); renderMapTrack(); };
+  $("mlLog").onclick = () => { mlogRecord(); renderMapTrack(); toast(`Logged the lists for ${S.snap.asOf}`); };
+  $("mlClr") && ($("mlClr").onclick = () => { if (confirm("Delete the MAP lists log from this browser?")) { store.set(MLOG, null); renderMapTrack(); } });
+  box.querySelector("tbody")?.addEventListener("click", e => { const tr = e.target.closest("tr[data-sym]"); if (tr) openDrawer(tr.dataset.sym); });
+}
+const _renderTab9 = renderTab;
+renderTab = function(t){ _renderTab9(t); if (t === "plan" && S.snap) { mlCounts(); renderMapTrack(); } };
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   LAYOUT TIDY (18 Oct) — display only.
+   • The workspace jump list is rebuilt after the late cards (Market breadth, Stage analysis, Board plan vs Pivot
+     script, MAP lists tracker) have drawn, so every card on the page is listed.
+   • Setups: the MAP lists cards stay out of the way until there is something in them.
+   ===================================================================== */
+const _renderTab10 = renderTab;
+renderTab = function(t){
+  _renderTab10(t);
+  if (t === "plan" && S.snap) {
+    const any = LISTS.focus.size || LISTS.held.size || MAPL.b.size || MAPL.stalk.size;
+    $("focusBox") && $("focusBox").classList.toggle("hidden", !any);
+    const log = store.get("adrb.mapLog", {}) || {};
+    $("mapTrack") && $("mapTrack").classList.toggle("hidden", !Object.keys(log).length && !any);
+  }
+  if (WS && S.snap && typeof buildSecs === "function") buildSecs(t);
+};
+// ticker panel: when the Pivot script's gates are shown, the Board plan's checks sit right above them, same layout
+if (WS) {
+  const _tpBuild2 = tpBuild;
+  tpBuild = function(r){
+    _tpBuild2(r);
+    const at = document.querySelector('#drawer .tp-pane[data-p="plan"] .s6p'); if (!at || r.etf) return;
+    const C = Object.fromEntries(checksFor(r).map(c => [c.k, c])), z = zr();
+    const row = (t, ok, v) => `<div class="chk"><span class="ic ${ok == null ? "na" : ok ? "ok" : "no"}">${ok == null ? "·" : ok ? "✓" : "✕"}</span><div>${t}</div><div class="small">${v}</div></div>`;
+    const inPlan = S.plan.plan.includes(r), deck = S.plan.deck.find(d => d.r === r), fail = checksFor(r).find(c => c.ok === false);
+    const verdict = inPlan ? `<span class="ok-t">IN THE PLAN · ${esc(r.state ? ST[r.state].name : "")}</span>` : deck ? `<span class="neg">ON DECK · ${esc(deck.why)}</span>` : `<span class="neg">NO · ${esc(fail ? fail.why : r.state ? ST[r.state].name : "not a setup")}</span>`;
+    at.insertAdjacentHTML("beforebegin", `<div class="bpck"><h4 style="margin:10px 0 2px;font-size:12px">Board plan · Chart &amp; Entry Spec v6.0 — ${verdict}</h4>
+      ${row("1 · Group not lagging (leading name / group: MAP decides)", C.group.ok, esc(r.group || "—"))}
+      ${row("2 · Above the daily 9 and 21 EMA (hard veto)", C["9/21"].ok, `${f2(r.e9)} | ${f2(r.e21)}`)}
+      ${row("3 · Above the daily 50 SMA", C["50"].ok, f2(r.s50))}
+      ${row(`4 · In the buy zone: ${z[0]} to +${z[1]} ADR from the ${zm().line}`, C.zone.ok, r.zx == null ? "—" : (r.zx >= 0 ? "+" : "") + r.zx.toFixed(2) + " ADR")}
+      ${row(`5 · No more than ${CFG.extCap} ADR above the 50 SMA${r.postER ? " (reset after earnings)" : ""}`, C.ext.ok, r.extU == null ? "—" : r.extU.toFixed(2) + "×")}
+      ${row(`6 · Entry under ${CFG.lodCap} ADR above the low of day`, C.LOD.ok, r.lodU == null ? "—" : r.lodU.toFixed(2) + "×")}
+      ${row(`7 · RS ${CFG.rsMin}+ and no earnings within the window`, C.RS.ok === false || C.ER.ok === false ? false : C.RS.ok == null ? null : true, `RS ${r.rs ?? "—"}${r.erIn != null ? ` · earnings ${r.erIn}d` : ""}`)}
+      <div class="small">Stop = the 30-min pullback low, never wider than ½ ADR (${r.adrD ? f2(r.adrD / 2) : "—"}). Trigger: a 30-min close above the 30-min 21 EMA. The full note is folded below.</div></div>`);
+  };
 }
 </script>
 </body>
