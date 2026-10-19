@@ -8194,13 +8194,17 @@ renderTab = function(t){ _renderTabF(t); if (t === "data") { try { renderFeedCar
      9 Earnings    event session = next NYSE session after the file's upcoming earnings date (the CSV has no BMO/AMC timing,
                    so every date is treated as "after the close or unknown"); N = sessions after the last completed session up
                    to and including it; pass N ≥ 6; Exit By = the session before; no date = blocker, never a pass
-     10 Room       (first resistance − planned entry) / (0.6 × ADR$) ≥ 2, NH passes. Planned entry: L1 / L3 / Above = band top,
-                   L2 = the prior day's EMA9. First resistance = lowest confirmed 5/5 swing high OR low (ties count) from the
-                   last 252 sessions above the entry
+     10 Room       INFORMATION ONLY (Eugene, 19 Oct): shown, coloured ≥ 2R / < 2R, never a blocker, never in the pass, the
+                   list or the first fail. (first resistance − planned entry) / (0.6 × ADR$), NH = nothing above. Planned entry: L1 / L3 / Above = band top,
+                   L2 = the prior day's EMA9. First resistance = the lowest LIVE level above the entry (Eugene, 19 Oct, A + B):
+                   · confirmed 5/5 swing highs and lows (ties count) from the last 252 sessions;
+                   · A: a swing high stops counting once a later bar's high trades above it; a swing low counts only after a
+                     later bar's low trades below it (support turned resistance) and stops once a bar after that trades back above it;
+                   · B: the highest high of the last 5 bars (too recent to confirm as a pivot) is a level too.
      11 LOD (live) entry ≤ 0.6 ADR above today's low; 1R = entry − LOD. Never part of the pass.
-   Lists (Eugene, 19 Oct): hard = 1 2 3 5 7 8 (any fail → Out) · soft = L2, 4, 9, 10.
+   Lists (Eugene, 19 Oct): hard = 1 2 3 5 7 8 (any fail → Out) · soft = L2, 4, 9 (10 = room, information only).
      L1 + no soft blocker = A-eligible · L1 + one = OnDeck-1blocker · L2 + none = OnDeck-L2 · L3 / Above zone = Background
-     (Out with 2+ soft blockers) · anything with two blockers = Out. Spec61 Pass = checks 1–10 all pass (L1 only).
+     (Out with 2+ soft blockers) · anything with two blockers = Out. Spec61 Pass = checks 1–9 all pass (L1 only).
    Size: base grade (Settings) − 1 below the 200 SMA − regime step (MAP says: Supportive 0 · Mixed 1 · Defensive 2)
      − personal steps (urge ≥ 4, three straight losses: 1 each), never below C. Shares = NLV × % ÷ (entry − LOD); before
      the open 1R = 0.6 ADR$ (estimate).
@@ -8222,6 +8226,9 @@ const s61Me = () => store.get("adrb.s61Me", {}) || {};
 const s61Cat = () => new Set(store.get("adrb.s61Cat", []) || []);
 const LOC61 = {L1: {n: "Continuation — in zone", c: "go", code: 1}, L2: {n: "Reclaim watch", c: "zone", code: 2}, L3: {n: "Background", c: "", code: 3},
   ABOVE: {n: "Above zone", c: "wait", code: 4}, BELOW21: {n: "Below 21 — out", c: "bad", code: 0}};
+// C (Eugene, 19 Oct): code BELOW21 also covers a failed check 3 with the close above the 21 EMA — name it for what it is
+const loc61Name = x => !x || !x.loc ? "—" : x.loc === "BELOW21" && x.close > x.e21 ? "Structure fail — out" : LOC61[x.loc].n;
+const res61Txt = at => !at ? "" : at.recent ? `high ${at.d}, last 5 sessions — not yet a confirmed swing` : `swing ${at.hi ? "high" : "low"} ${at.d}`;
 const LIST61 = {"A-eligible": {n: "Focus A-eligible", c: "go"}, "OnDeck-L2": {n: "On deck · L2 reclaim", c: "zone"}, "OnDeck-1blocker": {n: "On deck · 1 blocker", c: "zone"}, Background: {n: "Background", c: ""}, Out: {n: "Out", c: "bad"}};
 const REG_STEP = {Supportive: 0, Mixed: 1, Defensive: 2};
 
@@ -8283,7 +8290,14 @@ function s61Calc(b){
     for (let u = k - P; u <= k + P; u++) { if (u === k) continue; if (!(h[k] >= h[u])) ph = false; if (!(l[k] <= l[u])) pl = false; }
     if (ph) piv.push({k, p: h[k], hi: true, d: b.dates[k]}); if (pl) piv.push({k, p: l[k], hi: false, d: b.dates[k]});
   }
-  const resAbove = px => { let fr = NaN, at = null; for (const q of piv) if (q.p > px && (!fin(fr) || q.p < fr)) { fr = q.p; at = q; } return {fr, at}; };
+  // A · a level price has already traded through is no longer resistance (q.live)
+  for (const q of piv) { let dn = q.hi, gone = false;
+    for (let j = q.k + 1; j <= t && !gone; j++) { if (!dn) { if (l[j] < q.p) dn = true; } else if (h[j] > q.p) gone = true; }
+    q.live = dn && !gone; }
+  // B · the highest high of the last P bars (they can't be confirmed pivots yet)
+  let rk = Math.max(0, t - P + 1); for (let k = rk + 1; k <= t; k++) if (h[k] >= h[rk]) rk = k;
+  const rhi = {k: rk, p: h[rk], hi: true, d: b.dates[rk], recent: true, live: true}, lvl = piv.filter(q => q.live).concat([rhi]);
+  const resAbove = px => { let fr = NaN, at = null; for (const q of lvl) if (q.p > px && (!fin(fr) || q.p < fr)) { fr = q.p; at = q; } return {fr, at}; };
   const R0 = fin(entry) ? resAbove(entry) : {fr: NaN, at: null}, nh = fin(entry) && !fin(R0.fr);
   const room = !fin(entry) || !adrOk ? NaN : nh ? Infinity : (R0.fr - entry) / (C.risk * D);
   // Rejected 9 — label only (A: from below · B: reclaim then rejection), newest within rejKeep sessions
@@ -8299,7 +8313,7 @@ function s61Calc(b){
   const swing = PZ.highest(h, C.hiLen)[t], depth = adrOk && swing > 0 ? ((swing - c[t]) / c[t] * 100) / adr : NaN;
   return {t, close: c[t], to: b.dates[t], bars: n, adr, D, dv20, brk, brkMax, prov: n < C.intBars, e9: e9[t], e9p: t >= 1 ? e9[t - 1] : NaN, e21: e21[t], s50: s50[t], s200: s200[t],
     e21Up, s50Up, k3e21, k3s50, k3wk, wk: {c: wC1, s1: wS1, s2: wS2}, structOk, ext, xr: xReset, extOk, bandTop, bandBot, d9, d21, dB, loc, entry,
-    fr: R0.fr, frAt: R0.at, nh, room, piv, resAbove, rej, braid, depth, lo: l[t], hi: h[t]};
+    fr: R0.fr, frAt: R0.at, nh, room, piv, rhi, resAbove, rej, braid, depth, lo: l[t], hi: h[t]};
 }
 // the screener's fail code and tier (checks 1, 2, 3, 5 + location)
 function s61Pine(x, mcap){
@@ -8331,30 +8345,31 @@ function s61Build(r){
   const main = stg ? WS_MAIN[stg.lab] : null;
   add(4, "Stage", main !== "3" && main !== "1", stg ? `Stage ${stg.lab}` : "no stage", "not Stage 1 or 3 (flag)", "soft");
   add(5, "Extension", x.extOk, fin(x.ext) ? `${sg(x.ext, 2)} ADR${x.xr ? " · reset by a gap" : ""}` : "—", "≤ 4 ADR above the 50 SMA", "hard");
-  add(6, "Location", x.loc == null ? null : x.loc === "L1", x.loc ? `${LOC61[x.loc].n} · band ${sg(x.dB, 2)} · 9 ${sg(x.d9, 2)}` : "—", "L1: 0 to +0.5 ADR above the band", x.loc === "L2" ? "soft" : "loc");
+  add(6, "Location", x.loc == null ? null : x.loc === "L1", x.loc ? `${loc61Name(x)} · band ${sg(x.dB, 2)} · 9 ${sg(x.d9, 2)}` : "—", "L1: 0 to +0.5 ADR above the band", x.loc === "L2" ? "soft" : "loc");
   const gs = r.gState && r.gState !== "—" ? r.gState : null;
   add(7, "Group", gs == null ? null : gs !== "Lagging", gs || "no group state", "not Lagging", "hard");
   add(8, "RS", r.rs == null ? null : r.rs >= C.rsMin, `RS ${r.rs ?? "—"}`, `≥ ${C.rsMin}`, "hard");
   const er = s61Earn(r.eru, x.to, s61Bmo().has(r.sym));
   add(9, "Earnings", er.n == null ? false : er.n >= C.erMin, er.n == null ? `earnings date unknown${er.why === "date already passed" ? " (file's date has passed)" : ""}` : `in ${er.n} session${er.n === 1 ? "" : "s"} · exit by ${er.exitBy}${er.bmo ? " · BMO" : er.alt && er.alt.n !== er.n ? ` · ${er.alt.n} if BMO` : ""}`, "none in the next 5 sessions", "soft");
-  add(10, "Room", !fin(x.entry) ? null : x.nh ? true : x.room >= C.room, !fin(x.entry) ? "no planned entry" : x.nh ? `NH — no pivot above ${f2(x.entry)}` : `${x.room.toFixed(2)}R to ${f2(x.fr)} from ${f2(x.entry)}`, "≥ 2R (1R = 0.6 ADR)", "soft");
+  add(10, "Room", !fin(x.entry) ? null : x.nh ? true : x.room >= C.room, !fin(x.entry) ? "no planned entry" : x.nh ? `NH — no resistance above ${f2(x.entry)}` : `${x.room.toFixed(2)}R to ${f2(x.fr)} (${res61Txt(x.frAt)}) from ${f2(x.entry)}`, "≥ 2R (1R = 0.6 ADR)", "info");
   // 11 · live: today's low, entry at the last price (regular session / live only)
   const pm = S.mode === "pm", lo = pm ? null : r.lo1d, px = r.last;
   let live = null;
-  if (lo != null && px != null && fin(x.D) && px > lo) { const R1 = px - lo, lodA = R1 / x.D, rr = x.resAbove(px), lroom = fin(rr.fr) ? (rr.fr - px) / R1 : Infinity; live = {entry: px, lo, R1, lodA, fr: rr.fr, room: lroom, ok: lodA <= C.lod && lroom >= C.room}; }
+  if (lo != null && px != null && fin(x.D) && px > lo) { const R1 = px - lo, lodA = R1 / x.D, rr = x.resAbove(px), lroom = fin(rr.fr) ? (rr.fr - px) / R1 : Infinity; live = {entry: px, lo, R1, lodA, fr: rr.fr, at: rr.at, room: lroom, ok: lodA <= C.lod}; }
   add(11, "LOD (live)", live ? live.lodA <= C.lod : null, live ? `${live.lodA.toFixed(2)} ADR above today's low ${f2(lo)}` : pm ? "at the entry (opens 10:00 ET)" : "needs today's low", "≤ 0.6 ADR", "live");
   // list
-  const hardFail = [1, 2, 3, 5, 7, 8].filter(n => ck[n].ok !== true), soft = [4, 9, 10].filter(n => ck[n].ok !== true);
+  // 10 · room is information only (Eugene, 19 Oct): never a blocker, never in the pass or the first fail
+  const hardFail = [1, 2, 3, 5, 7, 8].filter(n => ck[n].ok !== true), soft = [4, 9].filter(n => ck[n].ok !== true);
   let list;
   if (hardFail.length || x.loc == null || x.loc === "BELOW21") list = "Out";
   else if (x.loc === "L3" || x.loc === "ABOVE") list = soft.length >= 2 ? "Out" : "Background";
   else if (x.loc === "L2") list = soft.length ? "Out" : "OnDeck-L2";
   else list = soft.length === 0 ? "A-eligible" : soft.length === 1 ? "OnDeck-1blocker" : "Out";
-  const pass = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].every(n => ck[n].ok === true);
-  const ff = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].find(n => ck[n].ok !== true);
+  const pass = [1, 2, 3, 4, 5, 6, 7, 8, 9].every(n => ck[n].ok === true);
+  const ff = [1, 2, 3, 4, 5, 6, 7, 8, 9].find(n => ck[n].ok !== true);
   const ffTxt = ff == null ? "" : ff === 1 ? `1 Liquidity ${r.mcap == null ? "cap unknown" : r.mcap < C.liqCap ? "cap " + money(r.mcap) : !(x.dv20 >= C.liqDv) ? money(x.dv20) + "/day" : "px " + f2(x.close)}`
     : ff === 2 ? `2 Break ${x.brkMax.toFixed(0)}%>40%` : ff === 3 ? `3 Structure ${!x.k3e21 ? "21E" : !x.k3s50 ? "50S" : "10W"}` : ff === 4 ? `4 Stage ${stg ? stg.lab : "?"}`
-    : ff === 5 ? `5 Ext ${fin(x.ext) ? x.ext.toFixed(2) : "?"}>4` : ff === 6 ? `6 ${x.loc ? LOC61[x.loc].n.replace(" — out", "") : "no ADR"}` : ff === 7 ? `7 Group ${gs || "unknown"}`
+    : ff === 5 ? `5 Ext ${fin(x.ext) ? x.ext.toFixed(2) : "?"}>4` : ff === 6 ? `6 ${x.loc ? loc61Name(x).replace(" — out", "") : "no ADR"}` : ff === 7 ? `7 Group ${gs || "unknown"}`
     : ff === 8 ? `8 RS ${r.rs ?? "?"}<${C.rsMin}` : ff === 9 ? `9 Earnings ${er.n == null ? "unknown" : er.n + "<" + C.erMin}` : !fin(x.entry) ? "10 Room no entry" : `10 Room ${x.room.toFixed(2)}R<${C.room}R`;
   const blockers = [...(x.loc === "L2" ? [6] : []), ...soft];
   // size
@@ -8436,9 +8451,10 @@ function s61PanelHTML(r){
   if (!s) return `<div class="s61p">${head}</h4><div class="small dim">${S.has.hist ? "Too little stored history for this name." : "Needs the price history (Data check → load price history)."}</div></div>`;
   const x = s.x, L = x.loc ? LOC61[x.loc] : null, li = LIST61[s.list], def = s61Reg().v === "Defensive";
   const ic = ok => `<span class="ic ${ok == null ? "na" : ok ? "ok" : "no"}">${ok == null ? "·" : ok ? "✓" : "✕"}</span>`;
-  const row = c => `<div class="chk">${ic(c.ok)}<div>${c.n} · ${esc(c.l)}<div class="d">${esc(c.lim)}${c.kind === "soft" ? " · soft blocker" : c.kind === "live" ? " · at the entry, not in the pass" : ""}</div></div><div class="small">${esc(c.v)}</div></div>`;
+  // information-only checks never show a red ✕: under the guide reads as a neutral "!"
+  const row = c => `<div class="chk">${c.kind === "info" && c.ok === false ? `<span class="ic na" title="Under the guide — information only">!</span>` : ic(c.ok)}<div>${c.n} · ${esc(c.l)}<div class="d">${esc(c.lim)}${c.kind === "soft" ? " · soft blocker" : c.kind === "live" ? " · at the entry, not in the pass" : c.kind === "info" ? " · information only, never blocks" : ""}</div></div><div class="small">${esc(c.v)}</div></div>`;
   const chips = [
-    L ? `<span class="pill ${L.c}">${esc(L.n)}</span>` : "",
+    L ? `<span class="pill ${L.c}">${esc(loc61Name(x))}</span>` : "",
     `<span class="pill ${li.c}" title="Spec 6.1 list">${esc(li.n)}</span>`,
     fin(s.rmv) ? `<span class="pill ${s.compressed ? "go" : ""}" title="RMV ≤ ${S61.rmvC} = compressed">RMV ${Math.round(s.rmv)}${s.compressed ? " · compressed" : ""}</span>` : "",
     def && s.exceptional ? `<span class="pill go" title="Leading group or a verified fresh catalyst, AND RMV ≤ 50. Display + Defensive ranking only — never a gate.">Exceptional</span>` : "",
@@ -8455,11 +8471,11 @@ function s61PanelHTML(r){
       <li>Personal step: <b>${z.meStep ? "−" + z.meStep : "0"}</b> <label class="tog"><input type="checkbox" data-s61me="urge" ${z.me.urge ? "checked" : ""}>urge ≥ 4</label> <label class="tog"><input type="checkbox" data-s61me="loss" ${z.me.loss ? "checked" : ""}>3 straight losses</label></li>
       <li>Final grade: <b>${gl(z.final)}</b>${z.floored ? " (floor C)" : ""}</li>
       <li>Shares: ${z.shares != null ? `${CFG.nlv.toLocaleString()} × ${z.final[1]}% ÷ ${f2(z.R1)} = <b>${z.shares.toLocaleString()}</b>` : CFG.nlv ? "—" : "add NLV in Settings"} <span class="small">${z.est ? `1R = 0.6 ADR = ${z.R1 != null ? f2(z.R1) : "—"} (estimate until the trigger; the real 1R is entry − LOD)` : `1R = entry ${f2(z.entry)} − LOD ${f2(s.live.lo)}`}</span></li></ol></div>`;
-  const lv = s.live, live = `<div class="s61lv ${lv ? (lv.ok ? "ok" : "no") : ""}"><div class="lbl">Check 11 · live</div>${lv ? `<span>Entry <b>${f2(lv.entry)}</b></span><span class="${lv.lodA <= S61.lod ? "" : "neg"}">vs LOD <b>${lv.lodA.toFixed(2)} ADR</b> (cap 0.6)</span><span>1R <b>${f2(lv.R1)}</b></span><span>First res. <b>${fin(lv.fr) ? f2(lv.fr) : "NH"}</b></span><span class="${lv.room >= S61.room ? "" : "neg"}">Room <b>${fin(lv.room) ? lv.room.toFixed(2) + "R" : "NH"}</b></span>` : `<span class="small">${S.mode === "pm" ? "Before the open: measured at the trigger (earliest 10:00 ET, close of the first 30-min bar). Entries before 10:00 ET are rule breaks." : "Needs today's low and last price."}</span>`}</div>`;
+  const lv = s.live, live = `<div class="s61lv ${lv ? (lv.ok ? "ok" : "no") : ""}"><div class="lbl">Check 11 · live</div>${lv ? `<span>Entry <b>${f2(lv.entry)}</b></span><span class="${lv.lodA <= S61.lod ? "" : "neg"}">vs LOD <b>${lv.lodA.toFixed(2)} ADR</b> (cap 0.6)</span><span>1R <b>${f2(lv.R1)}</b></span><span title="${esc(res61Txt(lv.at))}">First res. <b>${fin(lv.fr) ? f2(lv.fr) : "NH"}</b>${lv.at ? ` <span class="dim">(${esc(res61Txt(lv.at))})</span>` : ""}</span><span class="${lv.room >= S61.room ? "" : "neg"}">Room <b>${fin(lv.room) ? lv.room.toFixed(2) + "R" : "NH"}</b></span>` : `<span class="small">${S.mode === "pm" ? "Before the open: measured at the trigger (earliest 10:00 ET, close of the first 30-min bar). Entries before 10:00 ET are rule breaks." : "Needs today's low and last price."}</span>`}</div>`;
   const cat = s61Cat().has(r.sym);
-  return `<div class="s61p">${head} — <span class="${s.list === "A-eligible" ? "ok-t" : s.list === "Out" ? "neg" : ""}">${esc(li.n)}${s.ffTxt ? " · first fail " + esc(s.ffTxt) : " · checks 1–10 pass"}</span></h4>
+  return `<div class="s61p">${head} — <span class="${s.list === "A-eligible" ? "ok-t" : s.list === "Out" ? "neg" : ""}">${esc(li.n)}${s.ffTxt ? " · first fail " + esc(s.ffTxt) : " · checks 1–9 pass"}</span></h4>
     <div class="s61chips">${chips}</div>
-    <div class="small" style="margin:4px 0">Planned entry <b>${fin(x.entry) ? f2(x.entry) : "—"}</b>${x.loc === "L2" ? " (prior day's 9 EMA — reclaim level)" : fin(x.entry) ? " (top of the 9/21 band)" : ""} · first resistance <b>${x.nh ? "NH" : fin(x.fr) ? f2(x.fr) : "—"}</b>${x.frAt ? ` <span class="dim">(swing ${x.frAt.hi ? "high" : "low"} ${esc(x.frAt.d)})</span>` : ""} · ADR ${fin(x.adr) ? x.adr.toFixed(2) + "% = $" + f2(x.D) : "—"} · 1 · ${s.ck[1].ok == null ? "liquidity unknown" : s.ck[1].ok ? "liquid" : "illiquid"} · 2 · ${s.ck[2].ok ? "data clean" : "data break"}</div>
+    <div class="small" style="margin:4px 0">Planned entry <b>${fin(x.entry) ? f2(x.entry) : "—"}</b>${x.loc === "L2" ? " (prior day's 9 EMA — reclaim level)" : fin(x.entry) ? " (top of the 9/21 band)" : ""} · first resistance <b>${x.nh ? "NH" : fin(x.fr) ? f2(x.fr) : "—"}</b>${x.frAt ? ` <span class="dim">(${esc(res61Txt(x.frAt))})</span>` : ""} · ADR ${fin(x.adr) ? x.adr.toFixed(2) + "% = $" + f2(x.D) : "—"} · 1 · ${s.ck[1].ok == null ? "liquidity unknown" : s.ck[1].ok ? "liquid" : "illiquid"} · 2 · ${s.ck[2].ok ? "data clean" : "data break"}</div>
     ${[3, 4, 5, 6, 7, 8, 9, 10, 11].map(n => row(s.ck[n])).join("")}
     ${live}${sizeCard}
     <div class="small" style="margin-top:6px">Setup Quality <b>${s.sq}/5</b> · Shadow pivot level <b>${s.shadow != null ? f2(s.shadow) : "—"}</b> <span class="dim">— shadow (not a trigger)</span> · <label class="tog"><input type="checkbox" data-s61cat="${esc(r.sym)}" ${cat ? "checked" : ""}>verified fresh catalyst</label></div>
@@ -8516,25 +8532,25 @@ function renderS61Card(){
   const ffc = {}; all.Out.forEach(s => { const k = s.ff; ffc[k] = (ffc[k] || 0) + 1; });
   const tr = (s, i, cap) => { const x = s.x, r = s.r, z = s.size;
     return `<tr data-sym="${esc(r.sym)}" class="${i < cap ? "" : "dimr"}"><td class="l sym">${esc(r.sym)}</td><td>${rsBadge(r.rs)}</td><td class="l small">${esc(r.group || "")}<br><span class="dim">${esc(r.gState || "")}</span></td>
-      <td><span class="pill ${x.loc ? LOC61[x.loc].c : ""}">${esc(x.loc || "—")}</span></td><td>${sg(x.d9, 2)}</td><td>${fin(x.entry) ? f2(x.entry) : "—"}</td><td>${x.nh ? "NH" : fin(x.fr) ? f2(x.fr) : "—"}</td>
-      <td class="${s.ck[10].ok === false ? "neg" : ""}">${x.nh ? "NH" : fin(x.room) ? x.room.toFixed(2) + "R" : "—"}</td><td class="${s.ck[9].ok ? "" : "neg"}">${s.er.n == null ? "?" : s.er.n}</td>
+      <td><span class="pill ${x.loc ? LOC61[x.loc].c : ""}" title="${esc(loc61Name(x))}">${esc(x.loc === "BELOW21" && x.close > x.e21 ? "STRUCT" : x.loc || "—")}</span></td><td>${sg(x.d9, 2)}</td><td>${fin(x.entry) ? f2(x.entry) : "—"}</td><td>${x.nh ? "NH" : fin(x.fr) ? f2(x.fr) : "—"}</td>
+      <td class="${s.ck[10].ok === false ? "dim" : ""}" title="Room is information only">${x.nh ? "NH" : fin(x.room) ? x.room.toFixed(2) + "R" : "—"}</td><td class="${s.ck[9].ok ? "" : "neg"}">${s.er.n == null ? "?" : s.er.n}</td>
       <td><b>${z.final[0]}</b>${z.shares != null ? `<br><span class="small">${z.shares.toLocaleString()} sh</span>` : ""}</td><td>${s.sq}</td>
       <td class="l small">${s.blockers.length ? `<span class="neg">${esc(s.ffTxt)}</span> ` : ""}${def && s.exceptional ? `<span class="flag good">exceptional</span>` : ""}${s.compressed ? `<span class="flag">compressed</span>` : ""}${x.rej ? `<span class="flag">rejected 9 (${x.rej.type}) ${x.rej.age}d</span>` : ""}${x.prov ? `<span class="flag">${x.bars} bars</span>` : ""}</td></tr>`; };
-  const tbl = (rows, cap, empty) => rows.length ? `<div class="tscroll" style="max-height:420px"><table class="mini s61t"><thead><tr><th class="l">Ticker</th><th>RS</th><th class="l">Group</th><th>Loc</th><th title="Dist 9EMA ADR">9 ADR</th><th title="Planned entry">Entry</th><th title="First resistance: nearest 5/5 swing pivot above the entry">1st res.</th><th title="(first res − entry) / 0.6 ADR">Room</th><th title="NYSE sessions to the earnings session">Earn.</th><th title="Final grade after the SMA, regime and personal steps">Grade</th><th title="Setup Quality 0–5">SQ</th><th class="l">Notes</th></tr></thead><tbody>${rows.map((s, i) => tr(s, i, cap)).join("")}</tbody></table></div>` : `<div class="empty" style="padding:4px 0">${empty}</div>`;
+  const tbl = (rows, cap, empty) => rows.length ? `<div class="tscroll" style="max-height:420px"><table class="mini s61t"><thead><tr><th class="l">Ticker</th><th>RS</th><th class="l">Group</th><th>Loc</th><th title="Dist 9EMA ADR">9 ADR</th><th title="Planned entry">Entry</th><th title="First resistance: the nearest live level above the entry — a 5/5 swing high price hasn't traded above since, a swing low it broke below and hasn't reclaimed, or the highest high of the last 5 sessions">1st res.</th><th title="(first res − entry) / 0.6 ADR">Room</th><th title="NYSE sessions to the earnings session">Earn.</th><th title="Final grade after the SMA, regime and personal steps">Grade</th><th title="Setup Quality 0–5">SQ</th><th class="l">Notes</th></tr></thead><tbody>${rows.map((s, i) => tr(s, i, cap)).join("")}</tbody></table></div>` : `<div class="empty" style="padding:4px 0">${empty}</div>`;
   const deck = [...L["OnDeck-L2"], ...L["OnDeck-1blocker"]].sort(s61By(def));
   const n = k => all[k].length, shown = L["A-eligible"].length + deck.length, tot = n("A-eligible") + n("OnDeck-L2") + n("OnDeck-1blocker"), fl = shown < tot ? ` <span class="small">(filters on: ${shown} shown of ${tot})</span>` : "";
   box.innerHTML = hd + `<div class="bd">
     <div class="s61bar"><span>MAP says ${s61MapSel({regSet: RG.src === "map", reg: mr})} → regime step <b>${RG.src ? (REG_STEP[RG.v] ? "−" + REG_STEP[RG.v] : "0") : "−" + REG_STEP.Defensive}</b>${RG.src === "tape" ? ` <span class="small">(MAP not set — the board's tape read says ${esc(RG.v)})</span>` : !RG.src ? ` <span class="neg">(MAP not set and no breadth file — sized as Defensive)</span>` : ""}</span>
       <label class="tog"><input type="checkbox" data-s61me="urge" ${me.urge ? "checked" : ""}>urge ≥ 4 (−1)</label><label class="tog"><input type="checkbox" data-s61me="loss" ${me.loss ? "checked" : ""}>3 straight losses (−1)</label>
       <span class="small">base grade ${esc(CFG.grade)} unless set per ticker · grade never below C · ranked RS → RS Accel20 → Setup Quality → RMV → DCR%${def ? " · Defensive: exceptional names first" : ""}</span></div>
-    <div class="kpis" style="margin:8px 0"><div class="kpi card"><div class="k">Focus A-eligible</div><div class="v">${n("A-eligible")}</div><div class="n">L1, checks 1–10 pass · MAP picks Focus A 0–5</div></div>
+    <div class="kpis" style="margin:8px 0"><div class="kpi card"><div class="k">Focus A-eligible</div><div class="v">${n("A-eligible")}</div><div class="n">L1, checks 1–9 pass · MAP picks Focus A 0–5</div></div>
       <div class="kpi card"><div class="k">On deck</div><div class="v">${n("OnDeck-L2") + n("OnDeck-1blocker")}</div><div class="n">${n("OnDeck-L2")} L2 reclaim · ${n("OnDeck-1blocker")} one blocker · list 0–6</div></div>
       <div class="kpi card"><div class="k">Background</div><div class="v">${n("Background")}</div><div class="n">L3 or above the zone</div></div>
       <div class="kpi card"><div class="k">Out</div><div class="v">${n("Out")}</div><div class="n">${Object.entries(ffc).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => `#${k}: ${v}`).join(" · ")}</div></div></div>
     <h4 style="margin:8px 0 2px">Focus A-eligible${fl}</h4>${tbl(L["A-eligible"], 5, "No name passes every check 1–10 today.")}
     <h4 style="margin:12px 0 2px">On deck</h4>${tbl(deck, 6, "Nothing on deck.")}
     <details class="tp-fold" style="margin-top:8px"><summary>Background (${L.Background.length})</summary><div style="padding:6px 0">${L.Background.slice(0, 80).map(s => tkChip(s.r, s.x.loc === "ABOVE" ? "above" : "L3")).join("") || `<span class="dim small">none</span>`}</div></details>
-    <details class="tp-fold"><summary>How the lists work</summary><div class="small" style="padding:6px 0">Same rules as Deep Space Screener v5.0 (Unified Spec 6.1), on the stored daily bars. <b>Hard</b> (any fail = out): 1 liquidity ($1B cap, $100M/day 20-day, &gt; $10) · 2 no single-bar break &gt; 40% in 50 bars · 3 above a rising 21 EMA, a rising 50 SMA and a rising 10-week · 5 ≤ 4 ADR above the 50 SMA (or a gap reset) · 7 group not Lagging · 8 RS ≥ 75. <b>Soft</b> (one = on deck, two = out): location L2 · 4 Stage 1 or 3 · 9 earnings inside 5 sessions (or no date) · 10 room under 2R to the first 5/5 swing pivot (1R = 0.6 ADR). L3 and Above zone sit in Background. The first 5 A-eligible and first 6 on deck are full-strength; the rest are greyed. The earnings date in the CSV has no before/after-the-open timing, so every report is treated as after the close: a before-the-open reporter's real exit is one session earlier than shown.</div></details>
+    <details class="tp-fold"><summary>How the lists work</summary><div class="small" style="padding:6px 0">Same rules as Deep Space Screener v5.0 (Unified Spec 6.1), on the stored daily bars. <b>Hard</b> (any fail = out): 1 liquidity ($1B cap, $100M/day 20-day, &gt; $10) · 2 no single-bar break &gt; 40% in 50 bars · 3 above a rising 21 EMA, a rising 50 SMA and a rising 10-week · 5 ≤ 4 ADR above the 50 SMA (or a gap reset) · 7 group not Lagging · 8 RS ≥ 75. <b>Soft</b> (one = on deck, two = out): location L2 · 4 Stage 1 or 3 · 9 earnings inside 5 sessions (or no date). <b>Information only</b> (shown, never blocks — Eugene, 19 Oct): 10 room to the first resistance, ≥ 2R as a guide (1R = 0.6 ADR): the lowest of the 5/5 swing highs price hasn't traded above since, the swing lows it has broken below and not reclaimed, and the highest high of the last 5 sessions. "Structure fail — out" = check 3 failed with the close above the 21 EMA. L3 and Above zone sit in Background. The first 5 A-eligible and first 6 on deck are full-strength; the rest are greyed. The earnings date in the CSV has no before/after-the-open timing, so every report is treated as after the close: a before-the-open reporter's real exit is one session earlier than shown.</div></details>
   </div>`;
   s61Wire(box, null);
   box.querySelectorAll("tbody").forEach(tb => tb.addEventListener("click", e => { if (e.target.closest("[data-sym]:not(tr)")) return; const t = e.target.closest("tr[data-sym]"); if (t) openDrawer(t.dataset.sym); }));
@@ -8591,7 +8607,13 @@ selfCheck = function(){
     F(want === x.loc, r.sym, "Spec 6.1 location label", x.loc, want);
     if (fin(x.entry) && !x.nh) F(Math.abs((x.fr - x.entry) / (0.6 * D) - x.room) < 1e-9 && x.fr > x.entry, r.sym, "Spec 6.1 room = (first res − entry) / 0.6 ADR", x.room, (x.fr - x.entry) / (0.6 * D));
     if (fin(x.entry)) F(x.loc === "L2" ? x.entry === x.e9p : x.entry === x.bandTop, r.sym, "Spec 6.1 planned entry", x.entry, x.loc === "L2" ? x.e9p : x.bandTop);
-    const hard = [1, 2, 3, 5, 7, 8].some(n => s.ck[n].ok !== true), soft = [4, 9, 10].filter(n => s.ck[n].ok !== true).length;
+    // first resistance redone from the bars: still live (A), and never above the last 5 sessions' high when that is above the entry (B)
+    if (x.frAt) { const b = dssBars(r.sym), q = x.frAt;
+      if (b && b.n - 1 === x.t) { const t = x.t, H = b.h, Lw = b.l; let ok, hi5 = -Infinity; for (let k = Math.max(0, t - 4); k <= t; k++) hi5 = Math.max(hi5, H[k]);
+        if (q.recent) ok = q.p === hi5 && q.k > t - 5;
+        else { let j = q.k + 1; if (!q.hi) { while (j <= t && !(Lw[j] < q.p)) j++; j++; } ok = j <= t + 1; for (; ok && j <= t; j++) if (H[j] > q.p) ok = false; }
+        F(ok && (!(hi5 > x.entry) || x.fr <= hi5), r.sym, "Spec 6.1 first resistance not yet traded through (A) and ≤ the 5-session high (B)", `${x.fr} ${q.recent ? "recent" : q.hi ? "high" : "low"} ${q.d}`, `5-session high ${hi5}`); } }
+    const hard = [1, 2, 3, 5, 7, 8].some(n => s.ck[n].ok !== true), soft = [4, 9].filter(n => s.ck[n].ok !== true).length;   // 10 room = information only
     const lw = hard || !x.loc || x.loc === "BELOW21" ? "Out" : x.loc === "L3" || x.loc === "ABOVE" ? (soft >= 2 ? "Out" : "Background") : x.loc === "L2" ? (soft ? "Out" : "OnDeck-L2") : soft === 0 ? "A-eligible" : soft === 1 ? "OnDeck-1blocker" : "Out";
     F(lw === s.list, r.sym, "Spec 6.1 list", s.list, lw);
     F(s.pass === (s.list === "A-eligible"), r.sym, "Spec 6.1 pass = A-eligible", s.pass, s.list);
@@ -8644,7 +8666,7 @@ stopCalc = function(r){
   if (risk <= 0) { out.innerHTML = `<span class="neg">The stop has to sit below the entry.</span>`; return; }
   const lim = r.adrD ? r.adrD * S61.lod : null, fits = lim == null ? null : risk <= lim + 1e-9;
   let room = ""; try { const x = !r.etf ? s61Of(r) : null; if (x && x.x.resAbove) { const q = x.x.resAbove(e), R = fin(q.fr) ? (q.fr - e) / risk : Infinity;
-    room = ` Room to the first swing pivot ${fin(q.fr) ? f2(q.fr) : "(none — NH)"}: <b class="${R >= S61.room ? "pos" : "neg"}">${fin(R) ? R.toFixed(2) + "R" : "NH"}</b> (needs ≥ ${S61.room}R from the actual fill; a gate from test day 1).`; } } catch (err) {}
+    room = ` Room to first resistance ${fin(q.fr) ? f2(q.fr) + " (" + res61Txt(q.at) + ")" : "(none — NH)"}: <b class="${R >= S61.room ? "pos" : "neg"}">${fin(R) ? R.toFixed(2) + "R" : "NH"}</b> (≥ ${S61.room}R from the actual fill is the guide — information only, never blocks).`; } } catch (err) {}
   const z = sizeFor(r, e, s);
   out.innerHTML = `${fits == null ? "" : fits ? `<b class="pos">✓ Entry is within 0.6 ADR of the low.</b> ` : `<b class="neg">✕ Entry is more than 0.6 ADR above the low — no trade.</b> `}Risk $${risk.toFixed(2)} a share (${(risk / e * 100).toFixed(2)}%${r.adrD ? `, ${(risk / r.adrD).toFixed(2)} ADR; cap $${lim.toFixed(2)}` : ""}). First trim at 2R: <b>${(e + 2 * risk).toFixed(2)}</b>.${room}${z ? ` Size (Spec 6.0 grade, before the Spec 6.1 steps): grade ${z.grade} (${z.pct}% NLV) = <b>${z.shares.toLocaleString()} shares</b>${fits === false ? " — but the entry fails the 0.6-ADR cap" : ""}.` : " Add your NLV in Setups for a share count."}`;
 };
