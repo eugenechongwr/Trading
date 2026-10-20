@@ -10137,6 +10137,41 @@ openSnapshot = async function(file){
 // first run of this release: the cards that repeat another page's detail start folded (one click opens them, remembered)
 if (!store.get("adrb.collDef", false)) { ["tapeBox", "Sector strength today", "Groups moving together today", "Breadth file, every line"].forEach(k => COLL.add(k)); store.set("adrb.collapsed", [...COLL]); store.set("adrb.collDef", 1); }
 </script>
+<script>
+"use strict";
+/* =====================================================================
+   DAILY PLAN + DECISION LOG WHILE LIVE MODE IS ON (20 Oct fix). Tracking only.
+   The plan and the log are built from the stock file (jnDays reads the file's date and session). With Live mode on the
+   screen shows Massive's prices instead (S.snap.live), so jnDays returned null and every recording call — a MAP list
+   edit, the MAP import, setting MAP's call, even a new file dropped while live (liveRebase swaps it to live at once) —
+   was skipped: the Daily Plan kept the lists it had when it was first frozen.
+   Now, while live, a recording runs against the file underneath (LV.base.snap): the board is recomputed from the file,
+   jnRecord runs exactly as it does with Live off (same plan day, same 09:30 ET lock, same frozen facts from the file,
+   not from live prices), then the live data is put back and recomputed. Live prices still drive "Now" / "Live status".
+   ===================================================================== */
+const JNL = {busy: false};
+const jnLiveBase = () => !!(S.snap && S.snap.live && typeof LV !== "undefined" && LV.base && LV.base.snap && !LV.base.snap.live && LV.base.snap.files && LV.base.snap.files.length && LV.base.snap.map && LV.base.snap.map.size);
+const _jnRecordL = jnRecord;
+jnRecord = function(){
+  if (JNL.busy || !jnLiveBase()) return _jnRecordL();
+  const keep = {snap: S.snap, etf: S.etfSnap, prev: S.prev, basis: S.basis};
+  let ch = false;
+  JNL.busy = true;
+  try {
+    S.snap = LV.base.snap; if (LV.base.etf && !LV.base.etf.live) S.etfSnap = LV.base.etf; S.prev = null;
+    redetect(); computeAll();
+    ch = _jnRecordL();
+  } finally {
+    S.snap = keep.snap; S.etfSnap = keep.etf; S.prev = keep.prev; S.basis = keep.basis;
+    redetect(); computeAll();
+    JNL.busy = false;
+  }
+  return ch;
+};
+// computeAll → applyHist schedules jnSoon when Spec 6.1 drives the plan; the swap above must not start another one
+const _jnSoonL = jnSoon;
+jnSoon = function(){ if (JNL.busy) return; _jnSoonL(); };
+</script>
 <script id="mobile-js">
 "use strict";
 /* =====================================================================
