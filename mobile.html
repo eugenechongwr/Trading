@@ -7591,7 +7591,7 @@ function jnTodayCard(){
     const rr = jnRoom(o), riskAdr = o.ch && o.ch.stop != null && jnE(o) != null && adrD ? (jnE(o) - o.ch.stop) / adrD : null;
     const m61 = f.s61 ? `<div class="${g ? "" : "dim"}">Entry Check: ${esc((LIST61[f.s61.list] || {n: f.s61.list}).n)}${f.s61.loc ? " · " + esc(ecLocCode(f.s61.loc)) : ""} · grade ${esc(f.s61.grade)}${f.s61.erN != null ? ` · earnings in ${f.s61.erN} sessions, exit by ${esc(f.s61.exitBy || "—")}` : " · earnings unknown"}${f.s61.ff ? ` · what stopped it <span class="neg">${esc(ecPlain(f.s61.ff))}</span>` : ""}</div>` : "";
     const pres = typeof jnPres !== "function" || jnPres(o, rec);
-    const main = `<tr class="jn-main ${show ? "jn-has" : ""} ${pres ? "" : "jn-unseen"}"><td class="l"><span class="sym" ${rowBy.has(o.s) ? `data-jsym="${esc(o.s)}" style="cursor:pointer"` : ""}><b>${esc(o.s)}</b></span><div>${jnSrcHTML(o)}${o.spec ? `<span class="jn-src">Spec ${esc(o.spec)}</span>` : ""}</div>${pres ? "" : `<div class="small dim" title="Outside the shortlist you were shown (first 5 Board Qualified / first 6 On deck / the plan / MAP lists). Open it or mark it and it counts.">qualified, not shown</div>`}</td>
+    const main = `<tr class="jn-main ${show ? "jn-has" : ""} ${pres ? "" : "jn-unseen"}"><td class="l"><span class="sym" ${rowBy.has(o.s) ? `data-jsym="${esc(o.s)}" style="cursor:pointer"` : ""}><b>${esc(o.s)}</b></span><div>${jnSrcHTML(o)}${o.spec ? `<span class="jn-src">Spec ${esc(o.spec)}</span>` : ""}</div>${pres ? "" : `<div class="small dim" title="Outside the shortlist you were shown (first 5 Ready to trade / first 6 On deck / the plan / MAP lists). Open it or mark it and it counts.">qualified, not shown</div>`}</td>
       <td class="l small">${meta}${m61}${f.why ? `<div class="dim">${g ? "Blocker" : "On deck"}: ${esc(f.why)}</div>` : ""}<div class="dim">${esc(f.grp || "")}${f.gs ? " · group " + esc(f.gs) : ""}</div></td>
       <td>${g ? (g.entry == null ? "—" : `${f2(g.entry)}<div class="small dim">1R est ${f2(g.r1)} · ${g.nh ? "NH" : `1st res ${f2(g.fr)} · ${g.room == null ? "—" : g.room.toFixed(2) + "R"}`}</div>`)
         : f.entry == null ? "—" : `${f2(f.entry)}<div class="small dim">stop ${f2(f.stop)} · 2R ${f2(f.tgt)}</div>`}</td>
@@ -9438,7 +9438,7 @@ renderTab = function(t){
    - s61Clear(s): every failing / blocking check as value vs limit + what clears it.
    - DAILY PLAN (Eugene, 20 Oct: "agree"): one per plan day, stored in that day's Decision-log record (rec.plan) so it
      travels with snapshots. It holds the presented shortlist: MAP A / B / stalk (typed or imported order) + the board's
-     lists — Spec 6.1 on: the first 5 Board Qualified and first 6 On deck; Spec 6.0: the plan + the first 6 on deck — each
+     lists — Spec 6.1 on: the first 5 Ready to trade (was "Board Qualified") and first 6 On deck; Spec 6.0: the plan + the first 6 on deck — each
      with its rank, list, why-lines and the facts it was frozen with.
        revision 1 = the first file loaded for the plan day (normally the after-close file); a new file (premarket, a
        re-export) appends the next revision; MAP list edits / history loading update the current revision in place
@@ -9509,7 +9509,7 @@ function wlRow(r){
 }
 
 /* ---------------- the Daily Plan ---------------- */
-const DP_L = {A: "MAP Focus A", B: "MAP Focus B", S: "MAP On deck / Stalk", q: "Board Qualified", d: "Board On deck", zone: "Plan · in zone", wait: "Plan · wait", deck: "On deck"};
+const DP_L = {A: "MAP Focus A", B: "MAP Focus B", S: "MAP On deck / Stalk", q: "Ready to trade", d: "Board On deck", zone: "Plan · in zone", wait: "Plan · wait", deck: "On deck"};
 const DP_BOARD = ["q", "d", "zone", "wait", "deck"];
 const DP_TOP = {q: 5, d: 6, deck: 6};
 const dpLockAt = p => p;                                                       // the plan day; lock = 09:30 ET that day
@@ -9773,7 +9773,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>.jn-t tr.jn-unseen td{opac
    - Today: one screen — MAP's call + the tape read, the index / breadth / volatility lines in a strip, leading and
      weakening groups, earnings events on your names, timestamps; then the Daily Plan (frozen shortlist + live status +
      New Discoveries) and your held names. The full tape read lives on Market; the full plan on Setups.
-   - Watchlist: MAP Focus A / B / On deck-stalk, Board Qualified (first 5) and New Discoveries, My Favourites, Held — one
+   - Watchlist: MAP Focus A / B / On deck-stalk, Ready to trade (first 5; was "Board Qualified") and New Discoveries, My Favourites, Held — one
      compact table each (ticker, source, group, RS of N, location, status, room estimate, earnings, next action, MAP's
      note). Favourites (localStorage adrb.watch) are pinned with ☆ on any row here, the Daily Plan, the Spec 6.1 lists
      and the ticker panel; a favourite that leaves the files stays, marked "not in current data". In the workspace
@@ -9980,18 +9980,18 @@ function wlGroups(){
   let bq = [];
   if (S.has.hist && typeof s61Lists === "function") bq = s61Lists(true)["A-eligible"].slice(0, 5).map(x => mk(x.r.sym, "q"));
   const disc = rec && rec.disc ? Object.values(rec.disc).map(e => mk(e.s, "nd")) : [];
-  G.push(["Board Qualified (first 5) and New Discoveries", [...bq, ...disc.filter(d => !bq.some(b => b.s === d.s))]]);
+  G.push(["Ready to trade (first 5) and New Discoveries", [...bq, ...disc.filter(d => !bq.some(b => b.s === d.s))]]);
   G.push(["My Favourites / Research", wlAll().items.map(x => mk(x.s, "fav"))]);
   G.push(["Held", [...LISTS.held].map(s => mk(s, "H"))]);
   return G;
 }
-const WL_SRC = {A: "MAP A", B: "MAP B", S: "MAP on deck", q: "Board Qualified", nd: "New Discovery", fav: "Favourite", H: "Held"};
+const WL_SRC = {A: "MAP A", B: "MAP B", S: "MAP on deck", q: "Ready to trade", nd: "New Discovery", fav: "Favourite", H: "Held"};
 function wlRowHTML(e, all){
   const r = e.r, also = Object.keys(WL_SRC).filter(k => k !== e.src && all[k] && all[k].has(e.s));
   if (!r) return `<tr class="gone"><td>${wlPin(e.s)}</td><td class="l sym"><b>${esc(e.s)}</b></td><td class="l small">${esc(WL_SRC[e.src])}${also.length ? ` · also ${also.map(k => esc(WL_SRC[k])).join(", ")}` : ""}</td><td class="l small neg" colspan="7">not in current data — kept on your list</td></tr>`;
   const s = !r.etf && S.has.hist ? s61Of(r) : null, x = s ? s.x : null, mn = mapNote(e.s);
   const loc = x ? `<span class="pill ${x.loc ? LOC61[x.loc].c : ""}">${esc(ecLoc(x))}</span>` : statusPill(r);
-  const st = s ? `<span class="pill ${LIST61[s.list].c}">${esc(LIST61[s.list].n.replace("Ready to trade", "Board Qualified"))}</span>` : `<span class="small">${esc(statusOf(r).t)}</span>`;
+  const st = s ? `<span class="pill ${LIST61[s.list].c}">${esc(LIST61[s.list].n)}</span>` : `<span class="small">${esc(statusOf(r).t)}</span>`;
   const room = x ? (x.nh ? "NH" : fin(x.room) ? x.room.toFixed(1) + "R" : "—") : "—";
   const er = s ? (s.er.n == null ? `<span class="neg">?</span>` : `${s.er.n}${s.er.n < S61.erMin ? ` <span class="neg">✕</span>` : ""}`) + (typeof erTimingChip === "function" ? " " + erTimingChip(s) : "") : r.erIn == null || r.erIn < 0 ? "?" : r.erIn + "d";
   return `<tr data-sym="${esc(e.s)}"><td>${wlPin(e.s)}</td><td class="l sym"><b>${esc(e.s)}</b></td><td class="l small">${esc(WL_SRC[e.src])}${also.length ? `<div class="dim">also ${also.map(k => esc(WL_SRC[k])).join(", ")}</div>` : ""}</td>
@@ -10090,7 +10090,7 @@ function dpanelHTML(r){
   const D = x ? x.D : r.adrD || (r.adr && r.last ? r.adr / 100 * r.last : null), cap = S61.lod;
   // 1 valid setup?
   const p = typeof dpCur === "function" ? dpCur() : null, rec = p ? JN.recs[p] : null, inPlan = rec && rec.plan && rec.plan.revs.length ? rec.plan.revs[rec.plan.revs.length - 1].names.find(e => e.s === r.sym) : null;
-  const valid = s ? `<span class="pill ${LIST61[s.list].c}">${esc(LIST61[s.list].n.replace("Ready to trade", "Board Qualified"))}</span> · trend ${x.structOk ? "✓" : "✕"} · ${esc(ecLoc(x))} · group ${esc(r.gState || "—")} · MAP ${esc(mapRegime().v || "not set")}${inPlan ? ` · in today's plan (${esc(DP_L[inPlan.l])} #${inPlan.k})${inPlan.f && inPlan.f.loc && x.loc !== inPlan.f.loc ? ` <span class="neg">— was ${esc(inPlan.f.loc)} at the plan: reassess</span>` : ""}` : " · not in today's plan"}${s.ffTxt && s.list !== "A-eligible" ? `<div class="small neg">${esc(s61Clear(s).map(clearTxt).join("; ") || s.ffTxt)}</div>` : ""}`
+  const valid = s ? `<span class="pill ${LIST61[s.list].c}">${esc(LIST61[s.list].n)}</span> · trend ${x.structOk ? "✓" : "✕"} · ${esc(ecLoc(x))} · group ${esc(r.gState || "—")} · MAP ${esc(mapRegime().v || "not set")}${inPlan ? ` · in today's plan (${esc(DP_L[inPlan.l])} #${inPlan.k})${inPlan.f && inPlan.f.loc && x.loc !== inPlan.f.loc ? ` <span class="neg">— was ${esc(inPlan.f.loc)} at the plan: reassess</span>` : ""}` : " · not in today's plan"}${s.ffTxt && s.list !== "A-eligible" ? `<div class="small neg">${esc(s61Clear(s).map(clearTxt).join("; ") || s.ffTxt)}</div>` : ""}`
     : `${statusPill(r)} <span class="small dim">— Entry Check needs the price history</span>`;
   // 2 entry now?
   const entry = closed ? "Market closed — plan only." : early ? `<b>No.</b> Before 10:00 ET any entry is a rule break (earliest: the close of the first 30-min bar).` : st.st === "trig" || st.st === "taken" ? `<b>${st.st === "taken" ? "Taken" : "Triggered"}</b> — your call.` : `<b>Not confirmed.</b> Check the 30-min bar on the chart: a close over the 30-min 21 EMA, enter at the next bar's open.${S.snap && S.snap.live && r.t30 === true ? " The board's last 30-min reading is over the 21 EMA but the bar may still be forming and the data is 15 minutes delayed." : ""}`;
