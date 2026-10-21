@@ -6278,7 +6278,7 @@ renderTab = function(t){ if (t === "market" && S.snap) { sbPaint(); if (S.has.hi
 "use strict";
 /* =====================================================================
    SPEC 6.0 × PIVOT — SIDE BY SIDE (18 Oct). Off by default (localStorage adrb.s6p). Never changes the plan: it shows
-   which names indicators/structure/spec6-pivot-entry's location gates let through next to today's rules.
+   which names indicators/structure/intraday-pivot's (was spec6-pivot-entry) location gates let through next to today's rules.
    Daily port of that script's detail() at price px = the board's last price:
      1 weekly   last completed week's close > its 10-week SMA, and that SMA rising (vs a week earlier)
      2 21E      px > daily 21 EMA (hard veto)
@@ -7552,7 +7552,9 @@ const jnFmtR = v => v == null ? "—" : (v > 0 ? "+" : "") + v.toFixed(2) + "R";
 const jnFmtP = v => v === undefined ? `<span class="dim">…</span>` : v == null ? "—" : (v > 0 ? "+" : "") + v.toFixed(1) + "%";
 const jnPct = v => v == null ? "—" : Math.round(v) + "%";
 const jnCls = v => v == null ? "" : v > 0 ? "pos" : v < 0 ? "neg" : "";
-const jnSrcHTML = o => o.src.map(k => `<span class="jn-src ${k}">${JN_SRC[k] || k}</span>`).join("");
+// on screen the Entry Check tags read in words; JN_SRC itself is the CSV "lists" text and stays as it was
+const JN_SRC_D = {a61: "Entry Check · Ready to trade", d61: "Entry Check · On deck"};
+const jnSrcHTML = o => o.src.map(k => `<span class="jn-src ${k}">${JN_SRC_D[k] || JN_SRC[k] || k}</span>`).join("");
 function jnOutHTML(sc){
   const s = sc.sim;
   if (jnFinished(s)) return `<span class="jn-out ${jnCls(s.R)}"><b>${jnFmtR(s.R)}</b> <span class="small dim">${JN_OUT[s.k]}</span></span>`;
@@ -7579,7 +7581,7 @@ function jnTodayCard(){
   const TL = {all: () => true, plan: o => has(o, "zone", "wait", "a61"), zone: o => has(o, "zone", "a61"), deck: o => has(o, "deck", "d61"), map: o => has(o, "A", "B", "S")};
   const tl = TL[v.tl] ? v.tl : "all";
   const shown = L.filter(o => TL[tl](o) && !(v.tp && o.dec && o.dec.k === "pass") && !(v.tf && gfOn && !(rowBy.has(o.s) && gOK(rowBy.get(o.s)))));
-  const secOf = o => has(o, "a61") ? "Spec 6.1 Focus A-eligible" : has(o, "zone") ? "Plan · in zone" : has(o, "wait") ? "Plan · wait for pullback" : has(o, "d61") ? "Spec 6.1 On deck" : has(o, "deck") ? "On deck" : "MAP lists";
+  const secOf = o => has(o, "a61") ? "Entry Check · Ready to trade" : has(o, "zone") ? "Plan · in zone" : has(o, "wait") ? "Plan · wait for pullback" : has(o, "d61") ? "Entry Check · On deck" : has(o, "deck") ? "On deck" : "MAP lists";
   JN.shown = {p, list: shown.map(o => o.s), sec: shown.map(o => [o.s, secOf(o)])};
   const row = o => {
     const f = o.f, d = o.dec, k = d ? d.k : null, dis = open ? "" : "disabled", show = d || o.note || o.ch || JN.open.has(p + ":" + o.s);
@@ -7587,7 +7589,7 @@ function jnTodayCard(){
     const meta = [esc(f.status), `RS ${f.rs ?? "—"}`, `grade ${esc(f.grade || "—")}`, f.vs ? esc(VSL[f.vs].n) : "", er, f.piv == null ? "" : f.piv === "pass" ? "Pivot script ✓" : /^needs/.test(f.piv) ? `<span class="dim">Pivot script ? ${esc(f.piv)}</span>` : `Pivot script ✕ <span class="dim">${esc(f.piv)}</span>`].filter(Boolean).join(" · ");
     const g = jn61(o) ? f.s61 : null, cap = g ? S61.risk : 0.5, adrD = g ? ADR61(o) : f.adr && f.last ? f.adr / 100 * f.last : null;
     const rr = jnRoom(o), riskAdr = o.ch && o.ch.stop != null && jnE(o) != null && adrD ? (jnE(o) - o.ch.stop) / adrD : null;
-    const m61 = f.s61 ? `<div class="${g ? "" : "dim"}">Spec 6.1: ${esc((LIST61[f.s61.list] || {n: f.s61.list}).n)}${f.s61.loc ? " · " + esc(f.s61.loc) : ""} · grade ${esc(f.s61.grade)}${f.s61.erN != null ? ` · earnings in ${f.s61.erN} sessions, exit by ${esc(f.s61.exitBy || "—")}` : " · earnings unknown"}${f.s61.ff ? ` · first fail <span class="neg">${esc(f.s61.ff)}</span>` : ""}</div>` : "";
+    const m61 = f.s61 ? `<div class="${g ? "" : "dim"}">Entry Check: ${esc((LIST61[f.s61.list] || {n: f.s61.list}).n)}${f.s61.loc ? " · " + esc(ecLocCode(f.s61.loc)) : ""} · grade ${esc(f.s61.grade)}${f.s61.erN != null ? ` · earnings in ${f.s61.erN} sessions, exit by ${esc(f.s61.exitBy || "—")}` : " · earnings unknown"}${f.s61.ff ? ` · what stopped it <span class="neg">${esc(ecPlain(f.s61.ff))}</span>` : ""}</div>` : "";
     const pres = typeof jnPres !== "function" || jnPres(o, rec);
     const main = `<tr class="jn-main ${show ? "jn-has" : ""} ${pres ? "" : "jn-unseen"}"><td class="l"><span class="sym" ${rowBy.has(o.s) ? `data-jsym="${esc(o.s)}" style="cursor:pointer"` : ""}><b>${esc(o.s)}</b></span><div>${jnSrcHTML(o)}${o.spec ? `<span class="jn-src">Spec ${esc(o.spec)}</span>` : ""}</div>${pres ? "" : `<div class="small dim" title="Outside the shortlist you were shown (first 5 Board Qualified / first 6 On deck / the plan / MAP lists). Open it or mark it and it counts.">qualified, not shown</div>`}</td>
       <td class="l small">${meta}${m61}${f.why ? `<div class="dim">${g ? "Blocker" : "On deck"}: ${esc(f.why)}</div>` : ""}<div class="dim">${esc(f.grp || "")}${f.gs ? " · group " + esc(f.gs) : ""}</div></td>
@@ -7613,12 +7615,12 @@ function jnTodayCard(){
   const ctl = `<div class="jn-ctl">${tlSeg}${tog("tp", "Hide passes", "Hide names you've marked Pass")}${tog("tf", "Only names that pass my filter bar", "Use the filter bar (the presets you use on Stocks and Setups) to narrow this view")}
     <span class="small dim">showing <b>${shown.length}</b> of ${rec.n.length}${shown.length < rec.n.length ? " — hidden names are still logged and scored" : ""}${v.tf && !gfOn ? " · your filter bar is off, so that tick does nothing" : ""}</span></div>`;
   const why61 = `<details class="jn-what"><summary>What puts a name on this list?</summary><div class="small">
-    <p><b>"Spec 6.1 drives the plan" is on, so this list is the Spec 6.1 lists</b> — the same as Setups › Spec 6.1 lists, for the whole file.</p>
-    <p><b>6.1 · Focus A-eligible</b> — continuation in the zone (L1) and every check 1–10 passes: liquidity, clean data, above a rising 21 EMA / 50 SMA / 10-week, not Stage 1 or 3, ≤ 4 ADR above the 50, group not Lagging, RS 75+, no earnings in the next 5 sessions, 2R+ of room.</p>
-    <p><b>6.1 · On deck</b> — an L2 reclaim with no other blocker, or L1 with exactly one soft blocker (stage, earnings or room). The blocker is shown on each row.</p>
+    <p><b>"Entry Check drives the plan" is on, so this list is the Entry Check lists</b> — the same as Setups › Entry Check lists, for the whole file.</p>
+    <p><b>Ready to trade</b> (tag "6.1 · Focus A-eligible") — in the buy zone (L1) and every check 1–9 passes: liquidity, clean data, above a rising daily 21 EMA / daily 50 SMA / weekly 10-week line, not Stage 1 or 3, ≤ 4 ADR above the daily 50 SMA, group not Lagging, RS 75+, no earnings in the next 5 sessions. Room to the first resistance is shown, never a blocker.</p>
+    <p><b>On deck</b> (tag "6.1 · On deck") — just under the buy zone (L2) with nothing else missing, or in the buy zone with exactly one soft blocker (stage or earnings). The blocker is shown on each row.</p>
     <p><b>MAP A / B / stalk</b> — the lists you typed on Setups.</p>
-    <p><b>Entry</b> shows the 6.1 planned entry, the pre-open 1R estimate (0.6 ADR) and the first resistance. Your live stop is the low of day at the trigger — type it as the real stop.</p>
-    <p><b>Scoring.</b> The scores further down still replay the Spec 6.0 levels for every name (one yardstick across all days). The real 6.1 test score (T+5 primary, ladder secondary) comes from your Candidate Episode Outcomes task; the CSV export carries every 6.1 fact it needs.</p>
+    <p><b>Entry</b> shows the Entry Check planned entry, the pre-open 1R estimate (0.6 ADR) and the first resistance. Your live stop is the day low at the trigger — type it as the real stop.</p>
+    <p><b>Scoring.</b> The scores further down still replay the Spec 6.0 levels for every name (one yardstick across all days). The real Entry Check (rules v6.1) test score (T+5 primary, ladder secondary) comes from your Candidate Episode Outcomes task; the CSV export carries every 6.1 fact it needs.</p>
     <p>Your filter bar doesn't change what's logged — the view controls above only hide rows.</p></div></details>`;
   const why = sp61 ? why61 : `<details class="jn-what"><summary>What puts a name on this list?</summary><div class="small">
     <p><b>Plan · in zone / wait</b> — the same list as Setups › The plan: stocks in the buy zone (${zoneText()}) or up to ${CFG.waitW} ADR above it, above the 50 SMA and no more than ${CFG.extCap} ADR above it, with RS ${CFG.rsMin}+${CFG.hideER ? ", earnings inside the window left out" : ""}. Sorted by RS, the best <b>${CFG.planN}</b> make it${CFG.perGroup > 0 ? `, at most ${CFG.perGroup} per group` : ""}.</p>
@@ -7626,10 +7628,10 @@ function jnTodayCard(){
     <p><b>MAP A / B / stalk</b> — the lists you typed on Setups.</p>
     <p><b>Why your filter bar and Stocks screens don't drive it.</b> The log is there to score the board's rules over weeks, so it records the plan with the filter bar off — otherwise the scores would change with whatever filter you had on that night. The view controls above (and "Only names that pass my filter bar") hide rows only.</p>
     <p><b>To shorten the list itself</b>, lower Plan list size (now ${CFG.planN}) or raise RS minimum (now ${CFG.rsMin}) in Settings or on Setups — that shortens Setups › The plan too. It applies from the next file you load; names already logged today stay.</p></div></details>`;
-  const warn61 = sp61 && !S.has.hist ? `<div class="jn-warn">Spec 6.1 drives the plan, and its lists are built from the stored price history — <button class="btn sm" data-hist="full">Load price history</button>. The list fills in once it has loaded; until then only your MAP lists are logged.</div>`
-    : rec.s61 && !sp61 ? `<div class="jn-warn">Spec 6.1 was driving the plan earlier today, and is off now — names from both rule sets are on this list (each row is tagged).</div>`
-    : sp61 && rec.n.some(o => has(o, "zone", "wait", "deck")) ? `<div class="jn-warn">This day started on the Spec 6.0 plan before "Spec 6.1 drives the plan" was switched on — names from both rule sets are on this list (each row is tagged).</div>` : "";
-  return `<div class="card g1" id="jnToday"><div class="hd"><h2>Today's list — plan for ${jnDay(p)}</h2><span class="sub"><b>${sp61 ? "Spec 6.1 lists" : "Spec 6.0 plan"}</b> · ${dataTxt} · ${lockTxt} · <b>${nDec} of ${nPres}</b> shown to you decided${nPres < rec.n.length ? ` · ${rec.n.length - nPres} more qualified, not shown` : ""}</span><span class="spacer"></span>
+  const warn61 = sp61 && !S.has.hist ? `<div class="jn-warn">Entry Check drives the plan, and its lists are built from the stored price history — <button class="btn sm" data-hist="full">Load price history</button>. The list fills in once it has loaded; until then only your MAP lists are logged.</div>`
+    : rec.s61 && !sp61 ? `<div class="jn-warn">Entry Check was driving the plan earlier today, and is off now — names from both rule sets are on this list (each row is tagged).</div>`
+    : sp61 && rec.n.some(o => has(o, "zone", "wait", "deck")) ? `<div class="jn-warn">This day started on the Spec 6.0 plan before "Entry Check drives the plan" was switched on — names from both rule sets are on this list (each row is tagged).</div>` : "";
+  return `<div class="card g1" id="jnToday"><div class="hd"><h2>Today's list — plan for ${jnDay(p)}</h2><span class="sub"><b>${sp61 ? "Entry Check lists" : "Spec 6.0 plan"}</b> · ${dataTxt} · ${lockTxt} · <b>${nDec} of ${nPres}</b> shown to you decided${nPres < rec.n.length ? ` · ${rec.n.length - nPres} more qualified, not shown` : ""}</span><span class="spacer"></span>
       ${rec.n.length ? `<button class="btn sm" data-ja="tvcopy" title="Copies the names shown below as one comma-separated line — paste it into TradingView's Add symbol box">Copy for TradingView</button><button class="btn sm" data-ja="tvfile" title="Downloads the names shown below as a TradingView watchlist file, with sections (Watchlist menu → Import list)">TradingView watchlist</button>` : ""}</div>
     <div class="bd">${warn61}${dd && dd.p !== p ? `<div class="jn-warn">The file on screen is for ${jnDay(dd.p)}, which can't be logged any more — showing the open list for ${jnDay(p)}.</div>` : ""}
     ${!rec.n.length ? `<div class="empty">The board surfaced nothing for this day, and no MAP lists are typed. That's a valid result.</div>` : `${ctl}${why}
@@ -7646,8 +7648,8 @@ function jnRender(){
   const lockedDays = Object.keys(JN.recs).filter(p => !jnOpenDay(p)).length;
   const shownL = locked.filter(x => x.dec !== "unseen"), decided = shownL.filter(x => x.dec !== "none").length;
   const tile = (k, v, n, cls = "") => `<div class="kpi card"><div class="k">${k}</div><div class="v ${cls}">${v}</div><div class="n">${n}</div></div>`;
-  const specSeg = `<div class="jn-ctl"><span class="small"><b>Rules</b></span><span class="seg" id="jnSpec">${[["cur", `Current (Spec ${s61Live() ? "6.1" : "6.0"})`], ["6.0", "Spec 6.0"], ["6.1", "Spec 6.1"], ["all", "All — mixed"]].map(([k, l]) => `<button data-jsp="${k}" class="${(JN.view.spec || "cur") === k ? "on" : ""}">${l}</button>`).join("")}</span><span class="small dim">statistics below read one rule set at a time — each name keeps the rules it was logged under</span></div>`;
-  const kpis = specSeg + `<div class="note jn60"><b>These scores replay the Spec 6.0 levels</b> — for every name, including names logged from the Spec 6.1 lists (one yardstick across all days) (fill at a touch of the board's entry, widest stop = entry − ½ ADR, 2R target, T+3 close). They are not the Spec 6.1 strategy (30-min trigger from 10:00 ET, LOD stop ≤ 0.6 ADR, T+5 primary score, Ladder R) and not your real fills — read them as "did the board's 6.0 levels work", not as your expectancy. Your own fills and exits are scored separately in "Your real trades".</div><div class="kpis">${tile("Days logged", recs, `${lockedDays} locked · ${recs - lockedDays} open`)}${tile("Missed sessions", missed.length, hist ? "trading days with no file loaded" : "needs the price history", missed.length ? "neg" : "")}
+  const specSeg = `<div class="jn-ctl"><span class="small"><b>Rules</b></span><span class="seg" id="jnSpec">${[["cur", `Current (${s61Live() ? "Entry Check" : "Spec 6.0"})`], ["6.0", "Spec 6.0"], ["6.1", "Entry Check (6.1)"], ["all", "All — mixed"]].map(([k, l]) => `<button data-jsp="${k}" class="${(JN.view.spec || "cur") === k ? "on" : ""}">${l}</button>`).join("")}</span><span class="small dim">statistics below read one rule set at a time — each name keeps the rules it was logged under</span></div>`;
+  const kpis = specSeg + `<div class="note jn60"><b>These scores replay the Spec 6.0 levels</b> — for every name, including names logged from the Entry Check lists (one yardstick across all days) (fill at a touch of the board's entry, widest stop = entry − ½ ADR, 2R target, T+3 close). They are not the Entry Check strategy (30-min trigger from 10:00 ET, day-low stop ≤ 0.6 ADR, T+5 primary score, Ladder R) and not your real fills — read them as "did the board's 6.0 levels work", not as your expectancy. Your own fills and exits are scored separately in "Your real trades".</div><div class="kpis">${tile("Days logged", recs, `${lockedDays} locked · ${recs - lockedDays} open`)}${tile("Missed sessions", missed.length, hist ? "trading days with no file loaded" : "needs the price history", missed.length ? "neg" : "")}
     ${tile("Calls made", shownL.length ? jnPct(decided / shownL.length * 100) : "—", `${decided} of ${shownL.length} names shown to you on locked days${A.unseen.n ? ` · ${A.unseen.n} qualified, not shown (not counted)` : ""}`)}
     ${tile("Take · avg R", jnFmtR(A.take.avgR), `${A.take.fin} finished of ${A.take.n}`, jnCls(A.take.avgR))}${tile("Pass · avg R", jnFmtR(A.pass.avgR), `${A.pass.fin} finished of ${A.pass.n}`, jnCls(A.pass.avgR))}
     ${tile("No decision · avg R", jnFmtR(A.none.avgR), `${A.none.fin} finished of ${A.none.n}`, jnCls(A.none.avgR))}</div>`;
@@ -7676,14 +7678,14 @@ function jnRender(){
   if (hist) for (const p of Object.keys(JN.recs)) { const rec = JN.recs[p], t0 = jnT0(rec.d0), b = jnBase(rec, t0); bU5 = bU5.concat(b.u5); bU10 = bU10.concat(b.u10); bS5 = bS5.concat(b.s5); bS10 = bS10.concat(b.s10); if (b.top) { topN += b.top.n; topHit += b.top.hit.length; topDays++; } }
   const bRow = (label, a5, a10) => `<tr><td class="l"><b>${label}</b><div class="small dim">baseline</div></td><td>${a5.filter(x => x != null && isFinite(x)).length}</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td class="${jnCls(jnMed(a5))}">${jnFmtP(jnMed(a5))}</td><td>${jnPct(jnUp(a5))}</td><td class="${jnCls(jnMed(a10))}">${jnFmtP(jnMed(a10))}</td></tr>`;
   const surfT = `<div class="card g1" id="jnSurf"><div class="hd"><h2>Is the board surfacing the right names?</h2><span class="sub">every logged day · moves are close to close after the data session · baselines use the same days</span></div><div class="bd">
-    <table class="mini">${head("List")}<tbody>${aggRow("Plan · in zone", jnAgg(grp("zone")))}${aggRow("Plan · wait for pullback", jnAgg(grp("wait")))}${aggRow("On deck", jnAgg(grp("deck")))}${grp("a61").length + grp("d61").length ? aggRow("Spec 6.1 · Focus A-eligible", jnAgg(grp("a61")), "scored on the 6.0 replay levels") + aggRow("Spec 6.1 · On deck", jnAgg(grp("d61")), "scored on the 6.0 replay levels") : ""}${aggRow("Everything the board surfaced", jnAgg(surfAll))}
+    <table class="mini">${head("List")}<tbody>${aggRow("Plan · in zone", jnAgg(grp("zone")))}${aggRow("Plan · wait for pullback", jnAgg(grp("wait")))}${aggRow("On deck", jnAgg(grp("deck")))}${grp("a61").length + grp("d61").length ? aggRow("Entry Check · Ready to trade", jnAgg(grp("a61")), "scored on the 6.0 replay levels") + aggRow("Entry Check · On deck", jnAgg(grp("d61")), "scored on the 6.0 replay levels") : ""}${aggRow("Everything the board surfaced", jnAgg(surfAll))}
       ${aggRow("MAP A list", jnAgg(grp("A")))}${aggRow("MAP B list", jnAgg(grp("B")))}${aggRow("MAP stalk", jnAgg(grp("S")))}
       ${hist ? bRow(`Strong, not surfaced (RS ${CFG.momRS}+, above the 50)`, bS5, bS10) + bRow("Whole file", bU5, bU10) : ""}</tbody></table>
     ${topDays ? `<div class="small" style="margin-top:6px">Caught <b>${topHit} of ${topN}</b> of the top 20 five-day gainers (liquid names, $20M+ a day) across ${topDays} day${topDays === 1 ? "" : "s"}. Many big gainers are already extended when they run, so a low number here isn't automatically bad — compare it with the rows above.</div>` : ""}</div></div>`;
   // factors
   const FACT = [
-    ["Board list", x => x.o.src.includes("a61") ? "6.1 · Focus A-eligible" : x.o.src.includes("d61") ? "6.1 · On deck" : x.o.src.includes("zone") ? "Plan · in zone" : x.o.src.includes("wait") ? "Plan · wait" : x.o.src.includes("deck") ? "On deck" : "MAP only"],
-    ["Rules logged", x => x.rec.spec === "6.1" ? "Spec 6.1 lists" : "Spec 6.0 plan"],
+    ["Board list", x => x.o.src.includes("a61") ? "Entry Check · Ready to trade" : x.o.src.includes("d61") ? "Entry Check · On deck" : x.o.src.includes("zone") ? "Plan · in zone" : x.o.src.includes("wait") ? "Plan · wait" : x.o.src.includes("deck") ? "On deck" : "MAP only"],
+    ["Rules logged", x => x.rec.spec === "6.1" ? "Entry Check lists" : "Spec 6.0 plan"],
     ["MAP list", x => x.o.src.includes("A") ? "A list" : x.o.src.includes("B") ? "B list" : x.o.src.includes("S") ? "Stalk" : "Not on MAP's lists"],
     ["RS", x => x.o.f.rs == null ? "—" : x.o.f.rs >= 90 ? "90+" : x.o.f.rs >= 80 ? "80–89" : x.o.f.rs >= 60 ? "60–79" : "under 60"],
     ["Volatility", x => x.o.f.vs ? VSL[x.o.f.vs].n : "no history then"],
@@ -7718,12 +7720,12 @@ function jnRender(){
   const logT = `<div class="card g1" id="jnLog"><div class="hd"><h2>Every logged name</h2><span class="sub">${items.length} name-days · ${missed.length} missed session${missed.length === 1 ? "" : "s"}</span><span class="spacer"></span>
       <button class="btn sm" data-ja="csv">Export CSV</button>${recs ? `<button class="btn sm" data-ja="clear">Clear log</button>` : ""}</div><div class="bd">
     <div class="controls" style="margin-bottom:8px;display:flex;gap:10px;flex-wrap:wrap">${segs("jnVd", "dec", [["all", "All calls"], ["take", "Take"], ["stalk", "Stalk"], ["pass", "Pass"], ["none", "No decision"], ["open", "Not decided yet"], ["took", "Entered"]])}
-      ${segs("jnVl", "list", [["all", "All lists"], ["zone", "In zone"], ["wait", "Wait"], ["deck", "On deck"], ["a61", "6.1 A-eligible"], ["d61", "6.1 On deck"], ["A", "MAP A"], ["B", "MAP B"], ["S", "Stalk"]])}</div>
+      ${segs("jnVl", "list", [["all", "All lists"], ["zone", "In zone"], ["wait", "Wait"], ["deck", "On deck"], ["a61", "Entry Check · Ready"], ["d61", "Entry Check · On deck"], ["A", "MAP A"], ["B", "MAP B"], ["S", "Stalk"]])}</div>
     ${missed.length ? `<div class="small" style="margin-bottom:6px"><b>Missed sessions:</b> ${missed.slice(-30).map(jnDay).join(", ")}${missed.length > 30 ? ` and ${missed.length - 30} earlier` : ""}</div>` : ""}
     ${rows.length ? `<div class="tscroll" style="max-height:520px"><table class="mini"><thead><tr><th class="l">Plan day</th><th class="l">Ticker</th><th class="l">Lists</th><th class="l">Board then</th><th class="l">Call</th><th>Entry</th><th class="l">Outcome</th><th>5d</th><th>10d</th><th class="l">Your trade</th></tr></thead><tbody>${logRows}</tbody></table></div>${rows.length > MAXR ? `<div class="small">Showing the newest ${MAXR} of ${rows.length} — Export CSV has them all.</div>` : ""}` : `<div class="empty" style="padding:4px 0">${recs ? "Nothing matches these buttons." : "Nothing logged yet. Load today's files — the board's list opens here automatically."}</div>`}</div></div>`;
   const how = `<div class="card g1" id="jnHow"><div class="hd"><h2>How the scoring works</h2><span class="sub">plain rules, so the numbers can be checked by hand</span></div><div class="bd small">
-    <p><b>Which names.</b> While "Spec 6.1 drives the plan" is off, each day logs the Spec 6.0 plan + on deck. Once it's on, the day logs the Spec 6.1 lists (Focus A-eligible + On deck, whole file) instead, tagged "6.1", with the 6.1 facts frozen (planned entry, 1R estimate, first resistance, room, first fail, grade, earnings / exit by) — all in the CSV.</p>
-    <p><b>Which rules.</b> The Spec 6.0 plan's levels, replayed on daily bars, for every name. Since 19 Oct your live stop is the LOD at the trigger (≤ 0.6 ADR) and the Spec 6.1 test is scored by stop / T+5 close / Exit By with a separate Ladder R — that scoring runs outside the board (Candidate Episode Outcomes). Use these numbers to judge the board's 6.0 levels, not your strategy or your execution.</p>
+    <p><b>Which names.</b> While "Entry Check drives the plan" is off, each day logs the Spec 6.0 plan + on deck. Once it's on, the day logs the Entry Check lists (Ready to trade + On deck, whole file) instead, tagged "6.1", with the Entry Check facts frozen (planned entry, 1R estimate, first resistance, room, first fail, grade, earnings / exit by) — all in the CSV.</p>
+    <p><b>Which rules.</b> The Spec 6.0 plan's levels, replayed on daily bars, for every name. Since 19 Oct your live stop is the day low at the trigger (≤ 0.6 ADR) and the Entry Check (rules v6.1) test is scored by stop / T+5 close / Exit By with a separate Ladder R — that scoring runs outside the board (Candidate Episode Outcomes). Use these numbers to judge the board's 6.0 levels, not your strategy or your execution.</p>
     <p><b>Which day.</b> A premarket file dated Monday is the plan for Monday. A regular-session file from Monday is the plan for Tuesday. A list opens only for a day that hasn't closed yet, and calls lock at 16:00 ET that day.</p>
     <p><b>Reached entry.</b> Within 5 sessions after the data, price trades back to the board's entry (or up through it, when the entry is above where price was). The fill is the entry, or the open if it opened past it.</p>
     <p><b>Result.</b> The trade ends at the board's widest stop (entry − ½ ADR) or the 2R target, whichever is hit first. If neither is hit, it ends at the close of the 3rd session after the fill (your T+3 rule). On the fill day only the stop counts; if the stop and target are both inside one day it counts as the stop. R = (exit − fill) ÷ (entry − widest stop).</p>
@@ -7854,7 +7856,7 @@ openSnapshot = async function(file){
        window of the RS-NH highest (52 DAILY bars — the Pine applies ta.highest on the chart timeframe) earlier days
        see the last completed week, a week's last day sees its own week (request.security, lookahead off).
        Tier 5 / −1 never appear: Focus and Blocklist are empty by default.
-   2 · 6.0X = the spec6-pivot-entry daily gates as the board already ports them (s6Of): 1 weekly close above a rising
+   2 · 6.0X = the intraday-pivot (was spec6-pivot-entry) daily gates as the board already ports them (s6Of): 1 weekly close above a rising
        10W · 2 above the 21 EMA · 3 above a rising 50 SMA · 4 within 0.5 ADR of the 9 or 21 · 5 ≤ 4 ADR above the 50.
        "6X Tier" mirrors the screener's ladder with those gates: floor = liquidity + RS state (Lead/Emrg/Fade, the
        screener's) + gates 1 and 3 (properties of the name); allowance = gates 2, 4, 5 (tonight's location).
@@ -8290,7 +8292,7 @@ function renderFeedCard(){
   const tab = $("tab-data"); if (!tab) return;
   let box = $("feedBox"); if (!box) { const at = tab.querySelector(":scope > p.lede"); (at || tab).insertAdjacentHTML(at ? "afterend" : "afterbegin", `<div class="card g1" id="feedBox"></div>`); box = $("feedBox"); }
   if (!S.snap) { box.innerHTML = ""; return; }
-  const head = `<div class="hd"><h2>Deep Space feed</h2><span class="sub">one CSV for the daily MAP/BRIEF: Deep Space Screener v5.0 (Spec 6.1, 39 columns), Spec 6.1 lists, REACCEL, TAS with live themes, Power List and board context</span><span class="spacer"></span>
+  const head = `<div class="hd"><h2>Deep Space feed</h2><span class="sub">one CSV for the daily MAP/BRIEF: Deep Space Screener v5.0 (rules v6.1, 39 columns), Entry Check lists, REACCEL, TAS with live themes, Power List and board context</span><span class="spacer"></span>
     <button class="btn sm primary" data-feed="csv" ${S.has.hist ? "" : "disabled"}>Export feed CSV</button><button class="btn sm" data-feed="cmp" ${S.has.hist ? "" : "disabled"}>Compare with TradingView exports…</button></div>`;
   if (!S.has.hist) { box.innerHTML = head + `<div class="bd"><div class="empty" style="padding:4px 0">The feed is built from the stored daily bars. <button class="btn sm" data-hist="full">Load price history</button></div></div>`; return; }
   const rows = S.stocks.map(r => ({r, d: dssOf(r.sym)})).filter(o => o.d);
@@ -8318,7 +8320,7 @@ function renderFeedCard(){
   box.innerHTML = head + `<div class="bd">${stale ? `<div class="note" style="margin-bottom:8px;color:var(--neg)"><b>Price history is behind:</b> it ends ${esc(stale.last)} but should run to ${esc(stale.want)} (a holiday can make this a false alarm). Update it before exporting — numbers built across a gap are wrong. <button class="btn sm" data-hist="upd">Update price history</button></div>` : ""}
     <div class="small">Bars to <b>${esc(any ? any.to : "—")}</b>${ts ? ` (stored history + today's bar from ${ts.src === "csv" ? "your file" : ts.src === "live" ? "live mode" : "the board"})` : " (stored history — no newer bar in this file)"} · QQQ regime <b>${esc(reg)}</b> · ${rows.length} stocks scored · screener defaults (zone 0.75, StopFit 1.25, ADR 3%, $20M)</div>
     <table class="mini" style="margin-top:8px"><tbody>
-      <tr><td class="l"><b>Spec 6.1</b> (Deep Space Screener v5.0)</td><td class="l">${s61TierLine(rows)}</td></tr>
+      <tr><td class="l"><b>Entry Check</b> (Deep Space Screener v5.0, rules v6.1)</td><td class="l">${s61TierLine(rows)}</td></tr>
       <tr><td class="l">Spec 6.0 (legacy screener v4.1)</td><td class="l">${tierLine(t60)}</td></tr>
       <tr><td class="l"><b>Spec 6.0X</b> (Pivot script gates)</td><td class="l">${tierLine(t6x)}${t6x["—"] ? ` · ${t6x["—"]} not known` : ""}</td></tr>
       <tr><td class="l">Setup Quality</td><td class="l">${[5, 4, 3, 2, 1, 0].map(k => `<b>${sq[k] || 0}</b> at ${k}`).join(" · ")}</td></tr></tbody></table>
@@ -8388,7 +8390,17 @@ const LOC61 = {L1: {n: "Continuation — in zone", c: "go", code: 1}, L2: {n: "R
 // C (Eugene, 19 Oct): code BELOW21 also covers a failed check 3 with the close above the 21 EMA — name it for what it is
 const loc61Name = x => !x || !x.loc ? "—" : x.loc === "BELOW21" && x.close > x.e21 ? "Structure fail — out" : LOC61[x.loc].n;
 const res61Txt = at => !at ? "" : at.recent ? `high ${at.d}, last 5 sessions — not yet a confirmed swing` : `swing ${at.hi ? "high" : "low"} ${at.d}`;
-const LIST61 = {"A-eligible": {n: "Focus A-eligible", c: "go"}, "OnDeck-L2": {n: "On deck · L2 reclaim", c: "zone"}, "OnDeck-1blocker": {n: "On deck · 1 blocker", c: "zone"}, Background: {n: "Background", c: ""}, Out: {n: "Out", c: "bad"}};
+// list names on screen (21 Oct, Entry Check): plain words. The codes (s.list, the feed's "Spec61 List") are unchanged.
+const LIST61 = {"A-eligible": {n: "Ready to trade", c: "go"}, "OnDeck-L2": {n: "On deck · just under", c: "zone"}, "OnDeck-1blocker": {n: "On deck · one thing missing", c: "zone"}, Background: {n: "Not yet", c: ""}, Out: {n: "Out", c: "bad"}};
+// Entry Check (21 Oct): the Intraday Pivot indicator's location words, for display. LOC61 / loc61Name above keep their text
+// (it reaches the feed's "Spec61 First Fail" through ffTxt and the Decision log's frozen facts).
+const EC_LOC = {L1: "In buy zone", L2: "Just under buy zone (could reclaim)", L3: "Deep under buy zone", ABOVE: "Too high above buy zone"};
+const ecLoc = x => !x || !x.loc ? "—" : x.loc === "BELOW21" ? (x.close > x.e21 ? "Trend broken — out" : "Under the daily 21 EMA — out") : EC_LOC[x.loc];
+const ecLocS = x => ecLoc(x).replace(/ \(could reclaim\)| — out/g, "");                        // table cells
+const ecLocCode = c => !c ? "—" : c === "BELOW21" ? "Under the daily 21 EMA / trend broken — out" : EC_LOC[c] || c;   // a stored code, no close
+// ffTxt (data) read out in words for the screen: "3 Structure 21E" → "3 Trend daily 21 EMA"
+const ecPlain = t => String(t || "").replace(/\b21E\b/g, "daily 21 EMA").replace(/\b50S\b/g, "daily 50 SMA").replace(/\b10W\b/g, "weekly 10-week line").replace(/^3 Structure/, "3 Trend")
+  .replace(/Reclaim watch/, "just under buy zone").replace(/Above zone/, "too high above buy zone").replace(/Background/, "deep under buy zone").replace(/^5 Ext /, "5 Stretch ").replace(/^2 Break /, "2 Bad data ");
 const REG_STEP = {Supportive: 0, Mixed: 1, Defensive: 2};
 
 // earnings in NYSE sessions: N = sessions after lastDone up to and including the event session.
@@ -8499,23 +8511,23 @@ function s61Build(r){
   const money = v => v == null || !fin(v) ? "—" : v >= 1e9 ? "$" + (v / 1e9).toFixed(1) + "B" : "$" + Math.round(v / 1e6) + "M";
   add(1, "Liquidity", r.mcap == null ? null : pine.liqOk, `cap ${money(r.mcap)} · ${money(x.dv20)}/day · $${f2(x.close)}`, "cap ≥ $1B · ≥ $100M/day · > $10", "hard");
   add(2, "Data integrity", !x.brk, `${x.bars} bars${x.prov ? " (provisional)" : ""} · biggest 1-day move ${x.brkMax.toFixed(0)}%`, "no single bar > 40% in 50", "hard");
-  add(3, "Structure", x.structOk, `21E ${x.k3e21 ? "✓" : "✗"} · 50S ${x.k3s50 ? "✓" : "✗"} · 10W ${x.k3wk ? "✓" : "✗"}`, "above rising 21 EMA, 50 SMA, 10-week", "hard");
+  add(3, "Trend (structure)", x.structOk, `daily 21 EMA ${x.k3e21 ? "✓" : "✗"} · daily 50 SMA ${x.k3s50 ? "✓" : "✗"} · weekly 10-week ${x.k3wk ? "✓" : "✗"}`, "above a rising daily 21 EMA, daily 50 SMA and weekly 10-week line", "hard");
   let stg = null; try { stg = stageOf(r); } catch (e) {}
   const main = stg ? WS_MAIN[stg.lab] : null;
   add(4, "Stage", main !== "3" && main !== "1", stg ? `Stage ${stg.lab}` : "no stage", "not Stage 1 or 3 (flag)", "soft");
-  add(5, "Extension", x.extOk, fin(x.ext) ? `${sg(x.ext, 2)} ADR${x.xr ? " · reset by a gap" : ""}` : "—", "≤ 4 ADR above the 50 SMA", "hard");
-  add(6, "Location", x.loc == null ? null : x.loc === "L1", x.loc ? `${loc61Name(x)} · band ${sg(x.dB, 2)} · 9 ${sg(x.d9, 2)}` : "—", "L1: 0 to +0.5 ADR above the band", x.loc === "L2" ? "soft" : "loc");
+  add(5, "Stretch (extension)", x.extOk, fin(x.ext) ? `${sg(x.ext, 2)} ADR${x.xr ? " · reset by a gap" : ""}` : "—", "≤ 4 ADR above the daily 50 SMA", "hard");
+  add(6, "Zone (location)", x.loc == null ? null : x.loc === "L1", x.loc ? `${ecLocS(x)} · band ${sg(x.dB, 2)} · 9 EMA ${sg(x.d9, 2)} ADR` : "—", "buy zone: 0 to +0.5 ADR above the daily 9/21 band", x.loc === "L2" ? "soft" : "loc");
   const gs = r.gState && r.gState !== "—" ? r.gState : null;
   add(7, "Group", gs == null ? null : gs !== "Lagging", gs || "no group state", "not Lagging", "hard");
   add(8, "RS", r.rs == null ? null : r.rs >= C.rsMin, `RS ${r.rs ?? "—"}`, `≥ ${C.rsMin}`, "hard");
   const er = s61Earn(r.eru, x.to, s61Bmo().has(r.sym));
   add(9, "Earnings", er.n == null ? false : er.n >= C.erMin, er.n == null ? `earnings date unknown${er.why === "date already passed" ? " (file's date has passed)" : ""}` : `in ${er.n} session${er.n === 1 ? "" : "s"} · exit by ${er.exitBy}${er.bmo ? " · BMO" : er.alt && er.alt.n !== er.n ? ` · ${er.alt.n} if BMO` : ""}`, "none in the next 5 sessions", "soft");
-  add(10, "Room", !fin(x.entry) ? null : x.nh ? true : x.room >= C.room, !fin(x.entry) ? "no planned entry" : x.nh ? `NH — no resistance above ${f2(x.entry)}` : `${x.room.toFixed(2)}R to ${f2(x.fr)} (${res61Txt(x.frAt)}) from ${f2(x.entry)}`, "≥ 2R (1R = 0.6 ADR)", "info");
+  add(10, "Room", !fin(x.entry) ? null : x.nh ? true : x.room >= C.room, !fin(x.entry) ? "no planned entry" : x.nh ? `new highs — no resistance above ${f2(x.entry)}` : `${x.room.toFixed(2)}R to ${f2(x.fr)} (${res61Txt(x.frAt)}) from ${f2(x.entry)}`, "≥ 2R (1R = 0.6 ADR)", "info");
   // 11 · live: today's low, entry at the last price (regular session / live only)
   const pm = S.mode === "pm", lo = pm ? null : r.lo1d, px = r.last;
   let live = null;
   if (lo != null && px != null && fin(x.D) && px > lo) { const R1 = px - lo, lodA = R1 / x.D, rr = x.resAbove(px), lroom = fin(rr.fr) ? (rr.fr - px) / R1 : Infinity; live = {entry: px, lo, R1, lodA, fr: rr.fr, at: rr.at, room: lroom, ok: lodA <= C.lod}; }
-  add(11, "LOD (live)", live ? live.lodA <= C.lod : null, live ? `${live.lodA.toFixed(2)} ADR above today's low ${f2(lo)}` : pm ? "at the entry (opens 10:00 ET)" : "needs today's low", "≤ 0.6 ADR", "live");
+  add(11, "Day low (live)", live ? live.lodA <= C.lod : null, live ? `${live.lodA.toFixed(2)} ADR above today's low ${f2(lo)}` : pm ? "at the entry (opens 10:00 ET)" : "needs today's low", "entry ≤ 0.6 ADR above the day low", "live");
   // list
   // 10 · room is information only (Eugene, 19 Oct): never a blocker, never in the pass or the first fail
   const hardFail = [1, 2, 3, 5, 7, 8].filter(n => ck[n].ok !== true), soft = [4, 9].filter(n => ck[n].ok !== true);
@@ -8583,7 +8595,7 @@ const FEED_61 = [["MAP Universe", s => yn(s.mapUni)], ["Loc Label", s => s.x.loc
   ["Spec61 List", s => s.list], ["Exceptional", s => yn(s.exceptional)], ["Shadow Pivot Level", s => s.shadow != null ? +s.shadow.toFixed(4) : ""], ["Setup Quality", s => s.sq], ["Rejected 9", s => s61Rej(s)]];
 // compare: a Deep Space Screener v5.0 export (recognised by Loc Label) — checked first, so its "RS Accel20 pp" column isn't read as a REACCEL export
 { const rest = {...CMP_T}; for (const k in CMP_T) delete CMP_T[k];
-  CMP_T.dss5 = {name: "Deep Space Screener v5.0 (Spec 6.1)", test: h => /loc label/.test(h) && /setup quality/.test(h),
+  CMP_T.dss5 = {name: "Deep Space Screener v5.0 (rules v6.1)", test: h => /loc label/.test(h) && /setup quality/.test(h),
     cols: DSS5_COLS.map(([h, f, dp, tol, par]) => ({h, f: (d, r) => { const V = d && d.s61 ? {d, x: d.s61, r, p: s61Pine(d.s61, r && r.mcap != null ? r.mcap : null), sq: s61Sq(d, d.s61)} : null; return V ? f(V) : NaN; }, int: dp == null, key: h, tol, par: !!par})),
     tier: (d, r) => d.s61 ? s61Pine(d.s61, r && r.mcap != null ? r.mcap : null).tier : null, fail: (d, r) => d.s61 ? s61Pine(d.s61, r && r.mcap != null ? r.mcap : null).fail : null};
   Object.assign(CMP_T, rest); }
@@ -8602,48 +8614,67 @@ function s61TierLine(rows){
 // volatility pill under 6.1 (called from vsPill)
 function s61VsPill(r){ const d = r && !r.etf && S.has.hist ? dssOf(r.sym) : null; return d && fin(d.rmv) ? `<span class="pill ${d.rmv <= S61.rmvC ? "go" : ""}" title="RMV 0–100 (lower = tighter); ≤ ${S61.rmvC} = compressed">RMV ${Math.round(d.rmv)}${d.rmv <= S61.rmvC ? " · compressed" : ""}</span>` : null; }
 
-/* ---------------- ticker panel / drawer: one "Spec 6.1" block ---------------- */
-function s61PanelHTML(r){
-  if (r.etf) return "";
-  const s = s61Of(r);
-  const head = `<h4 style="margin:10px 0 4px;font-size:12px">Spec 6.1 ${s61Live() ? "" : `<span class="pill" title="Parity week: the plan above still runs on Spec 6.0. Turn on 'Spec 6.1 drives the plan' in Settings on test day 1.">parity week · not live</span>`}`;
-  if (!s) return `<div class="s61p">${head}</h4><div class="small dim">${S.has.hist ? "Too little stored history for this name." : "Needs the price history (Data check → load price history)."}</div></div>`;
-  const x = s.x, L = x.loc ? LOC61[x.loc] : null, li = LIST61[s.list], def = s61Reg().v === "Defensive";
+/* ---------------- ticker panel / drawer: one "Entry Check" block (was "Spec 6.1") ----------------
+   This is the Detailed view (every check on its own row). The Simple view (the default since 21 Oct) is built in the
+   Entry Check script at the end from the same pieces: s61RowHTML, s61ChipsHTML, s61LiveHTML, s61SizeHTML. */
+const ecTagHTML = () => `<span class="ectag" title="Rules: Unified Spec 6.1 (Chart &amp; Entry Spec 6.1 in Notion · Deep Space Screener v5.0 · Intraday Pivot on the 30-min chart)">rules v6.1</span>`;
+const ecNotLive = () => s61Live() ? "" : `<span class="pill" title="The plan above still runs on Spec 6.0. Turn on Settings › Entry Check drives the plan on test day 1.">Not driving the plan yet</span>`;
+// one check row; information-only checks never show a red ✕: under the guide reads as a neutral "!"
+function s61RowHTML(c){
   const ic = ok => `<span class="ic ${ok == null ? "na" : ok ? "ok" : "no"}">${ok == null ? "·" : ok ? "✓" : "✕"}</span>`;
-  // information-only checks never show a red ✕: under the guide reads as a neutral "!"
-  const row = c => `<div class="chk">${c.kind === "info" && c.ok === false ? `<span class="ic na" title="Under the guide — information only">!</span>` : ic(c.ok)}<div>${c.n} · ${esc(c.l)}<div class="d">${esc(c.lim)}${c.kind === "soft" ? " · soft blocker" : c.kind === "live" ? " · at the entry, not in the pass" : c.kind === "info" ? " · information only, never blocks" : ""}</div></div><div class="small">${esc(c.v)}</div></div>`;
-  const chips = [
-    L ? `<span class="pill ${L.c}">${esc(loc61Name(x))}</span>` : "",
-    `<span class="pill ${li.c}" title="Spec 6.1 list">${esc(li.n)}</span>`,
-    fin(s.rmv) ? `<span class="pill ${s.compressed ? "go" : ""}" title="RMV ≤ ${S61.rmvC} = compressed">RMV ${Math.round(s.rmv)}${s.compressed ? " · compressed" : ""}</span>` : "",
-    def && s.exceptional ? `<span class="pill go" title="Leading group or a verified fresh catalyst, AND RMV ≤ 50. Display + Defensive ranking only — never a gate.">Exceptional</span>` : "",
-    x.rej ? `<span class="pill wait" title="${x.rej.type === "A" ? "Rejected from below: the prior close was under the 9, the high came within 0.25 ADR of it, and it closed back under." : "Reclaim then rejection: it reclaimed the 9 the session before and closed back under."} Label only — never a gate.">rejected 9 (${x.rej.type}) · ${x.rej.age ? x.rej.age + "d ago" : "today"}</span>` : "",
-    x.prov ? `<span class="pill wait" title="Under 100 bars — provisional, still eligible">${x.bars} bars · provisional</span>` : "",
-    s.d.miss ? `<span class="pill wait" title="Sessions in the last 60 where the benchmark has a bar and this name doesn't. They're skipped (as Pine does), so its averages run over fewer real days — check the chart.">${s.d.miss} missing day${s.d.miss === 1 ? "" : "s"}</span>` : "",
-    s.d.stale ? `<span class="pill bad" title="Its last stored bar is older than the benchmark's — the checks are reading an old close">no bar for the last session</span>` : "",
-    s.d.splits ? `<span class="pill" title="A split inside the stored history: earlier bars rescaled by the split ratio (Massive split list)">split-adjusted</span>` : "",
-    (() => { const m = typeof msrcCur === "function" ? msrcCur() : null; if (!m) return `<span class="pill" title="No MAP source list recorded — drop your Deep Space Screener export to record one">MAP source: none recorded</span>`;
-      return m.set.has(r.sym) ? `<span class="pill go" title="In the MAP source universe dated ${esc(m.date)} (${m.n} names)">in MAP source${m.old ? " · " + esc(m.date) : ""}</span>` : `<span class="pill wait" title="Not in the MAP source universe dated ${esc(m.date)} (${m.n} names) — the board's own file is wider than MAP's">not in MAP source</span>`; })(),
-    s.er.n != null ? `<span class="pill ${s.er.n < S61.erMin ? "bad" : s.er.alt && s.er.alt.n < S61.erMin ? "wait" : ""}" title="${s.er.bmo ? "Marked as a before-the-open reporter: the event is the report date." : "The CSV has no before/after-the-open timing, so the event is the session after the report date (§7: after the close or unknown)."}">Earnings in ${s.er.n} sessions · exit by ${esc(s.er.exitBy)}${s.er.bmo ? " · before the open" : s.er.alt && s.er.alt.n !== s.er.n ? ` · if before the open: ${s.er.alt.n} · exit by ${esc(s.er.alt.exitBy)}` : ""}</span>` : `<span class="pill bad">Earnings date unknown</span>`,
-    r.eru ? `<label class="tog small" title="Tick when you know this company reports before the open: the event session becomes the report date (one session earlier)"><input type="checkbox" data-s61bmo="${esc(r.sym)}" ${s.er.bmo ? "checked" : ""}>reports before the open</label>` : ""
-  ].filter(Boolean).join(" ");
+  return `<div class="chk">${c.kind === "info" && c.ok === false ? `<span class="ic na" title="Under the guide — information only">!</span>` : ic(c.ok)}<div>${c.n} · ${esc(c.l)}<div class="d">${esc(c.lim)}${c.kind === "soft" ? " · soft blocker" : c.kind === "live" ? " · at the entry, not in the pass" : c.kind === "info" ? " · information only, never blocks" : ""}</div></div><div class="small">${esc(c.v)}</div></div>`;
+}
+// the chips, by key (the Simple view shows some up top and the rest in "Show the working")
+const S61_CHIPS = ["loc", "list", "rmv", "exc", "rej", "prov", "miss", "stale", "split", "msrc", "er", "bmo"];
+function s61ChipsHTML(r, s, def, keys = S61_CHIPS){
+  const x = s.x, L = x.loc ? LOC61[x.loc] : null, li = LIST61[s.list];
+  const C = {
+    loc: () => L ? `<span class="pill ${L.c}">${esc(ecLoc(x))}</span>` : "",
+    list: () => `<span class="pill ${li.c}" title="Entry Check list">${esc(li.n)}</span>`,
+    rmv: () => fin(s.rmv) ? `<span class="pill ${s.compressed ? "go" : ""}" title="RMV ≤ ${S61.rmvC} = compressed">RMV ${Math.round(s.rmv)}${s.compressed ? " · compressed" : ""}</span>` : "",
+    exc: () => def && s.exceptional ? `<span class="pill go" title="Leading group or a verified fresh catalyst, AND RMV ≤ 50. Display + Defensive ranking only — never a gate.">Exceptional</span>` : "",
+    rej: () => x.rej ? `<span class="pill wait" title="${x.rej.type === "A" ? "Rejected from below: the prior close was under the daily 9 EMA, the high came within 0.25 ADR of it, and it closed back under." : "Reclaim then rejection: it reclaimed the daily 9 EMA the session before and closed back under."} Label only — never a gate.">rejected 9 (${x.rej.type}) · ${x.rej.age ? x.rej.age + "d ago" : "today"}</span>` : "",
+    prov: () => x.prov ? `<span class="pill wait" title="Under 100 bars — provisional, still eligible">${x.bars} bars · provisional</span>` : "",
+    miss: () => s.d.miss ? `<span class="pill wait" title="Sessions in the last 60 where the benchmark has a bar and this name doesn't. They're skipped (as Pine does), so its averages run over fewer real days — check the chart.">${s.d.miss} missing day${s.d.miss === 1 ? "" : "s"}</span>` : "",
+    stale: () => s.d.stale ? `<span class="pill bad" title="Its last stored bar is older than the benchmark's — the checks are reading an old close">no bar for the last session</span>` : "",
+    split: () => s.d.splits ? `<span class="pill" title="A split inside the stored history: earlier bars rescaled by the split ratio (Massive split list)">split-adjusted</span>` : "",
+    msrc: () => { const m = typeof msrcCur === "function" ? msrcCur() : null; if (!m) return `<span class="pill" title="No MAP source list recorded — drop your Deep Space Screener export to record one">MAP source: none recorded</span>`;
+      return m.set.has(r.sym) ? `<span class="pill go" title="In the MAP source universe dated ${esc(m.date)} (${m.n} names)">in MAP source${m.old ? " · " + esc(m.date) : ""}</span>` : `<span class="pill wait" title="Not in the MAP source universe dated ${esc(m.date)} (${m.n} names) — the board's own file is wider than MAP's">not in MAP source</span>`; },
+    er: () => s.er.n != null ? `<span class="pill ${s.er.n < S61.erMin ? "bad" : s.er.alt && s.er.alt.n < S61.erMin ? "wait" : ""}" title="${s.er.bmo ? "Marked as a before-the-open reporter: the event is the report date." : "The CSV has no before/after-the-open timing, so the event is the session after the report date (§7: after the close or unknown)."}">Earnings in ${s.er.n} sessions · exit by ${esc(s.er.exitBy)}${s.er.bmo ? " · before the open" : s.er.alt && s.er.alt.n !== s.er.n ? ` · if before the open: ${s.er.alt.n} · exit by ${esc(s.er.alt.exitBy)}` : ""}</span>` : `<span class="pill bad">Earnings date unknown</span>`,
+    bmo: () => r.eru ? `<label class="tog small" title="Tick when you know this company reports before the open: the event session becomes the report date (one session earlier)"><input type="checkbox" data-s61bmo="${esc(r.sym)}" ${s.er.bmo ? "checked" : ""}>reports before the open</label>` : "",
+    timing: () => typeof erTimingChip === "function" ? erTimingChip(s) : ""
+  };
+  return keys.map(k => C[k] ? C[k]() : "").filter(Boolean).join(" ");
+}
+// check 11 at the entry (regular session / live)
+function s61LiveHTML(s){
+  const lv = s.live;
+  return `<div class="s61lv ${lv ? (lv.ok ? "ok" : "no") : ""}"><div class="lbl">Check 11 · day low · live</div>${lv ? `<span>Entry <b>${f2(lv.entry)}</b></span><span class="${lv.lodA <= S61.lod ? "" : "neg"}">vs the day low <b>${lv.lodA.toFixed(2)} ADR</b> (cap 0.6)</span><span>1R <b>${f2(lv.R1)}</b></span><span title="${esc(res61Txt(lv.at))}">First resistance <b>${fin(lv.fr) ? f2(lv.fr) : "none (new highs)"}</b>${lv.at ? ` <span class="dim">(${esc(res61Txt(lv.at))})</span>` : ""}</span><span class="${lv.room >= S61.room ? "" : "neg"}">Room <b>${fin(lv.room) ? lv.room.toFixed(2) + "R" : "new highs"}</b></span>` : `<span class="small">${S.mode === "pm" ? "Before the open: measured at the trigger (earliest 10:00 ET, the close of the first 30-min bar). Entries before 10:00 ET are rule breaks." : "Needs today's low and last price."}</span>`}</div>`;
+}
+// the size card (a worked list)
+function s61SizeHTML(r, s){
   const z = s.size, gl = g => `${g[0]} ${g[1]}%`;
-  const sizeCard = `<div class="s61sz"><div class="lbl">Size · MAP says ${s61MapSel(z)}</div>
+  return `<div class="s61sz"><div class="lbl">Size · MAP says ${s61MapSel(z)}</div>
     <ol><li>Base grade: <select data-s61grade="${esc(r.sym)}" title="This trade's own base grade (Doctrine: each setup gets its own grade)"><option value="">Settings default (${esc(CFG.grade)})</option>${GRADES.map(g => `<option value="${g[0]}" ${z.baseOwn && z.base[0] === g[0] ? "selected" : ""}>${g[0]} ${g[1]}%</option>`).join("")}</select> = <b>${gl(z.base)}</b> NLV${z.baseOwn ? "" : ` <span class="small neg">— grade this setup; the Settings default is used until you do</span>`}</li>
-      <li>SMA step: ${z.smaKnown ? (z.smaStep ? "<b>−1</b> below the 200 SMA" : "0 — above the 200 SMA") : "0 — 200 SMA unknown (short history)"} <span class="small">(the 50 SMA is a gate here)</span></li>
+      <li>SMA step: ${z.smaKnown ? (z.smaStep ? "<b>−1</b> below the daily 200 SMA" : "0 — above the daily 200 SMA") : "0 — 200 SMA unknown (short history)"} <span class="small">(the daily 50 SMA is a gate here)</span></li>
       <li>Regime step: ${z.regSrc ? `<b>${z.regStep ? "−" + z.regStep : "0"}</b> (${esc(z.reg)}${z.regSrc === "tape" ? " — the board's tape read; MAP not set" : ""})` : `<b>−${z.regStep}</b> <span class="neg">— MAP not set and no breadth file, sized as Defensive</span>`}</li>
       <li>Personal step: <b>${z.meStep ? "−" + z.meStep : "0"}</b> <label class="tog"><input type="checkbox" data-s61me="urge" ${z.me.urge ? "checked" : ""}>urge ≥ 4</label> <label class="tog"><input type="checkbox" data-s61me="loss" ${z.me.loss ? "checked" : ""}>3 straight losses</label></li>
       <li>Final grade: <b>${gl(z.final)}</b>${z.floored ? " (floor C)" : ""}</li>
-      <li>Shares: ${z.shares != null ? `${CFG.nlv.toLocaleString()} × ${z.final[1]}% ÷ ${f2(z.R1)} = <b>${z.shares.toLocaleString()}</b>` : CFG.nlv ? "—" : "add NLV in Settings"} <span class="small">${z.est ? `1R = 0.6 ADR = ${z.R1 != null ? f2(z.R1) : "—"} (estimate until the trigger; the real 1R is entry − LOD)` : `1R = entry ${f2(z.entry)} − LOD ${f2(s.live.lo)}`}</span></li></ol></div>`;
-  const lv = s.live, live = `<div class="s61lv ${lv ? (lv.ok ? "ok" : "no") : ""}"><div class="lbl">Check 11 · live</div>${lv ? `<span>Entry <b>${f2(lv.entry)}</b></span><span class="${lv.lodA <= S61.lod ? "" : "neg"}">vs LOD <b>${lv.lodA.toFixed(2)} ADR</b> (cap 0.6)</span><span>1R <b>${f2(lv.R1)}</b></span><span title="${esc(res61Txt(lv.at))}">First res. <b>${fin(lv.fr) ? f2(lv.fr) : "NH"}</b>${lv.at ? ` <span class="dim">(${esc(res61Txt(lv.at))})</span>` : ""}</span><span class="${lv.room >= S61.room ? "" : "neg"}">Room <b>${fin(lv.room) ? lv.room.toFixed(2) + "R" : "NH"}</b></span>` : `<span class="small">${S.mode === "pm" ? "Before the open: measured at the trigger (earliest 10:00 ET, close of the first 30-min bar). Entries before 10:00 ET are rule breaks." : "Needs today's low and last price."}</span>`}</div>`;
-  const cat = s61Cat().has(r.sym);
-  return `<div class="s61p">${head} — <span class="${s.list === "A-eligible" ? "ok-t" : s.list === "Out" ? "neg" : ""}">${esc(li.n)}${s.ffTxt ? " · first fail " + esc(s.ffTxt) : " · checks 1–9 pass"}</span></h4>
-    <div class="s61chips">${chips}</div>
-    <div class="small" style="margin:4px 0">Planned entry <b>${fin(x.entry) ? f2(x.entry) : "—"}</b>${x.loc === "L2" ? " (prior day's 9 EMA — reclaim level)" : fin(x.entry) ? " (top of the 9/21 band)" : ""} · first resistance <b>${x.nh ? "NH" : fin(x.fr) ? f2(x.fr) : "—"}</b>${x.frAt ? ` <span class="dim">(${esc(res61Txt(x.frAt))})</span>` : ""} · ADR ${fin(x.adr) ? x.adr.toFixed(2) + "% = $" + f2(x.D) : "—"} · 1 · ${s.ck[1].ok == null ? "liquidity unknown" : s.ck[1].ok ? "liquid" : "illiquid"} · 2 · ${s.ck[2].ok ? "data clean" : "data break"}</div>
-    ${[3, 4, 5, 6, 7, 8, 9, 10, 11].map(n => row(s.ck[n])).join("")}
-    ${live}${sizeCard}
-    <div class="small" style="margin-top:6px">Setup Quality <b>${s.sq}/5</b> · Shadow pivot level <b>${s.shadow != null ? f2(s.shadow) : "—"}</b> <span class="dim">— shadow (not a trigger)</span> · <label class="tog"><input type="checkbox" data-s61cat="${esc(r.sym)}" ${cat ? "checked" : ""}>verified fresh catalyst</label></div>
-    <div class="small dim">Trigger: a 30-min close above the 30-min 21 EMA, earliest the 10:00 ET bar close. Stop = LOD at the trigger. Exits: ⅓ at 2R (3R if chosen before entry) or the T+3 close — a T+3 close below the entry sells the whole position → stop to breakeven → shave 10% at each whole ADR from 7 ADR above the 50 SMA → runner out on a daily close under the 9 EMA.</div></div>`;
+      <li>Shares: ${z.shares != null ? `${CFG.nlv.toLocaleString()} × ${z.final[1]}% ÷ ${f2(z.R1)} = <b>${z.shares.toLocaleString()}</b>` : CFG.nlv ? "—" : "add NLV in Settings"} <span class="small">${z.est ? `1R = 0.6 ADR = ${z.R1 != null ? f2(z.R1) : "—"} (estimate until the trigger; the real 1R is entry − the day low)` : `1R = entry ${f2(z.entry)} − day low ${f2(s.live.lo)}`}</span></li></ol></div>`;
+}
+function s61PanelHTML(r){
+  if (r.etf) return "";
+  const s = s61Of(r);
+  const head = `<h4 style="margin:10px 0 4px;font-size:12px">Entry Check ${ecTagHTML()} ${ecNotLive()}`;
+  if (!s) return `<div class="s61p">${head}</h4><div class="small dim">${S.has.hist ? "Too little stored history for this name." : "Needs the price history (Data check → load price history)."}</div></div>`;
+  const x = s.x, li = LIST61[s.list], def = s61Reg().v === "Defensive", cat = s61Cat().has(r.sym);
+  return `<div class="s61p">${head} — <span class="${s.list === "A-eligible" ? "ok-t" : s.list === "Out" ? "neg" : ""}">${esc(li.n)}${s.ffTxt ? " · what's stopping it: " + esc(ecPlain(s.ffTxt)) : " · checks 1–9 pass"}</span></h4>
+    <div class="s61chips">${s61ChipsHTML(r, s, def)}</div>
+    <div class="small" style="margin:4px 0">Planned entry <b>${fin(x.entry) ? f2(x.entry) : "—"}</b>${x.loc === "L2" ? " (yesterday's daily 9 EMA — the reclaim level)" : fin(x.entry) ? " (top of the daily 9/21 band)" : ""} · first resistance <b>${x.nh ? "none (new highs)" : fin(x.fr) ? f2(x.fr) : "—"}</b>${x.frAt ? ` <span class="dim">(${esc(res61Txt(x.frAt))})</span>` : ""} · ADR ${fin(x.adr) ? x.adr.toFixed(2) + "% = $" + f2(x.D) : "—"} · 1 · ${s.ck[1].ok == null ? "liquidity unknown" : s.ck[1].ok ? "liquid" : "illiquid"} · 2 · ${s.ck[2].ok ? "data clean" : "data break"}</div>
+    ${[3, 4, 5, 6, 7, 8, 9, 10, 11].map(n => s61RowHTML(s.ck[n])).join("")}
+    ${s61LiveHTML(s)}${s61SizeHTML(r, s)}
+    <div class="small" style="margin-top:6px">Setup Quality <b>${s.sq}/5</b> · Old pivot level <b>${s.shadow != null ? f2(s.shadow) : "—"}</b> <span class="dim">(reference only)</span> · <label class="tog"><input type="checkbox" data-s61cat="${esc(r.sym)}" ${cat ? "checked" : ""}>verified fresh catalyst</label></div>
+    <div class="small dim">Trigger (on TradingView, Intraday Pivot): a 30-min candle closes back above the 30-min 21 EMA (the trigger line), earliest the 10:00 New York close; buy at the next 30-min candle's open. Stop = the day low at the trigger. Exits: ⅓ at 2R (3R if chosen before entry) or the T+3 daily close — a T+3 close below the entry sells the whole position → stop to breakeven → shave 10% at each whole ADR from 7 ADR above the daily 50 SMA → runner out on a daily close under the daily 9 EMA.</div></div>`;
 }
 // MAP's call, settable here too (the Market card needs the breadth file); the same stored value as the Market card
 function s61MapSel(z){ return `<select data-s61map title="MAP's Overall Verdict for today — the same setting as on Market"><option value="">— not set —</option>${MAPV.map(v => `<option ${z.regSet && z.reg === v ? "selected" : ""}>${v}</option>`).join("")}</select>`; }
@@ -8679,7 +8710,7 @@ if (WS) {
   };
 }
 
-/* ---------------- Setups: the Spec 6.1 lists ---------------- */
+/* ---------------- Setups: the Entry Check lists (was "Spec 6.1 lists") ---------------- */
 function renderS61Card(){
   const tab = $("tab-plan"); if (!tab || !S.snap) return;
   let box = $("s61Box");
@@ -8690,41 +8721,41 @@ function renderS61Card(){
   if (live && planCard) planCard.before(box); else if (!live) $("s6pBox").before(box);
   [planCard, deckCard, rules, $("s6pBox")].forEach(el => el && el.classList.toggle("hidden", live));
   const wt = $("planCtl") && $("planCtl").querySelector('[data-c="wildDeck"]'); if (wt) wt.closest("label").classList.toggle("hidden", live);
-  const hd = `<div class="hd"><h2>Spec 6.1 lists</h2><span class="sub">${live ? "<b>live</b> — the plan for the Spec 6.1 test" : "parity week · not live — the plan above still runs on Spec 6.0"}</span><span class="spacer"></span>${S.has.hist ? `<button class="btn sm" id="s61Tv">Copy A + on deck for TradingView</button>` : ""}</div>`;
-  if (!S.has.hist) { box.innerHTML = hd + `<div class="bd"><div class="empty" style="padding:4px 0">Spec 6.1 is built from the stored daily bars (swing pivots, weekly 10W, slopes). <button class="btn sm" data-hist="full">Load price history</button></div></div>`; return; }
+  const hd = `<div class="hd"><h2>Entry Check lists</h2><span class="ectag" title="Rules: Unified Spec 6.1 (Chart &amp; Entry Spec 6.1 in Notion · Deep Space Screener v5.0)">rules v6.1</span><span class="sub">${live ? "<b>live</b> — Entry Check drives the plan" : "not driving the plan yet — the plan above still runs on Spec 6.0 (Settings › Entry Check drives the plan)"}</span><span class="spacer"></span>${S.has.hist ? `<button class="btn sm" id="s61Tv">Copy ready + on deck for TradingView</button>` : ""}</div>`;
+  if (!S.has.hist) { box.innerHTML = hd + `<div class="bd"><div class="empty" style="padding:4px 0">Entry Check is built from the stored daily bars (swing pivots, the weekly 10-week line, slopes). <button class="btn sm" data-hist="full">Load price history</button></div></div>`; return; }
   const L = s61Lists(false), all = s61Lists(true), RG = s61Reg(), mr = mapRegime().v || "", me = s61Me(), def = RG.v === "Defensive";
-  const ffc = {}; all.Out.forEach(s => { const k = s.ff; ffc[k] = (ffc[k] || 0) + 1; });
+  const ffc = {}; all.Out.forEach(s => { const k = [1, 2, 3, 5, 7, 8].find(n => s.ck[n].ok !== true) ?? s.ff; ffc[k] = (ffc[k] || 0) + 1; });
   const tr = (s, i, cap, rows) => { const x = s.x, r = s.r, z = s.size, nx = rows && rows[i + 1];
     const tie = nx && i < cap && typeof tieWhy === "function" ? `<div class="small dim" style="font-weight:400" title="The tie-break that ranks it above the next row">over ${esc(nx.r.sym)}: ${esc(tieWhy(s, nx, def))}</div>` : "";
     const erQ = !s.er.bmo && s.er.n != null && s.er.n <= 10 ? `<span class="flag" title="Timing unknown — read as after the close (the rule). ${s.er.alt && s.er.alt.n < S61.erMin && s.er.n >= S61.erMin ? "Before the open it would be inside the 5-session gate." : ""}">${s.er.alt && s.er.alt.n < S61.erMin && s.er.n >= S61.erMin ? "?!" : "?"}</span>` : "";
-    const why = typeof s61Clear === "function" && s.blockers.length ? s61Clear(s).filter(c => s.blockers.includes(c.n) || (c.n === 6 && x.loc === "L2")).map(c => `<div class="neg">${esc(clearTxt(c))}</div>`).join("") : "";
+    const W = typeof ecWhy === "function" ? ecWhy(s) : {}, why = s.blockers.map(n => W[n] ? `<div class="neg">${esc(W[n])}</div>` : "").join("");
     return `<tr data-sym="${esc(r.sym)}" class="${i < cap ? "" : "dimr"}"><td class="l sym">${esc(r.sym)}${tie}</td><td>${rsBadge(r.rs)}</td><td class="l small">${esc(r.group || "")}<br><span class="dim">${esc(r.gState || "")}</span></td>
-      <td><span class="pill ${x.loc ? LOC61[x.loc].c : ""}" title="${esc(loc61Name(x))}">${esc(x.loc === "BELOW21" && x.close > x.e21 ? "STRUCT" : x.loc || "—")}</span></td><td>${sg(x.d9, 2)}</td><td>${fin(x.entry) ? f2(x.entry) : "—"}</td><td>${x.nh ? "NH" : fin(x.fr) ? f2(x.fr) : "—"}</td>
+      <td><span class="pill ${x.loc ? LOC61[x.loc].c : ""}" title="code ${esc(x.loc || "—")}">${esc(ecLocS(x))}</span></td><td>${sg(x.d9, 2)}</td><td>${fin(x.entry) ? f2(x.entry) : "—"}</td><td>${x.nh ? "NH" : fin(x.fr) ? f2(x.fr) : "—"}</td>
       <td class="${s.ck[10].ok === false ? "dim" : ""}" title="Room is information only">${x.nh ? "NH" : fin(x.room) ? x.room.toFixed(2) + "R" : "—"}</td><td class="${s.ck[9].ok ? "" : "neg"}">${s.er.n == null ? "?" : s.er.n}${erQ}</td>
       <td><b>${z.final[0]}</b>${z.shares != null ? `<br><span class="small">${z.shares.toLocaleString()} sh</span>` : ""}</td><td>${s.sq}</td>
-      <td class="l small">${s.blockers.length ? (why || `<span class="neg">${esc(s.ffTxt)}</span> `) : ""}${def && s.exceptional ? `<span class="flag good">exceptional</span>` : ""}${s.compressed ? `<span class="flag">compressed</span>` : ""}${x.rej ? `<span class="flag">rejected 9 (${x.rej.type}) ${x.rej.age}d</span>` : ""}${x.prov ? `<span class="flag">${x.bars} bars</span>` : ""}</td></tr>`; };
-  const tbl = (rows, cap, empty) => rows.length ? `<div class="tscroll" style="max-height:420px"><table class="mini s61t"><thead><tr><th class="l">Ticker</th><th>RS</th><th class="l">Group</th><th>Loc</th><th title="Dist 9EMA ADR">9 ADR</th><th title="Planned entry">Entry</th><th title="First resistance: the nearest live level above the entry — a 5/5 swing high price hasn't traded above since, a swing low it broke below and hasn't reclaimed, or the highest high of the last 5 sessions">1st res.</th><th title="(first res − entry) / 0.6 ADR">Room</th><th title="NYSE sessions to the earnings session">Earn.</th><th title="Final grade after the SMA, regime and personal steps">Grade</th><th title="Setup Quality 0–5">SQ</th><th class="l">Notes</th></tr></thead><tbody>${rows.map((s, i) => tr(s, i, cap, rows)).join("")}</tbody></table></div>` : `<div class="empty" style="padding:4px 0">${empty}</div>`;
+      <td class="l small">${s.blockers.length ? (why || `<span class="neg">${esc(ecPlain(s.ffTxt))}</span> `) : ""}${def && s.exceptional ? `<span class="flag good">exceptional</span>` : ""}${s.compressed ? `<span class="flag">compressed</span>` : ""}${x.rej ? `<span class="flag">rejected 9 (${x.rej.type}) ${x.rej.age}d</span>` : ""}${x.prov ? `<span class="flag">${x.bars} bars</span>` : ""}</td></tr>`; };
+  const tbl = (rows, cap, empty) => rows.length ? `<div class="tscroll" style="max-height:420px"><table class="mini s61t"><thead><tr><th class="l">Ticker</th><th>RS</th><th class="l">Group</th><th>Loc</th><th title="Distance from the daily 9 EMA, in ADR (Dist 9EMA ADR)">9 ADR</th><th title="Planned entry">Entry</th><th title="First resistance: the nearest level above the entry still in play — a 5/5 swing high price hasn't traded above since, a swing low it broke below and hasn't reclaimed, or the highest high of the last 5 sessions">1st res.</th><th title="(first res − entry) / 0.6 ADR">Room</th><th title="NYSE sessions to the earnings session">Earn.</th><th title="Final grade after the SMA, regime and personal steps">Grade</th><th title="Setup Quality 0–5">SQ</th><th class="l">Notes</th></tr></thead><tbody>${rows.map((s, i) => tr(s, i, cap, rows)).join("")}</tbody></table></div>` : `<div class="empty" style="padding:4px 0">${empty}</div>`;
   const deck = [...L["OnDeck-L2"], ...L["OnDeck-1blocker"]].sort(s61By(def));
   const n = k => all[k].length, shown = L["A-eligible"].length + deck.length, tot = n("A-eligible") + n("OnDeck-L2") + n("OnDeck-1blocker"), fl = shown < tot ? ` <span class="small">(filters on: ${shown} shown of ${tot})</span>` : "";
   box.innerHTML = hd + `<div class="bd">
     <div class="s61bar"><span>MAP says ${s61MapSel({regSet: RG.src === "map", reg: mr})} → regime step <b>${RG.src ? (REG_STEP[RG.v] ? "−" + REG_STEP[RG.v] : "0") : "−" + REG_STEP.Defensive}</b>${RG.src === "tape" ? ` <span class="small">(MAP not set — the board's tape read says ${esc(RG.v)})</span>` : !RG.src ? ` <span class="neg">(MAP not set and no breadth file — sized as Defensive)</span>` : ""}</span>
       <label class="tog"><input type="checkbox" data-s61me="urge" ${me.urge ? "checked" : ""}>urge ≥ 4 (−1)</label><label class="tog"><input type="checkbox" data-s61me="loss" ${me.loss ? "checked" : ""}>3 straight losses (−1)</label>
       <span class="small">base grade ${esc(CFG.grade)} unless set per ticker · grade never below C · ranked RS → RS Accel20 → Setup Quality → RMV → DCR%${def ? " · Defensive: exceptional names first" : ""}</span></div>
-    <div class="kpis" style="margin:8px 0"><div class="kpi card"><div class="k">Focus A-eligible</div><div class="v">${n("A-eligible")}</div><div class="n">L1, checks 1–9 pass · MAP picks Focus A 0–5</div></div>
-      <div class="kpi card"><div class="k">On deck</div><div class="v">${n("OnDeck-L2") + n("OnDeck-1blocker")}</div><div class="n">${n("OnDeck-L2")} L2 reclaim · ${n("OnDeck-1blocker")} one blocker · list 0–6</div></div>
-      <div class="kpi card"><div class="k">Background</div><div class="v">${n("Background")}</div><div class="n">L3 or above the zone</div></div>
-      <div class="kpi card"><div class="k">Out</div><div class="v">${n("Out")}</div><div class="n">${Object.entries(ffc).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => `#${k}: ${v}`).join(" · ")}</div></div></div>
-    <h4 style="margin:8px 0 2px">Focus A-eligible${fl}</h4>${tbl(L["A-eligible"], 5, "No name passes every check 1–10 today.")}
+    <div class="kpis" style="margin:8px 0"><div class="kpi card"><div class="k">Ready to trade</div><div class="v">${n("A-eligible")}</div><div class="n">in the buy zone, every check passes · MAP picks Focus A 0–5</div></div>
+      <div class="kpi card"><div class="k">On deck</div><div class="v">${n("OnDeck-L2") + n("OnDeck-1blocker")}</div><div class="n">${n("OnDeck-L2")} just under the zone · ${n("OnDeck-1blocker")} one thing missing · list 0–6</div></div>
+      <div class="kpi card"><div class="k">Not yet</div><div class="v">${n("Background")}</div><div class="n">deep under or too high above the buy zone</div></div>
+      <div class="kpi card"><div class="k">Out</div><div class="v">${n("Out")}</div><div class="n" title="What stops them (the first hard check that fails)">${Object.entries(ffc).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => `${EC_CK[k] || "#" + k}: ${v}`).join(" · ")}</div></div></div>
+    <h4 style="margin:8px 0 2px">Ready to trade${fl}</h4>${tbl(L["A-eligible"], 5, "No name passes every check today.")}
     <h4 style="margin:12px 0 2px">On deck</h4>${tbl(deck, 6, "Nothing on deck.")}
-    <details class="tp-fold" style="margin-top:8px"><summary>Background (${L.Background.length})</summary><div style="padding:6px 0">${L.Background.slice(0, 80).map(s => tkChip(s.r, s.x.loc === "ABOVE" ? "above" : "L3")).join("") || `<span class="dim small">none</span>`}</div></details>
-    <details class="tp-fold"><summary>How the lists work</summary><div class="small" style="padding:6px 0">Same rules as Deep Space Screener v5.0 (Unified Spec 6.1), on the stored daily bars. <b>Hard</b> (any fail = out): 1 liquidity ($1B cap, $100M/day 20-day, &gt; $10) · 2 no single-bar break &gt; 40% in 50 bars · 3 above a rising 21 EMA, a rising 50 SMA and a rising 10-week · 5 ≤ 4 ADR above the 50 SMA (or a gap reset) · 7 group not Lagging · 8 RS ≥ 75. <b>Soft</b> (one = on deck, two = out): location L2 · 4 Stage 1 or 3 · 9 earnings inside 5 sessions (or no date). <b>Information only</b> (shown, never blocks — Eugene, 19 Oct): 10 room to the first resistance, ≥ 2R as a guide (1R = 0.6 ADR): the lowest of the 5/5 swing highs price hasn't traded above since, the swing lows it has broken below and not reclaimed, and the highest high of the last 5 sessions. "Structure fail — out" = check 3 failed with the close above the 21 EMA. L3 and Above zone sit in Background. The first 5 A-eligible and first 6 on deck are full-strength; the rest are greyed. The earnings date in the CSV has no before/after-the-open timing, so every report is treated as after the close: a before-the-open reporter's real exit is one session earlier than shown.</div></details>
+    <details class="tp-fold" style="margin-top:8px"><summary>Not yet (${L.Background.length})</summary><div style="padding:6px 0">${L.Background.slice(0, 80).map(s => tkChip(s.r, s.x.loc === "ABOVE" ? "too high" : "deep under")).join("") || `<span class="dim small">none</span>`}</div></details>
+    <details class="tp-fold"><summary>How the lists work</summary><div class="small" style="padding:6px 0">Same rules as Deep Space Screener v5.0 (rules v6.1), on the stored daily bars. <b>Ready to trade</b> = in the buy zone (L1) and checks 1–9 pass · <b>On deck · just under</b> = just under the buy zone (L2), nothing else missing · <b>On deck · one thing missing</b> = in the buy zone with one soft blocker · <b>Not yet</b> = deep under (L3) or too high above the buy zone · <b>Out</b> = a hard check fails, or two soft blockers. <b>Hard</b> (any fail = out): 1 Stock: liquidity ($1B cap, $100M/day 20-day, &gt; $10) · 2 Stock: no single-bar break &gt; 40% in 50 bars · 3 Trend: above a rising daily 21 EMA, a rising daily 50 SMA and a rising weekly 10-week line · 5 Stretch: ≤ 4 ADR above the daily 50 SMA (or a gap reset) · 7 group not Lagging · 8 RS ≥ 75. <b>Soft</b> (one = on deck, two = out): just under the buy zone · 4 Stage 1 or 3 · 9 earnings inside 5 sessions (or no date). <b>Information only</b> (shown, never blocks — Eugene, 19 Oct): 10 room to the first resistance, ≥ 2R as a guide (1R = 0.6 ADR): the lowest of the 5/5 swing highs price hasn't traded above since, the swing lows it has broken below and not reclaimed, and the highest high of the last 5 sessions. "Trend broken — out" = check 3 failed with the close above the daily 21 EMA (screener code BELOW21, also "Structure fail"). Deep under and too high sit in Not yet. The first 5 Ready to trade and first 6 on deck are full-strength; the rest are greyed. The earnings date in the CSV has no before/after-the-open timing, so every report is treated as after the close: a before-the-open reporter's real exit is one session earlier than shown.</div></details>
   </div>`;
   s61Wire(box, null);
   box.querySelectorAll("tbody").forEach(tb => tb.addEventListener("click", e => { if (e.target.closest("[data-sym]:not(tr)")) return; const t = e.target.closest("tr[data-sym]"); if (t) openDrawer(t.dataset.sym); }));
-  $("s61Tv") && ($("s61Tv").onclick = () => copyText([...L["A-eligible"], ...deck].map(s => s.r.sym).join(","), "A-eligible + on deck copied"));
+  $("s61Tv") && ($("s61Tv").onclick = () => copyText([...L["A-eligible"], ...deck].map(s => s.r.sym).join(","), "Ready to trade + on deck copied"));
 }
 const _renderTab61 = renderTab;
-renderTab = function(t){ _renderTab61(t); if (t === "plan" && S.snap) { try { renderS61Card(); } catch (e) { console.warn("spec 6.1 card", e); } if (WS && typeof buildSecs === "function") buildSecs(t); } };
+renderTab = function(t){ _renderTab61(t); if (t === "plan" && S.snap) { try { renderS61Card(); } catch (e) { console.warn("entry check card", e); } if (WS && typeof buildSecs === "function") buildSecs(t); } };
 
 /* ---------------- live switch: the retired hints and Wild go away ---------------- */
 const _flagsHTML61 = flagsHTML;
@@ -8755,13 +8786,15 @@ renderSettings = function(){
   _renderSettings61();
   const reset = $("sReset"); if (!reset) return;
   const box = document.createElement("div");
-  box.innerHTML = `<h4>Unified Spec 6.1</h4>
-    <div class="row"><div>Spec 6.1 drives the plan<div class="d">Off for the parity week: the Spec 6.1 lists and ticker block are shown beside today's plan, which still runs on Spec 6.0. Turn on for test day 1 — the lists take the plan's place and the Spec 6.0 ticket, Board plan / Pivot script blocks, Wild volatility and the HOOD / gapper hints are folded away. Off brings everything back.</div></div><div><input type="checkbox" id="s61LiveSw" ${s61Live() ? "checked" : ""}></div></div>`;
+  box.innerHTML = `<h4>Entry Check <span class="ectag" title="Rules: Unified Spec 6.1 (Chart &amp; Entry Spec 6.1 in Notion · Deep Space Screener v5.0 · Intraday Pivot)">rules v6.1</span></h4>
+    <div class="row"><div>Entry Check drives the plan<div class="d">Off for the parity week: the Entry Check lists and ticker block are shown beside today's plan, which still runs on Spec 6.0. Turn on for test day 1 — the lists take the plan's place and the Spec 6.0 ticket, Board plan / Pivot script blocks, Wild volatility and the HOOD / gapper hints are folded away. Off brings everything back.</div></div><div><input type="checkbox" id="s61LiveSw" ${s61Live() ? "checked" : ""}></div></div>
+    <div class="row"><div>Entry Check panel: detailed view<div class="d">Off (default): one call at the top in words, the key prices, the checks strip and one sentence per failing check — every row behind "Show the working". On: the older layout, every check on its own row. The same switch sits on the panel (Simple / Detailed). Display only.</div></div><div><input type="checkbox" id="ecViewSw" ${store.get("adrb.ecView", "simple") === "detailed" ? "checked" : ""}></div></div>`;
   reset.parentElement.before(box);
-  $("s61LiveSw").onchange = e => { store.set("adrb.s61Live", e.target.checked); s61Reset(); computePlan(); renderAll(); toast(e.target.checked ? "Spec 6.1 now drives the plan" : "Back to the Spec 6.0 plan (Spec 6.1 lists shown beside it)"); };
+  $("s61LiveSw").onchange = e => { store.set("adrb.s61Live", e.target.checked); s61Reset(); computePlan(); renderAll(); toast(e.target.checked ? "Entry Check now drives the plan" : "Back to the Spec 6.0 plan (Entry Check lists shown beside it)"); };
+  $("ecViewSw").onchange = e => { store.set("adrb.ecView", e.target.checked ? "detailed" : "simple"); if ($("drawer").classList.contains("open") && EC.sym) openDrawer(EC.sym); toast(e.target.checked ? "Entry Check: detailed view" : "Entry Check: simple view"); };
 };
 
-/* ---------------- self-check: the Spec 6.1 lists follow their written rules ---------------- */
+/* ---------------- self-check: the Entry Check lists follow their written rules ---------------- */
 const _selfCheck61 = selfCheck;
 selfCheck = function(){
   const R = _selfCheck61();
@@ -8771,25 +8804,25 @@ selfCheck = function(){
     const s = s61Of(r); if (!s) continue; const x = s.x, D = x.D;
     // location label redone from the distances, in the written order
     const want = !x.structOk || !(x.close > x.e21) ? "BELOW21" : !fin(D) ? null : (x.close - x.bandTop) / D > 0.5 ? "ABOVE" : (x.close - x.bandTop) / D >= 0 ? "L1" : (x.close - x.e9) / D >= -0.25 ? "L2" : "L3";
-    F(want === x.loc, r.sym, "Spec 6.1 location label", x.loc, want);
-    if (fin(x.entry) && !x.nh) F(Math.abs((x.fr - x.entry) / (0.6 * D) - x.room) < 1e-9 && x.fr > x.entry, r.sym, "Spec 6.1 room = (first res − entry) / 0.6 ADR", x.room, (x.fr - x.entry) / (0.6 * D));
-    if (fin(x.entry)) F(x.loc === "L2" ? x.entry === x.e9p : x.entry === x.bandTop, r.sym, "Spec 6.1 planned entry", x.entry, x.loc === "L2" ? x.e9p : x.bandTop);
+    F(want === x.loc, r.sym, "Entry Check location label", x.loc, want);
+    if (fin(x.entry) && !x.nh) F(Math.abs((x.fr - x.entry) / (0.6 * D) - x.room) < 1e-9 && x.fr > x.entry, r.sym, "Entry Check room = (first res − entry) / 0.6 ADR", x.room, (x.fr - x.entry) / (0.6 * D));
+    if (fin(x.entry)) F(x.loc === "L2" ? x.entry === x.e9p : x.entry === x.bandTop, r.sym, "Entry Check planned entry", x.entry, x.loc === "L2" ? x.e9p : x.bandTop);
     // first resistance redone from the bars: still live (A), and never above the last 5 sessions' high when that is above the entry (B)
     if (x.frAt) { const b = dssBars(r.sym), q = x.frAt;
       if (b && b.n - 1 === x.t) { const t = x.t, H = b.h, Lw = b.l; let ok, hi5 = -Infinity; for (let k = Math.max(0, t - 4); k <= t; k++) hi5 = Math.max(hi5, H[k]);
         if (q.recent) ok = q.p === hi5 && q.k > t - 5;
         else { let j = q.k + 1; if (!q.hi) { while (j <= t && !(Lw[j] < q.p)) j++; j++; } ok = j <= t + 1; for (; ok && j <= t; j++) if (H[j] > q.p) ok = false; }
-        F(ok && (!(hi5 > x.entry) || x.fr <= hi5), r.sym, "Spec 6.1 first resistance not yet traded through (A) and ≤ the 5-session high (B)", `${x.fr} ${q.recent ? "recent" : q.hi ? "high" : "low"} ${q.d}`, `5-session high ${hi5}`); } }
+        F(ok && (!(hi5 > x.entry) || x.fr <= hi5), r.sym, "Entry Check first resistance not yet traded through (A) and ≤ the 5-session high (B)", `${x.fr} ${q.recent ? "recent" : q.hi ? "high" : "low"} ${q.d}`, `5-session high ${hi5}`); } }
     const hard = [1, 2, 3, 5, 7, 8].some(n => s.ck[n].ok !== true), soft = [4, 9].filter(n => s.ck[n].ok !== true).length;   // 10 room = information only
     const lw = hard || !x.loc || x.loc === "BELOW21" ? "Out" : x.loc === "L3" || x.loc === "ABOVE" ? (soft >= 2 ? "Out" : "Background") : x.loc === "L2" ? (soft ? "Out" : "OnDeck-L2") : soft === 0 ? "A-eligible" : soft === 1 ? "OnDeck-1blocker" : "Out";
-    F(lw === s.list, r.sym, "Spec 6.1 list", s.list, lw);
-    F(s.pass === (s.list === "A-eligible"), r.sym, "Spec 6.1 pass = A-eligible", s.pass, s.list);
-    F(GRADES.indexOf(s.size.final) >= GRADES.indexOf(s.size.base) && s.size.final !== undefined, r.sym, "Spec 6.1 size never above the base grade", s.size.final && s.size.final[0], s.size.base[0]);
+    F(lw === s.list, r.sym, "Entry Check list", s.list, lw);
+    F(s.pass === (s.list === "A-eligible"), r.sym, "Entry Check pass = A-eligible", s.pass, s.list);
+    F(GRADES.indexOf(s.size.final) >= GRADES.indexOf(s.size.base) && s.size.final !== undefined, r.sym, "Entry Check size never above the base grade", s.size.final && s.size.final[0], s.size.base[0]);
     const m0 = mapRegime().v, mv = MAPV.includes(m0) ? m0 : S.tape && MAPV.includes(S.tape.bucket) ? S.tape.bucket : "";   // MAP → tape read → Defensive
     const wantStep = mv === "Supportive" ? 0 : mv === "Mixed" ? 1 : 2;
-    F(s.size.regStep === wantStep, r.sym, "Spec 6.1 regime step (MAP, else the tape read, else −2)", s.size.regStep, wantStep);
+    F(s.size.regStep === wantStep, r.sym, "Entry Check regime step (MAP, else the tape read, else −2)", s.size.regStep, wantStep);
     const mainSt = s.stage ? WS_MAIN[s.stage.lab] : null;
-    F(s.ck[4].ok === !(mainSt === "1" || mainSt === "3"), r.sym, "Spec 6.1 check 4 (Stage 1 or 3 = soft blocker)", s.ck[4].ok, mainSt);
+    F(s.ck[4].ok === !(mainSt === "1" || mainSt === "3"), r.sym, "Entry Check check 4 (Stage 1 or 3 = soft blocker)", s.ck[4].ok, mainSt);
   }
   // list order: Board RS → RS Accel20 → Setup Quality → RMV (lower first) → DCR% → ticker; Defensive: exceptional first
   const L61 = s61Lists(true), m1 = mapRegime().v, dfn = (MAPV.includes(m1) ? m1 : S.tape && S.tape.bucket) === "Defensive";
@@ -8797,7 +8830,7 @@ selfCheck = function(){
   for (const k in L61) for (let i = 1; i < L61[k].length; i++) {
     const a = keyOf(L61[k][i - 1]), b = keyOf(L61[k][i]); let ok = true;
     for (let j = 0; j < a.length; j++) { if (a[j] > b[j]) break; if (a[j] < b[j]) { ok = false; break; } }
-    F(ok, L61[k][i].r.sym, `Spec 6.1 ${k} order (tie-breaks)`, `after ${L61[k][i - 1].r.sym}`, "RS → Accel20 → SQ → RMV → DCR");
+    F(ok, L61[k][i].r.sym, `Entry Check ${k} order (tie-breaks)`, `after ${L61[k][i - 1].r.sym}`, "RS → Accel20 → SQ → RMV → DCR");
   }
   return R;
 };
@@ -8823,11 +8856,11 @@ document.head.insertAdjacentHTML("beforeend", `<style>
    Spec 6.0 levels. stopCalc is re-pointed at the rule in force: the 0.6-ADR LOD cap, plus room to the first 5/5 swing
    pivot from the typed entry (Spec 6.1 check 10/11, gate from test day 1).
    ===================================================================== */
-const RULES_NOW = `<b>Execution rules since 19 Oct (Spec 6.1):</b> no entry before 10:00 ET · trigger = a 30-min close above the 30-min 21 EMA, enter the next bar · stop = the LOD at the trigger, entry no more than 0.6 ADR above it · first third at 2R or the T+3 close (a T+3 close below the entry = sell the whole position). The widest stop (entry − ½ ADR) and 2R shown with the Spec 6.0 plan are the old levels, kept until test day 1 — don't place stops from them.`;
+const RULES_NOW = `<b>Execution rules since 19 Oct (Entry Check, rules v6.1):</b> no entry before 10:00 ET · trigger = a 30-min close above the 30-min 21 EMA, enter the next 30-min bar · stop = the day low at the trigger, entry no more than 0.6 ADR above it · first third at 2R or the T+3 close (a T+3 close below the entry = sell the whole position). The widest stop (entry − ½ ADR) and 2R shown with the Spec 6.0 plan are the old levels, kept until test day 1 — don't place stops from them.`;
 stopCalc = function(r){
   const out = $("dStopOut"); if (!out) return;
   const e = parseFloat($("dEntry").value), s = parseFloat($("dStop").value);
-  if (!isFinite(e) || !isFinite(s)) { S.userStops.delete(r.sym); out.innerHTML = "Type the day's low at the trigger to check entry ≤ 0.6 ADR above it (Spec 6.1 stop) and size off it."; return; }
+  if (!isFinite(e) || !isFinite(s)) { S.userStops.delete(r.sym); out.innerHTML = "Type the day's low at the trigger to check entry ≤ 0.6 ADR above it (the Entry Check stop) and size off it."; return; }
   S.userStops.set(r.sym, s);
   const risk = e - s;
   if (risk <= 0) { out.innerHTML = `<span class="neg">The stop has to sit below the entry.</span>`; return; }
@@ -8835,7 +8868,7 @@ stopCalc = function(r){
   let room = ""; try { const x = !r.etf ? s61Of(r) : null; if (x && x.x.resAbove) { const q = x.x.resAbove(e), R = fin(q.fr) ? (q.fr - e) / risk : Infinity;
     room = ` Room to first resistance ${fin(q.fr) ? f2(q.fr) + " (" + res61Txt(q.at) + ")" : "(none — NH)"}: <b class="${R >= S61.room ? "pos" : "neg"}">${fin(R) ? R.toFixed(2) + "R" : "NH"}</b> (≥ ${S61.room}R from the actual fill is the guide — information only, never blocks).`; } } catch (err) {}
   const z = sizeFor(r, e, s);
-  out.innerHTML = `${fits == null ? "" : fits ? `<b class="pos">✓ Entry is within 0.6 ADR of the low.</b> ` : `<b class="neg">✕ Entry is more than 0.6 ADR above the low — no trade.</b> `}Risk $${risk.toFixed(2)} a share (${(risk / e * 100).toFixed(2)}%${r.adrD ? `, ${(risk / r.adrD).toFixed(2)} ADR; cap $${lim.toFixed(2)}` : ""}). First trim at 2R: <b>${(e + 2 * risk).toFixed(2)}</b>.${room}${z ? ` Size (Spec 6.0 grade, before the Spec 6.1 steps): grade ${z.grade} (${z.pct}% NLV) = <b>${z.shares.toLocaleString()} shares</b>${fits === false ? " — but the entry fails the 0.6-ADR cap" : ""}.` : " Add your NLV in Setups for a share count."}`;
+  out.innerHTML = `${fits == null ? "" : fits ? `<b class="pos">✓ Entry is within 0.6 ADR of the low.</b> ` : `<b class="neg">✕ Entry is more than 0.6 ADR above the low — no trade.</b> `}Risk $${risk.toFixed(2)} a share (${(risk / e * 100).toFixed(2)}%${r.adrD ? `, ${(risk / r.adrD).toFixed(2)} ADR; cap $${lim.toFixed(2)}` : ""}). First trim at 2R: <b>${(e + 2 * risk).toFixed(2)}</b>.${room}${z ? ` Size (Spec 6.0 grade, before the Entry Check steps): grade ${z.grade} (${z.pct}% NLV) = <b>${z.shares.toLocaleString()} shares</b>${fits === false ? " — but the entry fails the 0.6-ADR cap" : ""}.` : " Add your NLV in Setups for a share count."}`;
 };
 // the note sits by the stop check (both layouts) and under the plan's lede on Setups
 const _openDrawerRN = openDrawer;
@@ -8952,7 +8985,7 @@ function popGrab(sym){
   const dr = $("drawer"), open = dr.classList.contains("open");
   const take = () => {
     const rsH = [...dr.querySelectorAll("h4")].find(h => /^RS by/.test(h.textContent.trim()));
-    const els = [dr.querySelector(".tp-lv"), dr.querySelector(".s61p > h4"), dr.querySelector(".s61p .s61chips"), rsH, dr.querySelector(".rsbars"), dr.querySelector(".kv")].filter(Boolean);
+    const els = [dr.querySelector(".tp-lv"), dr.querySelector(".s61p > h4"), dr.querySelector(".s61p .ecsay"), dr.querySelector(".s61p .ecstrip"), dr.querySelector(".s61p .s61chips"), rsH, dr.querySelector(".rsbars"), dr.querySelector(".kv")].filter(Boolean);
     return els.map(el => { const c = el.cloneNode(true); c.querySelectorAll("input, select, button, label.tog, .tp-rsel").forEach(x => x.remove()); c.removeAttribute("id"); c.querySelectorAll("[id]").forEach(x => x.removeAttribute("id")); return c.outerHTML; }).join("");
   };
   if (open && POP.drSym === sym) return take();
@@ -9214,7 +9247,7 @@ renderSettings = function(){
   const reset = $("sReset"); if (!reset) return;
   const box = document.createElement("div");
   box.innerHTML = `<h4>Chart in the ticker panel and the chart window</h4>
-    <div class="row"><div>Board chart (Lightweight Charts)<div class="d">On: candles from the stored daily bars (daily / weekly) or Massive (30m / 5m, 15-min delayed), with your 9/21 EMA, 50/200 SMA, zone, stops, 2R, Spec 6.1 entry / first resistance / LOD, swing pivots and the RS line drawn by the board. Off: the TradingView embed. "Open in TradingView" works either way. Charts by TradingView Lightweight Charts™ — Copyright (c) 2026 TradingView, Inc., <a href="https://www.tradingview.com/" target="_blank" rel="noopener">tradingview.com</a> (Apache License 2.0).</div></div><div><input type="checkbox" id="bcEngSw" ${bcEng() === "board" ? "checked" : ""}></div></div>`;
+    <div class="row"><div>Board chart (Lightweight Charts)<div class="d">On: candles from the stored daily bars (daily / weekly) or Massive (30m / 5m, 15-min delayed), with your 9/21 EMA, 50/200 SMA, zone, stops, 2R, Entry Check entry / first resistance / day low, swing pivots and the RS line drawn by the board. Off: the TradingView embed. "Open in TradingView" works either way. Charts by TradingView Lightweight Charts™ — Copyright (c) 2026 TradingView, Inc., <a href="https://www.tradingview.com/" target="_blank" rel="noopener">tradingview.com</a> (Apache License 2.0).</div></div><div><input type="checkbox" id="bcEngSw" ${bcEng() === "board" ? "checked" : ""}></div></div>`;
   reset.parentElement.before(box);
   $("bcEngSw").onchange = e => { store.set("adrb.chartEng", e.target.checked ? "board" : "tv"); bcRemount(); };
 };
@@ -9455,12 +9488,12 @@ function tieWhy(a, b, def){
 // two lines from the board's numbers (Spec 6.1 when the history is in, else the 6.0 row)
 function wl61(s){
   const x = s.x, r = s.r, D = x.D;
-  const loc = x.loc === "L1" ? `L1 ${sgA(x.dB)} ADR over the 9/21 band` : x.loc === "L2" ? `L2 ${sgA(x.d9)} ADR from the 9 EMA` : x.loc === "ABOVE" ? `above the zone ${sgA(x.dB)} ADR` : x.loc === "L3" ? `L3 ${sgA(x.d9)} ADR under the 9` : loc61Name(x);
-  const why = [loc, `RS ${r.rs ?? "—"} of ${S.stocks.length}`, r.group ? `${r.group}${r.gState && r.gState !== "—" ? " " + r.gState : ""}` : "", x.structOk ? "21E / 50S / 10W rising" : "structure failing",
+  const loc = x.loc === "L1" ? `in buy zone ${sgA(x.dB)} ADR over the daily 9/21 band` : x.loc === "L2" ? `just under buy zone ${sgA(x.d9)} ADR from the daily 9 EMA` : x.loc === "ABOVE" ? `too high above buy zone ${sgA(x.dB)} ADR` : x.loc === "L3" ? `deep under buy zone ${sgA(x.d9)} ADR from the daily 9 EMA` : ecLoc(x);
+  const why = [loc, `RS ${r.rs ?? "—"} of ${S.stocks.length}`, r.group ? `${r.group}${r.gState && r.gState !== "—" ? " " + r.gState : ""}` : "", x.structOk ? "daily 21 EMA / daily 50 SMA / weekly 10-week rising" : "trend failing",
     fin(x.ext) ? `${sgA(x.ext, 1)} ADR over the 50 SMA` : "", `SQ ${s.sq}/5`].filter(Boolean).join(" · ");
   const cl = s61Clear(s), er = s.er;
   const erT = er.n == null ? "earnings date unknown" : `earnings in ${er.n} sessions${!er.bmo && er.alt && er.alt.n !== er.n ? ` (${er.alt.n} if before the open)` : ""}`;
-  const room = !fin(x.entry) ? "" : x.nh ? "no resistance above (NH)" : `1st resistance ${money$(x.fr)} ≈ ${x.room.toFixed(1)}R est.`;
+  const room = !fin(x.entry) ? "" : x.nh ? "no resistance above (new highs)" : `1st resistance ${money$(x.fr)} ≈ ${x.room.toFixed(1)}R est.`;
   const now = (s.list === "A-eligible" ? [`trigger: 30-min close over the 30-min 21 EMA, from 10:00 ET`, room, `invalid on a close under the 21 EMA ${money$(x.e21)}`, erT]
     : cl.length ? [`blocked: ${cl.map(clearTxt).join("; ")}`, room] : [room, erT]).filter(Boolean).join(" · ");
   return {why, now};
@@ -9548,11 +9581,11 @@ function dpLive(e){
   const chg = f.last && r.last != null ? (r.last / f.last - 1) * 100 : null;
   if (s) {
     const x = s.x;
-    if (x.loc === "BELOW21") flags.push({t: x.close > x.e21 ? "structure failed" : "under the 21 EMA — invalid", c: "bad"});
-    else if (x.loc === "ABOVE" && f.loc !== "ABOVE") flags.push({t: `extended ${sgA(x.dB)} ADR over the band`, c: "wait"});
-    else if (f.loc === "L2" && x.loc === "L1") flags.push({t: "reclaimed the 9 — L1 now", c: "go"});
-    else if (x.loc === "L1") flags.push({t: "in the zone (L1)", c: "go"});
-    else if (x.loc) flags.push({t: LOC61[x.loc].n, c: LOC61[x.loc].c});
+    if (x.loc === "BELOW21") flags.push({t: x.close > x.e21 ? "trend broken" : "under the daily 21 EMA — invalid", c: "bad"});
+    else if (x.loc === "ABOVE" && f.loc !== "ABOVE") flags.push({t: `too high: ${sgA(x.dB)} ADR over the band`, c: "wait"});
+    else if (f.loc === "L2" && x.loc === "L1") flags.push({t: "reclaimed the daily 9 — in the buy zone now", c: "go"});
+    else if (x.loc === "L1") flags.push({t: "in the buy zone", c: "go"});
+    else if (x.loc) flags.push({t: ecLoc(x), c: LOC61[x.loc].c});
     if (s.ck[9].ok === false && s.er.n != null) flags.push({t: `earnings in ${s.er.n}`, c: "bad"});
   } else { const st = statusOf(r); flags.push(st.k === "trig" ? {t: "over the 30-min 21 EMA — not a confirmed trigger", c: "zone"} : {t: st.t, c: st.c}); }
   return {px: r.last, chg, flags, loc: s ? s.x.loc : null};
@@ -9596,7 +9629,7 @@ function dpCardHTML(compact){
     <div class="small" style="margin:4px 0 8px"><b>Plan for ${jnDay(p)}</b> · v${R.n} of ${pl.revs.length} · ${lockTxt} · data to the ${jnDay(R.d0)} close${pl.revs.length > 1 || R.ed ? `<details class="tp-fold" style="display:inline-block;margin-left:8px"><summary>revisions</summary><div class="small">${revTxt}</div></details>` : ""}</div>
     ${order.map(k => `<h4 style="margin:8px 0 2px">${esc(DP_L[k])} <span class="small dim">${groups[k].length}</span></h4><div class="tscroll" style="max-height:none"><table class="mini dpt"><thead><tr><th>#</th><th class="l">Ticker</th><th class="l">Why · why now / what could fail (frozen)</th><th>At plan</th><th>Now</th><th class="l">Live status</th></tr></thead><tbody>${groups[k].map(row).join("")}</tbody></table></div>`).join("") || `<div class="empty">The plan is empty — nothing qualified and no MAP lists typed. That's a valid plan.</div>`}
     ${disc}
-    <div class="small dim" style="margin-top:6px">${S.has.hist ? "" : "The why-lines use the Spec 6.0 row until the price history is loaded (then Spec 6.1's location, room and blockers). "}Live status uses the data on screen (Massive is 15 minutes delayed). "In the zone" is a location, not a trigger: the trigger is a 30-min close over the 30-min 21 EMA, from 10:00 ET, checked on the chart.</div></div>`;
+    <div class="small dim" style="margin-top:6px">${S.has.hist ? "" : "The why-lines use the Spec 6.0 row until the price history is loaded (then Entry Check's location, room and blockers). "}Live status uses the data on screen (Massive is 15 minutes delayed). "In the zone" is a location, not a trigger: the trigger is a 30-min close over the 30-min 21 EMA, from 10:00 ET, checked on the chart.</div></div>`;
 }
 function dpPaint(){ const b = $("dpBox"); if (b) { b.innerHTML = dpCardHTML(); b.querySelectorAll("tbody").forEach(tb => tb.addEventListener("click", e => { const t = e.target.closest("tr[data-sym]"); if (t && S.rowBySym && S.rowBySym.has(t.dataset.sym)) openDrawer(t.dataset.sym); })); } }
 const _renderTabC = renderTab;
@@ -9694,7 +9727,7 @@ jnTradeHTML = function(p, o){
   let h = _jnTradeHTMLD(p, o); if (!o.took) return h;
   const m = jnMine(o), id = `data-p="${p}" data-s="${esc(o.s)}"`;
   // the trim box sits after exit, so fill → Tab → exit stays the typing order
-  h = h.replace(/(<input type="number" step="0\.01" data-jf="exit"[^>]*>)/, `$1<input type="number" step="0.01" data-jf="trim" ${id} value="${o.trim ?? ""}" placeholder="trim" title="Optional: your first-third trim price (Spec 6.1: ⅓ at 2R or the T+3 close). Leave blank if you sold in one go.">`);
+  h = h.replace(/(<input type="number" step="0\.01" data-jf="exit"[^>]*>)/, `$1<input type="number" step="0.01" data-jf="trim" ${id} value="${o.trim ?? ""}" placeholder="trim" title="Optional: your first-third trim price (Entry Check exits: ⅓ at 2R or the T+3 close). Leave blank if you sold in one go.">`);
   const extra = !m ? "" : `<div class="small">${m.net != null ? `net <b class="${jnCls(m.net)}">${jnFmtN(m.net)}</b> <span class="dim">after ${JN_COST}R cost${m.trimR != null ? ` · trim ${jnFmtN(m.trimR)} + runner ${jnFmtN(m.runR)}` : ""}</span>` : ""}
     ${m.roomA != null ? `<div>room from your fill <b class="${m.roomA >= 2 ? "pos" : "neg"}">${m.roomA.toFixed(2)}R</b> <span class="dim">to ${f2(m.res)} (${esc(m.resFrom)}${m.resFrom === "board estimate" ? " — check the chart; type your own first resistance in the notes" : ""})</span></div>` : m.resFrom ? `<div class="dim">room: ${esc(m.resFrom)}</div>` : ""}
     ${m.roomA != null && m.roomA < 2 ? `<div class="${o.roomWhy ? "" : "neg"}">Under 2R — why did you take it? <input type="text" data-jrw ${id} value="${esc(o.roomWhy || "")}" placeholder="one line (information only — never blocks)" style="width:210px"></div>` : ""}</div>`;
@@ -9713,7 +9746,7 @@ function jnExpHTML(items){
   const few = n => n < 20 ? ` <span class="small dim">(too few to judge)</span>` : n < 60 ? ` <span class="small dim">(early read)</span>` : "";
   const row = (label, g) => `<tr><td class="l"><b>${label}</b></td><td>${g.n}${few(g.n)}</td><td>${jnPct(g.win)}</td><td class="${jnCls(g.avg)}"><b>${jnFmtN(g.avg)}</b></td><td class="${jnCls(g.tot)}">${jnFmtN(g.tot)}</td><td class="pos">${jnFmtN(g.aw)}</td><td class="neg">${jnFmtN(g.al)}</td><td>${g.pf == null ? "—" : g.pf === Infinity ? "∞" : g.pf.toFixed(2)}</td><td class="neg">${g.dd == null ? "—" : g.dd.toFixed(2) + "R"}</td></tr>`;
   const by = (f) => { const M = new Map(); T.forEach(y => { const k = f(y); if (!M.has(k)) M.set(k, []); M.get(k).push(y); }); return [...M].sort((a, b) => b[1].length - a[1].length); };
-  const loc = y => { const g = y.x.o.f.s61; return g && g.loc ? (g.loc === "L1" ? "L1 continuation" : g.loc === "L2" ? "L2 reclaim" : g.loc) : "no 6.1 location logged"; };
+  const loc = y => { const g = y.x.o.f.s61; return g && g.loc ? ecLocCode(g.loc) : "no Entry Check location logged"; };
   const all = agg(T), trims = T.filter(y => y.m.trimR != null), sTrim = trims.reduce((a, y) => a + y.m.trimR, 0), sRun = trims.reduce((a, y) => a + y.m.runR, 0);
   const slip = T.map(y => y.m.slip).filter(v => v != null), lossers = T.filter(y => y.m.R != null && y.m.R < 0), beyond = lossers.filter(y => y.m.R < -1.05);
   const head = `<thead><tr><th class="l"></th><th>Trades</th><th>Won</th><th>Avg net R</th><th>Total net R</th><th>Avg win</th><th>Avg loss</th><th>Profit factor</th><th>Max drawdown</th></tr></thead>`;
@@ -9723,7 +9756,7 @@ function jnExpHTML(items){
       ${by(y => "MAP call: " + (y.x.rec.map || "not set")).map(([k, L]) => row(esc(k), agg(L))).join("")}</tbody></table>
       <div class="small" style="margin-top:6px">${trims.length ? `First third vs runner (${trims.length} trades with a trim typed): trim <b>${jnFmtN(sTrim)}</b> · runner <b>${jnFmtN(sRun)}</b>. ` : "Type the trim price on a trade to split the first third from the runner. "}
       ${slip.length ? `Fill vs plan entry: average <b>${(slip.reduce((a, b) => a + b, 0) / slip.length).toFixed(2)} ADR</b>. ` : ""}${lossers.length ? `Losses: ${beyond.length} of ${lossers.length} lost more than 1R (stop slippage or a gap).` : ""}</div>
-      <div class="small dim">Read with the sample size. Spec 6.1's rules change only at the 60-session review, and only when the gap is ≥ 1R or the 95% interval excludes zero — never on a handful of trades. A high RS or a 2R target is not expectancy; this table is.</div>`
+      <div class="small dim">Read with the sample size. Entry Check's rules (v6.1) change only at the 60-session review, and only when the gap is ≥ 1R or the 95% interval excludes zero — never on a handful of trades. A high RS or a 2R target is not expectancy; this table is.</div>`
       : `<div class="empty" style="padding:4px 0">No closed trades with a fill, an exit and a stop yet under these rules. Tick "entered", type the fill, the real stop (chart notes) and the exit.</div>`}</div></div>`;
 }
 document.head.insertAdjacentHTML("beforeend", `<style>.jn-t tr.jn-unseen td{opacity:.6}</style>`);
@@ -9929,12 +9962,12 @@ function nextAction(r, held){
   if (held) { if (s && fin(s.x.e9)) return s.x.close < s.x.e9 ? `Closed under the daily 9 EMA ${f2(s.x.e9)} — the runner's exit rule` : `Hold — runner out on a daily close under the 9 EMA (${f2(s.x.e9)})`; return "Hold — check the daily 9 EMA (load the price history)"; }
   if (!s) return statusOf(r).d || statusOf(r).t;
   const x = s.x, D = x.D;
-  if (s.list === "A-eligible") return early ? "Wait for 10:00 ET, then a 30-min close over the 30-min 21 EMA" : "On the chart: 30-min close over the 30-min 21 EMA; stop = LOD (≤ 0.6 ADR)";
-  if (s.list === "OnDeck-L2") return `Needs a close over the prior day's 9 EMA ${f2(x.e9p)}, then the 30-min trigger`;
+  if (s.list === "A-eligible") return early ? "Wait for 10:00 ET, then a 30-min close over the 30-min 21 EMA" : "On the chart: 30-min close over the 30-min 21 EMA; stop = the day low (≤ 0.6 ADR)";
+  if (s.list === "OnDeck-L2") return `Just under the buy zone — needs a move over yesterday's daily 9 EMA ${f2(x.e9p)}, then the 30-min trigger`;
   if (s.list === "OnDeck-1blocker") { const c = s61Clear(s).find(c => s.blockers.includes(c.n)); return c ? `Blocked by ${c.n} — clears: ${c.clear}` : "One blocker — see the checks"; }
-  if (x.loc === "ABOVE") return `Above the zone — wait for a pullback to ≤ ${f2(x.bandTop + 0.5 * D)}`;
-  if (x.loc === "L3") return "Background — deeper than L2 under the 9 EMA";
-  return `Out — ${s.ffTxt || loc61Name(x)}`;
+  if (x.loc === "ABOVE") return `Too high above the buy zone — wait for a pullback to ≤ ${f2(x.bandTop + 0.5 * D)}`;
+  if (x.loc === "L3") return "Not yet — deep under the buy zone (more than 0.25 ADR under the daily 9 EMA)";
+  return `Out — ${s.ffTxt ? ecPlain(s.ffTxt) : ecLoc(x)}`;
 }
 
 /* ---------------- Watchlist page ---------------- */
@@ -9957,8 +9990,8 @@ function wlRowHTML(e, all){
   const r = e.r, also = Object.keys(WL_SRC).filter(k => k !== e.src && all[k] && all[k].has(e.s));
   if (!r) return `<tr class="gone"><td>${wlPin(e.s)}</td><td class="l sym"><b>${esc(e.s)}</b></td><td class="l small">${esc(WL_SRC[e.src])}${also.length ? ` · also ${also.map(k => esc(WL_SRC[k])).join(", ")}` : ""}</td><td class="l small neg" colspan="7">not in current data — kept on your list</td></tr>`;
   const s = !r.etf && S.has.hist ? s61Of(r) : null, x = s ? s.x : null, mn = mapNote(e.s);
-  const loc = x ? `<span class="pill ${x.loc ? LOC61[x.loc].c : ""}">${esc(loc61Name(x))}</span>` : statusPill(r);
-  const st = s ? `<span class="pill ${LIST61[s.list].c}">${esc(LIST61[s.list].n.replace("Focus A-eligible", "Board Qualified"))}</span>` : `<span class="small">${esc(statusOf(r).t)}</span>`;
+  const loc = x ? `<span class="pill ${x.loc ? LOC61[x.loc].c : ""}">${esc(ecLoc(x))}</span>` : statusPill(r);
+  const st = s ? `<span class="pill ${LIST61[s.list].c}">${esc(LIST61[s.list].n.replace("Ready to trade", "Board Qualified"))}</span>` : `<span class="small">${esc(statusOf(r).t)}</span>`;
   const room = x ? (x.nh ? "NH" : fin(x.room) ? x.room.toFixed(1) + "R" : "—") : "—";
   const er = s ? (s.er.n == null ? `<span class="neg">?</span>` : `${s.er.n}${s.er.n < S61.erMin ? ` <span class="neg">✕</span>` : ""}`) + (typeof erTimingChip === "function" ? " " + erTimingChip(s) : "") : r.erIn == null || r.erIn < 0 ? "?" : r.erIn + "d";
   return `<tr data-sym="${esc(e.s)}"><td>${wlPin(e.s)}</td><td class="l sym"><b>${esc(e.s)}</b></td><td class="l small">${esc(WL_SRC[e.src])}${also.length ? `<div class="dim">also ${also.map(k => esc(WL_SRC[k])).join(", ")}</div>` : ""}</td>
@@ -9970,7 +10003,7 @@ function renderWatch(){
   if (!S.snap) { box.innerHTML = ""; return; }
   const G = wlGroups(), all = {}; G.forEach(([, L]) => L.forEach(e => { (all[e.src] = all[e.src] || new Set()).add(e.s); }));
   const head = `<thead><tr><th></th><th class="l">Ticker</th><th class="l">Source</th><th class="l">Group</th><th>RS</th><th class="l">Location</th><th class="l">Status</th><th>Room est.</th><th class="l">Earn.</th><th class="l">Next action</th></tr></thead>`;
-  const tbl = (t, L, extra = "") => `<div class="card g1 wlg"><div class="hd"><h2>${esc(t)}</h2><span class="sub">${L.length} name${L.length === 1 ? "" : "s"}</span>${extra}</div><div class="bd">${L.length ? `<div class="tscroll" style="max-height:none"><table class="mini wlt">${head}<tbody>${L.map(e => wlRowHTML(e, all)).join("")}</tbody></table></div>` : `<div class="empty" style="padding:4px 0">${t.startsWith("MAP") ? "Empty — type tickers in the boxes above or import today's MAP." : t.startsWith("My Fav") ? "Pin any name with ☆ (here, on the Daily Plan, the Spec 6.1 lists or the ticker panel), or add tickers below." : t.startsWith("Held") ? "No held names — type them in the Held box." : S.has.hist ? "None today." : "Needs the price history."}</div>`}
+  const tbl = (t, L, extra = "") => `<div class="card g1 wlg"><div class="hd"><h2>${esc(t)}</h2><span class="sub">${L.length} name${L.length === 1 ? "" : "s"}</span>${extra}</div><div class="bd">${L.length ? `<div class="tscroll" style="max-height:none"><table class="mini wlt">${head}<tbody>${L.map(e => wlRowHTML(e, all)).join("")}</tbody></table></div>` : `<div class="empty" style="padding:4px 0">${t.startsWith("MAP") ? "Empty — type tickers in the boxes above or import today's MAP." : t.startsWith("My Fav") ? "Pin any name with ☆ (here, on the Daily Plan, the Entry Check lists or the ticker panel), or add tickers below." : t.startsWith("Held") ? "No held names — type them in the Held box." : S.has.hist ? "None today." : "Needs the price history."}</div>`}
     ${t.startsWith("My Fav") ? `<div style="display:flex;gap:6px;margin-top:6px"><input type="text" id="wlAddIn" placeholder="Add tickers (any separator)" style="flex:1;max-width:320px"><button class="btn sm" data-wla>Add</button></div>` : ""}</div></div>`;
   if (!$("mapImpBox")) box.insertAdjacentHTML("beforebegin", `<div class="card g1" id="mapImpBox"></div>`);
   if (!$("mapImpBox").contains(document.activeElement)) $("mapImpBox").innerHTML = mapImpHTML();
@@ -10007,7 +10040,7 @@ function envHTML(){
 function heldHTML(){
   const H = [...LISTS.held], rowBy = S.rowBySym || new Map();
   return `<div class="hd"><h2>Held</h2><span class="sub">your positions — not candidates · type them in the Held box on the Watchlist</span></div><div class="bd">${H.length ? `<div class="tscroll" style="max-height:none"><table class="mini wlt"><thead><tr><th></th><th class="l">Ticker</th><th>Last</th><th>Today</th><th class="l">Where</th><th class="l">Next action</th></tr></thead><tbody>${H.map(sym => { const r = rowBy.get(sym); if (!r) return `<tr class="gone"><td>${wlPin(sym)}</td><td class="l sym"><b>${esc(sym)}</b></td><td colspan="4" class="l neg small">not in current data</td></tr>`;
-      const s = !r.etf && S.has.hist ? s61Of(r) : null; return `<tr data-sym="${esc(sym)}"><td>${wlPin(sym)}</td><td class="l sym"><b>${esc(sym)}</b></td><td>${f2(r.last)}</td><td class="${cls(r.todayRaw)}">${pc(r.todayRaw, 1)}</td><td class="l">${s ? `<span class="pill ${s.x.loc ? LOC61[s.x.loc].c : ""}">${esc(loc61Name(s.x))}</span>` : statusPill(r)}</td><td class="l small">${esc(nextAction(r, true))}</td></tr>`; }).join("")}</tbody></table></div>` : `<div class="empty" style="padding:4px 0">No held names.</div>`}</div>`;
+      const s = !r.etf && S.has.hist ? s61Of(r) : null; return `<tr data-sym="${esc(sym)}"><td>${wlPin(sym)}</td><td class="l sym"><b>${esc(sym)}</b></td><td>${f2(r.last)}</td><td class="${cls(r.todayRaw)}">${pc(r.todayRaw, 1)}</td><td class="l">${s ? `<span class="pill ${s.x.loc ? LOC61[s.x.loc].c : ""}">${esc(ecLoc(s.x))}</span>` : statusPill(r)}</td><td class="l small">${esc(nextAction(r, true))}</td></tr>`; }).join("")}</tbody></table></div>` : `<div class="empty" style="padding:4px 0">No held names.</div>`}</div>`;
 }
 function renderHome(){
   const box = $("homeBody"); if (!box) return;
@@ -10057,8 +10090,8 @@ function dpanelHTML(r){
   const D = x ? x.D : r.adrD || (r.adr && r.last ? r.adr / 100 * r.last : null), cap = S61.lod;
   // 1 valid setup?
   const p = typeof dpCur === "function" ? dpCur() : null, rec = p ? JN.recs[p] : null, inPlan = rec && rec.plan && rec.plan.revs.length ? rec.plan.revs[rec.plan.revs.length - 1].names.find(e => e.s === r.sym) : null;
-  const valid = s ? `<span class="pill ${LIST61[s.list].c}">${esc(LIST61[s.list].n.replace("Focus A-eligible", "Board Qualified"))}</span> · structure ${x.structOk ? "✓" : "✕"} · ${esc(loc61Name(x))} · group ${esc(r.gState || "—")} · MAP ${esc(mapRegime().v || "not set")}${inPlan ? ` · in today's plan (${esc(DP_L[inPlan.l])} #${inPlan.k})${inPlan.f && inPlan.f.loc && x.loc !== inPlan.f.loc ? ` <span class="neg">— was ${esc(inPlan.f.loc)} at the plan: reassess</span>` : ""}` : " · not in today's plan"}${s.ffTxt && s.list !== "A-eligible" ? `<div class="small neg">${esc(s61Clear(s).map(clearTxt).join("; ") || s.ffTxt)}</div>` : ""}`
-    : `${statusPill(r)} <span class="small dim">— Spec 6.1 needs the price history</span>`;
+  const valid = s ? `<span class="pill ${LIST61[s.list].c}">${esc(LIST61[s.list].n.replace("Ready to trade", "Board Qualified"))}</span> · trend ${x.structOk ? "✓" : "✕"} · ${esc(ecLoc(x))} · group ${esc(r.gState || "—")} · MAP ${esc(mapRegime().v || "not set")}${inPlan ? ` · in today's plan (${esc(DP_L[inPlan.l])} #${inPlan.k})${inPlan.f && inPlan.f.loc && x.loc !== inPlan.f.loc ? ` <span class="neg">— was ${esc(inPlan.f.loc)} at the plan: reassess</span>` : ""}` : " · not in today's plan"}${s.ffTxt && s.list !== "A-eligible" ? `<div class="small neg">${esc(s61Clear(s).map(clearTxt).join("; ") || s.ffTxt)}</div>` : ""}`
+    : `${statusPill(r)} <span class="small dim">— Entry Check needs the price history</span>`;
   // 2 entry now?
   const entry = closed ? "Market closed — plan only." : early ? `<b>No.</b> Before 10:00 ET any entry is a rule break (earliest: the close of the first 30-min bar).` : st.st === "trig" || st.st === "taken" ? `<b>${st.st === "taken" ? "Taken" : "Triggered"}</b> — your call.` : `<b>Not confirmed.</b> Check the 30-min bar on the chart: a close over the 30-min 21 EMA, enter at the next bar's open.${S.snap && S.snap.live && r.t30 === true ? " The board's last 30-min reading is over the 21 EMA but the bar may still be forming and the data is 15 minutes delayed." : ""}`;
   // 3 risk · 4 reward
@@ -10106,7 +10139,7 @@ if (WS) {
     const dr = $("drawer"), h3 = dr.querySelector(".tp-head h3"); if (h3 && !h3.querySelector("[data-wlpin]")) h3.insertAdjacentHTML("beforeend", " " + wlPin(r.sym));
     const pane = dr.querySelector('.tp-pane[data-p="plan"]'); if (!pane || r.etf) return;
     const ev = document.createElement("details"); ev.className = "tp-fold dpev"; ev.open = !!store.get("adrb.evOpen", false);
-    ev.innerHTML = `<summary>Evidence — every Spec 6.1 check, the size card, the 6.0 ticket, Board plan / Pivot script, entry checks and the stop check</summary>`;
+    ev.innerHTML = `<summary>Evidence — every Entry Check row, the size card, the 6.0 ticket, Board plan / Pivot script, entry checks and the stop check</summary>`;
     [...pane.childNodes].forEach(n => ev.appendChild(n)); pane.appendChild(ev);
     ev.addEventListener("toggle", () => store.set("adrb.evOpen", ev.open));
     pane.insertAdjacentHTML("afterbegin", dpanelHTML(r));
@@ -10171,6 +10204,164 @@ jnRecord = function(){
 // computeAll → applyHist schedules jnSoon when Spec 6.1 drives the plan; the swap above must not start another one
 const _jnSoonL = jnSoon;
 jnSoon = function(){ if (JNL.busy) return; _jnSoonL(); };
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   ENTRY CHECK (21 Oct; docs/handover-entry-check-2026-10-20.md). The "Spec 6.1" ticker block is shown as "Entry Check":
+   one call at the top in words (READY TO TRADE · ON DECK · JUST UNDER · ON DECK · ONE THING MISSING · NOT YET · OUT),
+   one sentence, the key prices, the checks strip in the Intraday Pivot indicator's words (Stock · Trend · Stage · Zone ·
+   Stretch · Group + RS · Earn · Room · Low), one plain sentence per failing check, the size line, and every row behind
+   "Show the working". Display only: the call is read straight off s61Of(r).list, the strip off s.ck[n].ok, the prices
+   off s.x — s61Of / s61Lists / s61Calc / sizes / the plan are untouched.
+   - ecLoc(x): the indicator's location words. LOC61 / loc61Name stay as they were (their text reaches the feed's
+     "Spec61 First Fail" column through ffTxt, the Decision log's frozen facts and the room test).
+   - Simple (default) | Detailed (the pre-21 Oct block, labels renamed): localStorage adrb.ecView. Folds: adrb.ecWork
+     ("Show the working"), adrb.ecSize (the size card).
+   - Workspace layout, Simple: the block sits under the decision panel, above the Evidence fold (Detailed keeps it inside
+     Evidence as before). Classic drawer: same place as before, before "Entry checks".
+   Names, storage keys, record fields, CSV / feed headers and the screener's codes keep "s61" / "Spec61" / L1 / BELOW21.
+   ===================================================================== */
+// EC_LOC / ecLoc / ecLocS / ecLocCode / ecPlain sit next to LOC61 in the Spec 6.1 script; the Detailed view's pieces
+// (s61RowHTML, s61ChipsHTML, s61LiveHTML, s61SizeHTML, ecTagHTML, ecNotLive) sit with s61PanelHTML there.
+const EC = {sym: null};
+const EC_CALL = {"A-eligible": {t: "READY TO TRADE", c: "go"}, "OnDeck-L2": {t: "ON DECK · JUST UNDER", c: "zone"}, "OnDeck-1blocker": {t: "ON DECK · ONE THING MISSING", c: "zone"},
+  Background: {t: "NOT YET", c: ""}, Out: {t: "OUT", c: "bad"}};
+// short names for the check numbers (Setups card "Out" tally, two-blocker sentence)
+const EC_CK = {1: "Stock size", 2: "Bad data", 3: "Trend", 4: "Stage", 5: "Stretch", 6: "Zone", 7: "Group", 8: "RS", 9: "Earnings", 10: "Room", 11: "Day low"};
+const ecView = () => store.get("adrb.ecView", "simple") === "detailed" ? "detailed" : "simple";
+const ecReady = "In the buy zone and every check passes. On TradingView, wait for Intraday Pivot to say GET READY → BUY.";
+
+// one plain sentence for every failing / blocking check 1–9, keyed by check number
+function ecWhy(s){
+  const x = s.x, r = s.r, ck = s.ck, D = x.D, er = s.er, W = {};
+  const money = v => !fin(v) ? "—" : v >= 1e9 ? "$" + (v / 1e9).toFixed(1) + "B" : "$" + Math.round(v / 1e6) + "M";
+  if (ck[1].ok == null) W[1] = "Market cap unknown — the stock file needs a Market cap column to check the size.";
+  else if (ck[1].ok === false) W[1] = "Too small or thin — " + (r.mcap < S61.liqCap ? `market cap ${money(r.mcap)} (needs $1B or more)` : !(x.dv20 >= S61.liqDv) ? `${money(x.dv20)} traded a day (needs $100M or more)` : `price $${f2(x.close)} (needs over $10)`) + ".";
+  if (ck[2].ok === false) W[2] = `Bad data — a ${x.brkMax.toFixed(0)}% one-day move in the last 50 sessions (limit 40%). Check it isn't an unadjusted split.`;
+  if (ck[3].ok === false) W[3] = !(x.close > x.e21) ? `Under the daily 21 EMA (${f2(x.e21)}) — out until it closes back above a rising 21.`
+    : "Trend broken — " + [!x.k3e21 ? "the daily 21 EMA isn't rising" : "", !x.k3s50 ? (x.close > x.s50 ? "the daily 50 SMA isn't rising" : `under the daily 50 SMA (${f2(x.s50)})`) : "", !x.k3wk ? "the last weekly close isn't above a rising weekly 10-week line" : ""].filter(Boolean).join(", ") + ".";
+  if (ck[4].ok === false) { const lab = s.stage ? s.stage.lab : "?"; W[4] = `Stage ${lab} (${WS_MAIN[lab] === "1" ? "basing" : "topping"}) — the chart can still trade it, at most On deck. Size down or wait.`; }
+  if (ck[5].ok === false) W[5] = fin(x.ext) ? `Too stretched — ${sgA(x.ext)} ADR above the daily 50 SMA (limit 4). Fits again at ${f2(x.s50 + 4 * D)} or lower today.` : "Stretch unknown — no ADR yet.";
+  const zHi = x.bandTop + 0.5 * D;
+  if (x.loc == null) W[6] = "No ADR yet — too little history to place it.";
+  else if (x.loc === "L2") W[6] = `Just under the buy zone (${f2(x.bandTop)} – ${f2(zHi)}). A move back above ${f2(x.e9p)} (yesterday's daily 9 EMA) puts it in play — that's the planned entry.`;
+  else if (x.loc === "L3") W[6] = `Deep under the buy zone — ${Math.abs(x.d9).toFixed(2)} ADR under the daily 9 EMA. Needs to get back within 0.25 ADR of it (${f2(x.e9 - 0.25 * D)} or higher).`;
+  else if (x.loc === "ABOVE") W[6] = `Too high above the buy zone (${x.dB.toFixed(2)} ADR over the top of the daily 9/21 band; limit 0.5) — wait for a pullback to ${f2(zHi)} or lower.`;
+  if (ck[7].ok == null) W[7] = "Group strength unknown — no group for it in the file.";
+  else if (ck[7].ok === false) W[7] = `Its group${r.group ? " (" + r.group + ")" : ""} is Lagging — wait for the group to improve.`;
+  if (ck[8].ok == null) W[8] = "RS unknown.";
+  else if (ck[8].ok === false) W[8] = `RS ${r.rs} of ${S.stocks.length} — needs 75 or better.`;
+  if (ck[9].ok === false) W[9] = er.n == null ? `No earnings date${er.why === "date already passed" ? " (the file's date has passed)" : ""} — confirm it before trading; a missing date counts as a blocker.`
+    : `Earnings in ${er.n} session${er.n === 1 ? "" : "s"} (exit by ${er.exitBy}) — needs 6 or more. Wait until after the report.`;
+  return W;
+}
+// the header sentence and the check it came from (that one isn't repeated under the strip)
+function ecSay(s, W){
+  if (s.list === "A-eligible") return {n: null, t: ecReady};
+  if (s.list === "OnDeck-L2" || s.list === "Background") return {n: 6, t: W[6]};
+  if (s.list === "OnDeck-1blocker") { const n = s.blockers[0]; return {n, t: W[n]}; }
+  const hard = [1, 2, 3, 5, 7, 8].find(n => s.ck[n].ok !== true);
+  if (hard != null) return {n: hard, t: W[hard]};
+  if (s.x.loc == null) return {n: 6, t: W[6]};
+  const bl = s.blockers.map(n => n === 6 ? ecLocS(s.x).toLowerCase() : n === 4 ? `Stage ${s.stage ? s.stage.lab : "?"}` : "earnings too close or unknown");
+  return {n: null, t: `${bl.length >= 2 ? "Two things missing" : "Off the lists"} — ${bl.join(" and ")}. Off the lists until one clears.`};
+}
+// the strip: [key, label, ok (true / false / null), kind]; groups read every check they cover
+function ecStrip(s){
+  const ck = s.ck, x = s.x, er = s.er, both = (...v) => v.some(o => o === false) ? false : v.every(o => o === true) ? true : null;
+  const lab = s.stage ? s.stage.lab : null, lv = s.live;
+  return [["stock", "Stock", both(ck[1].ok, ck[2].ok), "hard"], ["trend", "Trend", ck[3].ok, "hard"], ["stage", lab ? `Stage ${lab}` : "Stage", ck[4].ok, "soft"],
+    ["zone", "Zone", ck[6].ok, x.loc === "BELOW21" || x.loc == null ? "hard" : "soft"], ["stretch", "Stretch", ck[5].ok, "hard"], ["grs", "Group + RS", both(ck[7].ok, ck[8].ok), "hard"],
+    ["earn", er.n != null ? `Earn ${er.n} sess` : "Earn", ck[9].ok, "soft"],
+    ["room", !fin(x.entry) ? "Room —" : x.nh ? "Room: new highs" : `Room ${x.room.toFixed(1)}R`, ck[10].ok, "info"],
+    ["low", lv ? `Low ${lv.lodA.toFixed(2)} ADR` : "Low (at the trigger)", ck[11].ok, "live"]];
+}
+function ecStripHTML(s){
+  return `<div class="ecstrip">${ecStrip(s).map(([k, l, ok, kind]) => {
+    // room (information only) and the day low (measured at this price, never part of the pass) are never a red ✗
+    const m = kind === "info" || kind === "live" ? (ok === true && kind === "live" ? "✓" : ok === false ? "!" : "·") : ok === true ? "✓" : ok === false ? "✗" : "?";
+    const c = kind === "info" || kind === "live" ? (ok === true && kind === "live" ? "ok" : ok === false ? "inf" : "na") : ok === true ? "ok" : ok === false ? (kind === "soft" ? "warn" : "no") : "na";
+    return `<span class="ec-${c}" data-ec="${k}" data-ok="${ok == null ? "" : ok ? 1 : 0}"${kind === "info" ? ` title="Room to the first resistance — information only, never blocks (2R is the guide)"` : kind === "live" ? ` title="Entry no more than 0.6 ADR above the day low — the real check is at the trigger; this reading is at the last price"` : ""}>${m} ${esc(l)}</span>`; }).join("")}</div>`;
+}
+// key prices: buy zone, planned entry, 1R estimate, first resistance + room, earnings
+function ecPrices(s){
+  const x = s.x, er = s.er, D = x.D, b = (k, v) => `<b data-px="${k}">${f2(v)}</b>`;
+  const l1 = fin(D) ? [`Buy zone ${b("zlo", x.bandTop)} – ${b("zhi", x.bandTop + 0.5 * D)}`, fin(x.entry) ? `planned entry ${b("entry", x.entry)}${x.loc === "L2" ? " (yesterday's daily 9 EMA)" : ""}` : "no planned entry",
+    `1R ≈ ${b("r1", S61.risk * D)} (0.6 ADR)`] : ["No ADR yet — too little history"];
+  const res = !fin(x.entry) ? "" : x.nh ? "No resistance above (new highs)" : `First resistance ${b("fr", x.fr)}${x.frAt ? ` <span class="dim">(${esc(res61Txt(x.frAt))})</span>` : ""} · <span class="${x.room >= S61.room ? "" : "ec-inf"}">${x.room.toFixed(1)}R room${x.room >= S61.room ? "" : " (under 2R — information only)"}</span>`;
+  const ern = er.n == null ? `<span class="neg">Earnings date unknown</span>` : `<span class="${er.n < S61.erMin ? "neg" : ""}">Earnings in ${er.n} session${er.n === 1 ? "" : "s"}, exit by ${esc(er.exitBy)}</span>`;
+  return `<div class="ecpx">${l1.join(" · ")}</div><div class="ecpx">${[res, ern].filter(Boolean).join(" · ")}</div>`;
+}
+function ecSizeLine(s){
+  const z = s.size, gl = g => `${g[0]} ${g[1]}%`;
+  const st = [z.smaStep ? "−1 under the daily 200 SMA" : "", z.regStep ? `−${z.regStep} ${z.regSrc ? z.reg + (z.regSrc === "tape" ? " (tape read)" : "") : "MAP not set"}` : "", z.meStep ? `−${z.meStep} personal` : ""].filter(Boolean);
+  return `Size <b>${gl(z.base)}</b>${st.length ? " → " + esc(st.join(", ")) : ""} = <b>${gl(z.final)}</b>${z.floored ? " (floor C)" : ""}${z.shares != null ? ` · <b>${z.shares.toLocaleString()}</b> shares${z.est ? " (1R estimate)" : ""}` : CFG.nlv ? "" : " · add NLV in Settings"}${z.baseOwn ? "" : ` <span class="small neg">· this setup isn't graded — Settings default used</span>`}`;
+}
+const ecFoot = () => `<div class="ecfoot"><span class="small dim">View</span>${ecToggle()}</div>`;
+const ecToggle = () => `<span class="seg ecv" title="Entry Check: Simple (call, prices, checks strip) or Detailed (every check on its own row — the pre-21 Oct layout)"><button data-ecv="simple" class="${ecView() === "simple" ? "on" : ""}">Simple</button><button data-ecv="detailed" class="${ecView() === "detailed" ? "on" : ""}">Detailed</button></span>`;
+
+const _s61PanelEC = s61PanelHTML;
+s61PanelHTML = function(r){
+  if (r.etf) return "";
+  if (ecView() === "detailed") return _s61PanelEC(r).replace('<div class="s61p">', '<div class="s61p ecd">').replace(/<\/div>\s*$/, `${ecFoot()}</div>`);
+  const s = s61Of(r);
+  const head = `<h4 class="ech">Entry Check · ${esc(r.sym)} ${ecTagHTML()} ${ecNotLive()}`;
+  if (!s) return `<div class="s61p ecs">${head}</h4><div class="small dim">${S.has.hist ? "Too little stored history for this name." : "Needs the price history (Data check → load price history)."}</div>${ecFoot()}</div>`;
+  const x = s.x, W = ecWhy(s), say = ecSay(s, W), call = EC_CALL[s.list], def = s61Reg().v === "Defensive", cat = s61Cat().has(r.sym);
+  const more = [1, 2, 3, 4, 5, 6, 7, 8, 9].filter(n => W[n] && n !== say.n && !(n === 6 && x.loc === "BELOW21")).map(n => `<div class="ecwhy" data-n="${n}">${s.ck[n].kind === "hard" || (n === 6 && x.loc == null) ? "✗" : "!"} ${esc(W[n])}</div>`).join("");
+  const chips = s61ChipsHTML(r, s, def, ["rmv", "exc", "rej", "prov", "miss", "stale", "split", "msrc", "timing"]);
+  const work = `<details class="tp-fold ecw" data-ecf="adrb.ecWork" ${store.get("adrb.ecWork", false) ? "open" : ""}><summary>Show the working</summary>
+    <div class="small" style="margin:4px 0">Location <b>${esc(ecLoc(x))}</b> (code ${esc(x.loc || "—")}) · ADR ${fin(x.adr) ? x.adr.toFixed(2) + "% = $" + f2(x.D) : "—"} · Setup Quality <b>${s.sq}/5</b> · Old pivot level <b>${s.shadow != null ? f2(s.shadow) : "—"}</b> <span class="dim">(reference only)</span></div>
+    <div class="s61chips">${s61ChipsHTML(r, s, def, ["er", "bmo"])}</div>
+    ${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(n => s61RowHTML(s.ck[n])).join("")}
+    ${s61LiveHTML(s)}
+    <div class="small" style="margin-top:6px"><label class="tog"><input type="checkbox" data-s61cat="${esc(r.sym)}" ${cat ? "checked" : ""}>verified fresh catalyst</label></div>
+    <div class="small dim">Exits: ⅓ at 2R (3R if chosen before entry) or the T+3 daily close — a T+3 close below the entry sells the whole position → stop to breakeven → shave 10% at each whole ADR from 7 ADR above the daily 50 SMA → runner out on a daily close under the daily 9 EMA.</div></details>`;
+  return `<div class="s61p ecs" data-list="${esc(s.list)}">${head}<span class="pill eccall ${call.c}" data-call="${esc(s.list)}">${call.t}</span></h4>
+    <div class="ecsay">${esc(say.t)}</div>
+    ${ecPrices(s)}
+    ${ecStripHTML(s)}
+    ${more}
+    ${chips ? `<div class="s61chips">${chips}</div>` : ""}
+    <details class="ecsz" data-ecf="adrb.ecSize" ${store.get("adrb.ecSize", false) ? "open" : ""}><summary>${ecSizeLine(s)}</summary>${s61SizeHTML(r, s)}</details>
+    ${work}
+    <div class="small dim" style="margin-top:6px">Trigger (on TradingView, Intraday Pivot): a 30-min candle closes back above the 30-min 21 EMA (the trigger line), earliest the 10:00 New York close; buy at the next 30-min candle's open. Stop = the day low at the trigger, no more than 0.6 ADR under the entry.</div>${ecFoot()}</div>`;
+};
+// the ticker on the panel (the Settings switch re-opens it)
+const _openDrawerEC = openDrawer;
+openDrawer = function(sym){ EC.sym = sym; return _openDrawerEC(sym); };
+// the toggle and the folds' remembered state
+const _s61WireEC = s61Wire;
+s61Wire = function(root, sym){
+  _s61WireEC(root, sym);
+  root.querySelectorAll("[data-ecv]").forEach(b => b.onclick = e => { e.stopPropagation(); store.set("adrb.ecView", b.dataset.ecv); s61Refresh(sym); });
+  root.querySelectorAll("details[data-ecf]").forEach(d => d.addEventListener("toggle", () => store.set(d.dataset.ecf, d.open)));
+};
+// workspace, Simple: lift the block out of the Evidence fold, under the decision panel
+if (WS) {
+  const _tpBuildEC = tpBuild;
+  tpBuild = function(r){
+    _tpBuildEC(r);
+    if (ecView() !== "simple" || r.etf) return;
+    const pane = document.querySelector('#drawer .tp-pane[data-p="plan"]'), ev = pane && pane.querySelector(":scope > details.dpev"), blk = ev && ev.querySelector(".s61p.ecs");
+    if (blk) { ev.before(blk); const sm = ev.querySelector("summary"); if (sm) sm.textContent = "Evidence — the Spec 6.0 ticket, Board plan / Pivot script, entry checks and the stop check (Entry Check is above)"; }
+  };
+}
+document.head.insertAdjacentHTML("beforeend", `<style>
+.ecfoot{display:flex;justify-content:flex-end;align-items:center;gap:6px;margin-top:6px} .s61p .ecv button{font-size:11px;padding:2px 8px}
+.s61t td:last-child{white-space:normal;min-width:240px}
+.s61p h4.ech{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:10px 0 4px;font-size:12px}
+.ectag{font-size:10.5px;font-weight:400;color:var(--ink-3);border:1px solid var(--line);border-radius:6px;padding:0 5px}
+.eccall{margin-left:auto;font-size:12.5px;font-weight:800;letter-spacing:.04em;padding:3px 10px}
+.ecsay{font-size:13px;font-weight:600;margin:2px 0 4px}
+.ecpx{font-size:12.5px;margin:1px 0}
+.ecstrip{display:flex;flex-wrap:wrap;gap:3px 12px;font-size:12.5px;margin:7px 0 4px;padding:5px 0;border-top:1px dashed var(--line);border-bottom:1px dashed var(--line)}
+.ecstrip span{white-space:nowrap}
+.ec-ok{color:var(--good)} .ec-no{color:var(--crit);font-weight:700} .ec-warn{color:var(--med);font-weight:700} .ec-na{color:var(--ink-3)} .ec-inf{color:var(--med)}
+.ecwhy{font-size:12.5px;margin:2px 0}
+.ecsz{margin:6px 0} .ecsz>summary{cursor:pointer;font-size:12.5px} .ecsz .s61sz{margin-top:4px}
+</style>`);
 </script>
 <script id="mobile-js">
 "use strict";
