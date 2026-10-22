@@ -987,8 +987,8 @@ document.documentElement.classList.add("ws", "mob");
       <div class="card controls" id="mapCtl"></div>
       <div class="card g1"><div class="hd"><h2>Where is each name?</h2><span class="sub" id="mapSub"></span></div><div style="padding:0 8px 6px"><svg id="mapPlot" class="plot" height="460"></svg></div><div class="legend" id="mapLegend"></div></div>
       <div class="g2e">
-        <div class="card"><div class="hd"><h2>Seven states, best first</h2><span class="sub">click a ticker to open it</span></div><div class="bd stlist" id="stateList"></div></div>
-        <div class="card"><div class="hd"><h2>Where they cluster</h2><span class="sub" id="clSub">groups with several names, split by state · number after a ticker is its RS</span></div><div class="bd" id="stateClusters"></div></div>
+        <div class="card"><div class="hd"><h2>Entry Check locations, best first</h2><span class="sub">click a ticker to open it</span></div><div class="bd stlist" id="stateList"></div></div>
+        <div class="card"><div class="hd"><h2>Where they cluster</h2><span class="sub" id="clSub">groups with several names, split by Entry Check location · number after a ticker is its RS</span></div><div class="bd" id="stateClusters"></div></div>
       </div>
     </section>
 
@@ -1554,6 +1554,29 @@ const ESTR = {
 };
 const estrHTML = k => k ? `<span class="st"><i style="background:${ESTR[k].c}"></i>${ESTR[k].name}</span>` : "—";
 const stHTML = k => k ? `<span class="st"><i style="background:${ST[k].c}"></i>${ST[k].name}</span>` : "—";
+/* Entry Check locations (22 Oct, Eugene: the Discover pages read Entry Check, not the old buy-zone state). Same words as the
+   Entry Check block and the Intraday Pivot indicator. Built from the stored price history (s61Of, cached); without it a name
+   has no location ("—"). r.state (the old buy-zone read) is still computed underneath and never shown on Discover. */
+const ECS = [
+  {k: 1, code: "L1", name: "In buy zone", short: "zone", c: "var(--st1)", d: "0 to +0.5 ADR over the daily 9/21 band with the trend intact (Entry Check L1). The Setups lists add every other check."},
+  {k: 2, code: "L2", name: "Just under buy zone", short: "just under", c: "var(--st2)", d: "Up to 0.25 ADR under the daily 9 EMA (L2) — could reclaim; the planned entry is a move back over yesterday's 9 EMA."},
+  {k: 3, code: "ABOVE", name: "Too high above buy zone", short: "too high", c: "var(--st3)", d: "More than 0.5 ADR over the daily 9/21 band — wait for a pullback into the zone."},
+  {k: 4, code: "L3", name: "Deep under buy zone", short: "deep under", c: "var(--st5)", d: "More than 0.25 ADR under the daily 9 EMA (L3) — not a setup until it's back near the zone."},
+  {k: 5, code: "U21", name: "Under the daily 21 EMA", short: "under 21", c: "var(--st6)", d: "Closed under the daily 21 EMA — out."},
+  {k: 6, code: "BRK", name: "Trend broken", short: "broken", c: "var(--st7)", d: "Above the 21 EMA, but the daily 21 EMA, daily 50 SMA or weekly 10-week line isn't rising — out."}
+];
+const ECSK = Object.fromEntries(ECS.map(s => [s.k, s]));
+const ECS_NONE = "Entry Check locations come from the stored price history — load it on Data check";
+function ecsOf(r){
+  if (!r || r.etf || !S.has.hist || typeof s61Of !== "function") return null;
+  let s = null; try { s = s61Of(r); } catch (e) { return null; }
+  const x = s && s.x; if (!x || !x.loc) return null;
+  return x.loc === "L1" ? 1 : x.loc === "L2" ? 2 : x.loc === "ABOVE" ? 3 : x.loc === "L3" ? 4 : x.close > x.e21 ? 6 : 5;
+}
+const ecsHTML = r => { if (r && r.etf) return estrHTML(r.estr); const k = ecsOf(r); return k ? `<span class="st" title="${esc(ECSK[k].d)}"><i style="background:${ECSK[k].c}"></i>${ECSK[k].name}</span>` : `<span class="dim" title="${ECS_NONE}">—</span>`; };
+const ecX = r => { if (!r || r.etf || !S.has.hist || typeof s61Of !== "function") return null; try { const s = s61Of(r); return s && s.x && s.x.loc ? s.x : null; } catch (e) { return null; } };
+const ecsName = r => { const k = ecsOf(r); return k ? ECSK[k].name : "—"; };
+const ecsIn = (r, ...ks) => ks.includes(ecsOf(r));
 </script>
 <script>
 "use strict";
@@ -1764,7 +1787,7 @@ function computeAll(){
     r.rcDepth = r.reclaimLv.length ? Math.max(...r.reclaimLv.map(k => r.rcDepths[k])) : null;
     r.reclaim = r.reclaimLv.length > 0
       && (r.rs ?? 0) >= (f.minRS || 0)
-      && (f.where === "any" || (f.where === "above50" ? r.a50 === true : f.where === "zone" ? (r.state === 1 || r.state === 2) : true))
+      && (f.where === "any" || (f.where === "above50" ? r.a50 === true : f.where === "zone" ? ecsIn(r, 1, 2) : true))
       && (!(f.dcr > 0) || (r.dcr != null && r.dcr * 100 >= f.dcr))
       && (!f.liq || !r.thin)
       && (!f.ip || r.inPlay === true);
@@ -2002,7 +2025,7 @@ function COLS(){
     {k: "_i", l: "#", g: "id", v: r => r._i, f: r => `<span class="dim">${r._i}</span>`},
     {k: "sym", l: "Ticker", g: "id", cls: "l sym", v: r => r.sym, f: r => `<span title="${esc(r.desc)}">${esc(r.sym)}</span> <a href="${tvURL(r)}" target="_blank" rel="noopener" title="Open in TradingView" class="small" data-stop="1">↗</a>`},
     {k: "rs", l: "RS", h: "composite", g: "id", v: r => r.rs, f: r => rsBadge(r.rs, "Composite RS (1–99) from your weights")},
-    {k: "state", l: "State", h: "entry rules · ETF: structure", g: "id", cls: "l", v: r => r.etf ? (r.estr ? -r.estr : null) : (r.state ? -r.state : null), f: r => r.etf ? estrHTML(r.estr) : stHTML(r.state)},
+    {k: "state", l: "Location", h: "Entry Check location · ETF: structure", g: "id", cls: "l", v: r => r.etf ? (r.estr ? -r.estr : null) : (ecsOf(r) ? -ecsOf(r) : null), f: r => ecsHTML(r)},
     // today
     {k: "rsToday", l: "RS today", h: "ADR basis", g: "today", v: r => r.rsToday, f: r => rsBadge(r.rsToday)},
     {k: "vs_today", l: "vs bench", h: "ADR", g: "today", v: r => r.vs_today, f: r => `<span class="${cls(r.vs_today)}">${sg(r.vs_today)}</span>`},
@@ -2030,7 +2053,7 @@ function COLS(){
   // structure
   C.push(
     {k: "trend", l: "Trend", h: "9/21/50", g: "struct", cls: "l", v: r => ({Lead: 3, Mediocre: 2, Lag: 1})[r.trend] || 0, f: r => trendHTML(r.trend)},
-    {k: "zx", l: "vs " + zm().short, h: "ADR · zone " + zoneRange().replace(" ADR", ""), g: "struct", v: r => r.zx, f: r => { if (r.zx == null) return "—"; const iz = r.zx >= zr()[0] - 1e-9 && r.zx <= zr()[1] + 1e-9; return `<span class="${iz ? "pos" : ""}" style="font-weight:${iz ? 650 : 400}">${sg(r.zx)}</span>`; }},
+    {k: "zx", l: "vs 9/21 band", h: "ADR from the top of the daily 9/21 band (Entry Check) · buy zone 0 to +0.5", g: "struct", v: r => ecX(r) ? ecX(r).dB : null, f: r => { const x = ecX(r); if (!x || !isFinite(x.dB)) return "—"; const iz = x.loc === "L1"; return `<span class="${iz ? "pos" : ""}" style="font-weight:${iz ? 650 : 400}">${sg(x.dB)}</span>`; }},
     {k: "extU", l: "From 50", h: "ADR", g: "struct", v: r => r.extU, f: r => r.extU == null ? "—" : `<span class="${r.extU > CFG.extCap ? "neg" : ""}" style="font-weight:${r.extU > CFG.extCap ? 650 : 400}">${sg(r.extU, 1)}</span>`},
     {k: "smaStep", l: "SMA gate", h: "grade step", g: "struct", v: r => r.smaStep, f: r => r.smaStep ? `<span class="neg">−${r.smaStep}</span>` : `<span class="dim">0</span>`},
     {k: "offHigh", l: "Off 52W", h: "high %", g: "struct", v: r => r.offHigh, f: r => pc(r.offHigh, 1)},
@@ -2089,7 +2112,7 @@ const FILTERS = [
   {k: "q", type: "text", ph: "Search ticker / name…"},
   {k: "sector", type: "select", label: "All sectors", opts: () => [...new Set(S.rows.map(r => r.sector))].sort()},
   {k: "group", type: "select", label: "All groups", opts: () => [...new Set(S.rows.map(r => r.group))].sort()},
-  {k: "state", type: "select", label: "All states", opts: () => STATES.map(s => [s.k, s.name])},
+  {k: "state", type: "select", label: "All locations", opts: () => ECS.map(s => [s.k, s.name])},
   {k: "trend", type: "select", label: "All trends", opts: () => ["Lead", "Mediocre", "Lag"]},
   {k: "gstate", type: "select", label: "Any group state", opts: () => ["Leading", "Improving", "Weakening", "Lagging"]},
   {k: "minRS", type: "num", label: "RS ≥"},
@@ -2111,7 +2134,7 @@ function passFilters(r, F){
   if (F.q) { const q = F.q.toLowerCase(); if (!(r.sym.toLowerCase().includes(q) || (r.desc || "").toLowerCase().includes(q))) return false; }
   if (F.sector && r.sector !== F.sector) return false;
   if (F.group && r.group !== F.group) return false;
-  if (F.state && String(r.state) !== String(F.state)) return false;
+  if (F.state && String(ecsOf(r)) !== String(F.state)) return false;
   if (F.trend && r.trend !== F.trend) return false;
   if (F.gstate && r.gState !== F.gstate) return false;
   if (F.minRS != null && F.minRS !== "" && (r.rs ?? -1) < +F.minRS) return false;
@@ -2398,7 +2421,7 @@ function renderMovers(){
   $("moversSub").textContent = `${L.length} stocks moving ${CFG.moversMin}+ ADR ${pm ? "premarket" : "today"} or gapping · biggest first · last ${CFG.newsDays} trading days${on.length ? " · " + on.join(", ") : ""}`;
   if (!L.length) { $("movers").innerHTML = `<div class="empty">Nothing is moving ${CFG.moversMin}+ ADR in this file.</div>`; return; }
   $("movers").innerHTML = (anyNews() ? "" : `<div class="note">Add a Massive or Finnhub key, or your relay link, in Settings to see the headlines behind these moves. The links under each name work without setup.</div>`) +
-    L.map(r => `<div class="mv"><div class="who"><b data-sym="${esc(r.sym)}">${esc(r.sym)}</b> <span class="${cls(mv(r))}" style="font-weight:650">${sg(mv(r))} ADR</span><div class="small">${esc(r.group)}</div><div class="small">${stHTML(r.state)}</div><div>${flagsHTML(r)}</div></div><div>${newsSlot(r.sym, "line2")}<div class="small" style="margin-top:3px">${newsLinks(r.sym)}</div></div></div>`).join("");
+    L.map(r => `<div class="mv"><div class="who"><b data-sym="${esc(r.sym)}">${esc(r.sym)}</b> <span class="${cls(mv(r))}" style="font-weight:650">${sg(mv(r))} ADR</span><div class="small">${esc(r.group)}</div><div class="small">${ecsHTML(r)}</div><div>${flagsHTML(r)}</div></div><div>${newsSlot(r.sym, "line2")}<div class="small" style="margin-top:3px">${newsLinks(r.sym)}</div></div></div>`).join("");
   hydrateNews($("movers"));
 }
 // your real stop: the 30-min pullback low, checked against the half-ADR ceiling
@@ -2562,7 +2585,7 @@ function renderFlow(){
   const pm = S.mode === "pm";
   const open = box => box.onclick = e => { const tr = e.target.closest("tr[data-sym]"); if (tr) openDrawer(tr.dataset.sym); };
   const mini = (rows, head, cells) => `<table class="mini"><thead><tr>${head.map((h, i) => `<th class="${i === 0 ? "l" : ""}">${h}</th>`).join("")}</tr></thead><tbody>${rows.map(r => `<tr data-sym="${esc(r.sym)}" class="${r.thin ? "thin" : ""}">${cells(r).map((c, i) => `<td class="${i === 0 ? "l sym" : ""}">${c}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
-  const stDot = r => r.state ? `<span class="st" title="${esc(ST[r.state].name)}"><i style="background:${ST[r.state].c}"></i>${({1: "zone", 2: "wait", 3: "above", 4: "ext", 5: "below", 6: "<50", 7: "out"})[r.state]}</span>` : "—";
+  const stDot = r => { const k = ecsOf(r); return k ? `<span class="st" title="${esc(ECSK[k].name)}"><i style="background:${ECSK[k].c}"></i>${ECSK[k].short}</span>` : `<span class="dim" title="${ECS_NONE}">—</span>`; };
   const extraFlags = r => `${r.reclaim ? `<span class="flag rc">rc ${r.reclaimLv.join("·")}</span>` : ""}${r.chase ? `<span class="flag chase" title="Already 2+ ADR — don't chase">≥2 ADR</span>` : ""}${r.focus ? `<span class="flag map">MAP</span>` : ""}${r.held ? `<span class="flag held">HELD</span>` : ""}`;
   const pmMsg = `<div class="empty" style="padding:6px 0">This is a premarket file — this needs a regular-session export (intraday volume, low of day, VWAP).</div>`;
   // in play
@@ -2586,7 +2609,7 @@ function renderFlow(){
     <div class="row"><span class="lbl">Levels</span>${["9", "21", "50"].map(k => `<label class="tog"><input type="checkbox" data-rclv="${k}" ${f.lv.includes(k) ? "checked" : ""}>${k} ${k === "50" ? "SMA" : "EMA"}</label>`).join("")}
       <span class="lbl">Dipped under by ≥</span><input type="number" step="0.05" min="0" data-rc="depth" value="${f.depth}"><span class="small">ADR</span></div>
     <div class="row"><span class="lbl">RS ≥</span><input type="number" step="5" data-rc="minRS" value="${f.minRS}">
-      <span class="lbl">Where</span><select data-rc="where"><option value="any" ${f.where === "any" ? "selected" : ""}>Anywhere</option><option value="above50" ${f.where === "above50" ? "selected" : ""}>Above the 50 SMA</option><option value="zone" ${f.where === "zone" ? "selected" : ""}>In or near the buy zone</option></select>
+      <span class="lbl">Where</span><select data-rc="where"><option value="any" ${f.where === "any" ? "selected" : ""}>Anywhere</option><option value="above50" ${f.where === "above50" ? "selected" : ""}>Above the 50 SMA</option><option value="zone" ${f.where === "zone" ? "selected" : ""}>In or just under the buy zone</option></select>
       <span class="lbl">In top</span><select data-rc="dcr">${[[0, "any part"], [50, "half"], [67, "third"], [75, "quarter"]].map(([v, l]) => `<option value="${v}" ${+f.dcr === v ? "selected" : ""}>${l}</option>`).join("")}</select><span class="small">of today's range</span></div>
     <div class="row"><label class="tog"><input type="checkbox" data-rcb="liq" ${f.liq ? "checked" : ""}>Liquid only</label><label class="tog"><input type="checkbox" data-rcb="ip" ${f.ip ? "checked" : ""}>In play only</label>
       <span class="lbl">Sort</span><select data-rc="sort">${Object.entries(RC_SORT).map(([k, [l]]) => `<option value="${k}" ${f.sort === k ? "selected" : ""}>${l}</option>`).join("")}</select>
@@ -2605,11 +2628,11 @@ function renderFlow(){
   // new since last file
   const d = S.delta, ch = a => a.length ? a.slice(0, 24).map(r => tkChip(r, r.rs ?? "", r.thin ? "thin" : "")).join("") + (a.length > 24 ? `<span class="small"> +${a.length - 24}</span>` : "") : "<span class='dim'>none</span>";
   $("nwSub").textContent = d ? `vs ${S.prev.files.map(f => f.name).join(" + ")}` : "";
-  $("nwBox").innerHTML = d ? `<div class="nwgrid"><div><div class="lbl">Into the buy zone</div>${ch(d.added)}</div>
-    <div><div class="lbl">Newly in play</div>${pm ? "<span class='dim'>regular session only</span>" : ch(d.ipNew)}</div>
+  // 22 Oct: "Into / Left the buy zone" read the old buy-zone state of both files — gone (an earlier file has no Entry Check location)
+  $("nwBox").innerHTML = d ? `<div class="nwgrid"><div><div class="lbl">Newly in play</div>${pm ? "<span class='dim'>regular session only</span>" : ch(d.ipNew)}</div>
     <div><div class="lbl">New reclaims</div>${pm ? "<span class='dim'>regular session only</span>" : ch(d.rcNew)}</div>
-    <div><div class="lbl">Left the buy zone</div>${ch(d.removed)}</div></div>`
-    : `<div class="empty" style="padding:6px 0">Drop a later export on the page (or use "Compare with…" for an earlier one) to see what just entered the buy zone, came into play or reclaimed.</div>`;
+</div>`
+    : `<div class="empty" style="padding:6px 0">Drop a later export on the page (or use "Compare with…" for an earlier one) to see what just came into play or reclaimed.</div>`;
 }
 
 /* ---------------- TODAY ---------------- */
@@ -2626,7 +2649,7 @@ function renderToday(){
     ["Median move", sg(median(H)) + " ADR", pm ? "premarket vs close" : "vs prior close"],
     ["≥ 1 ADR up", H.filter(x => x >= 1).length, `${H.filter(x => x <= -1).length} names ≤ −1 ADR`],
     ["≥ 2 ADR up", H.filter(x => x >= 2).length, "chase zone — don't buy the extension"],
-    ["In the buy zone", st.filter(r => r.state === 1).length, `${st.filter(r => r.state === 2).length} more waiting just above · mode ${zm().n}`],
+    ["In the buy zone", S.has.hist ? st.filter(r => ecsOf(r) === 1).length : "—", S.has.hist ? `${st.filter(r => ecsOf(r) === 2).length} more just under · Entry Check location` : "needs the price history"],
     ["Gappers", st.filter(r => r.gapper).length, `≥ ${CFG.gapTh} ADR ${pm ? "premarket" : "gap"}`],
     pm ? ["Lead trend", st.filter(r => r.trend === "Lead").length, `of ${st.length} sit 9 > 21 > 50`]
        : ["Gaps holding", (() => { const g = st.filter(r => r.gapU != null && r.gapU >= .5); return g.length ? `${g.filter(r => (r.openU ?? 0) > 0).length}/${g.length}` : "—"; })(), "gapped ≥ 0.5 ADR and green from the open"]
@@ -2646,14 +2669,14 @@ function renderToday(){
   T.today.o.sub = () => `RS today ranks on: ${(S.basisOpts.find(o => o[0] === S.basis) || [])[1]}`;
   T.today.render();
 }
-const rowTip = r => `<div class="t">${esc(r.sym)} <span class="small">${esc(r.group)}</span></div>${tipRow("RS · today", `${r.rs ?? "—"} · ${r.rsToday ?? "—"}`)}${S.mode === "pm" ? tipRow("PM move", `${pc(r.pmPct)} · ${sg(r.pmU)} ADR`) : tipRow("Gap · from open", `${sg(r.gapU)} · ${sg(r.openU)} ADR`)}${tipRow("vs " + zm().short, sg(r.zx) + " ADR")}${r.inPlay ? tipRow("In play", `${f2(r.ipRv)}x vol · ${sg(r.ipVs)} ADR`) : ""}${r.reclaim ? tipRow("Reclaim", r.reclaimLv.join(" · ")) : ""}${tipRow("From 50 SMA", sg(r.extU, 1) + " ADR")}${tipRow("State", r.state ? ST[r.state].name : "—")}`;
+const rowTip = r => `<div class="t">${esc(r.sym)} <span class="small">${esc(r.group)}</span></div>${tipRow("RS · today", `${r.rs ?? "—"} · ${r.rsToday ?? "—"}`)}${S.mode === "pm" ? tipRow("PM move", `${pc(r.pmPct)} · ${sg(r.pmU)} ADR`) : tipRow("Gap · from open", `${sg(r.gapU)} · ${sg(r.openU)} ADR`)}${tipRow("vs the 9/21 band", ecX(r) ? sg(ecX(r).dB) + " ADR" : "—")}${r.inPlay ? tipRow("In play", `${f2(r.ipRv)}x vol · ${sg(r.ipVs)} ADR`) : ""}${r.reclaim ? tipRow("Reclaim", r.reclaimLv.join(" · ")) : ""}${tipRow("From 50 SMA", sg(ecX(r) ? ecX(r).ext : r.extU, 1) + " ADR")}${tipRow("Location", ecsName(r))}`;
 
 /* ---------------- LEADERS MAP ---------------- */
 function renderMap(){
   const ctl = $("mapCtl");
   if (!ctl.dataset.built) {
     ctl.innerHTML = `<div class="grp"><span class="lbl">Group</span><select id="mGroup"><option value="">All</option></select></div>
-      <div class="grp"><span class="lbl">Colour by</span><div class="seg" id="mColor"><button data-k="state" class="on">State</button><button data-k="trend">Trend</button><button data-k="gstate">Group state</button></div></div>
+      <div class="grp"><span class="lbl">Colour by</span><div class="seg" id="mColor"><button data-k="state" class="on">Location</button><button data-k="trend">Trend</button><button data-k="gstate">Group state</button></div></div>
       <div class="grp"><span class="lbl">RS ≥</span><input type="number" id="mRS" value="0" style="width:56px"></div>
 
       <label class="tog"><input type="checkbox" id="mLiq">Liquid only</label>
@@ -2667,41 +2690,42 @@ function renderMap(){
   }
   const gSel = $("mGroup"), cur = gSel.value;
   gSel.innerHTML = `<option value="">All groups</option>` + S.groups.filter(g => g.n >= 2).map(g => `<option ${g.name === cur ? "selected" : ""}>${esc(g.name)}</option>`).join("");
-  $("mZone").innerHTML = zoneCtlHTML(); wireZone($("mZone"));
-  const [zl, zh] = zr();
-  $("mapLede").innerHTML = `Where each name sits against your entry rules. Across: distance from the <b>${zm().line}</b>, in ADR (0 = on the line). Up: distance above the 50 SMA, in ADR. The outlined box is your buy zone — <b>${zoneRange()}</b> from the line and no more than ${CFG.extCap} ADR above the 50 SMA. Solid ring = in play, dashed ring = reclaim. ${onSpec() ? "This is your written rule." : "<b>This mode is outside your written rule</b> (0 to +0.5 ADR from the 9/21 band) — expect more names in the box than real setups."}`;
-  let pool = VS().filter(r => r.zx != null && r.extU != null && (r.rs ?? 0) >= (+$("mRS").value || 0) && (!$("mLiq").checked || !r.thin) && (!$("mLead").checked || r.groupLeader) && (!$("mIP").checked || r.inPlay) && (!$("mRC").checked || r.reclaim) && (!gSel.value || r.group === gSel.value));
+  // 22 Oct: Entry Check locations — across = distance from the top of the daily 9/21 band, up = distance above the daily 50 SMA,
+  // both in Entry Check's ADR (20-day mean range) from the stored bars; the old buy-zone line / mode controls are gone
+  $("mZone").innerHTML = "";
+  const zl = 0, zh = S61.above, cap = S61.ext;
+  $("mapLede").innerHTML = `Where each name sits against Entry Check. Across: distance from the top of the daily 9/21 band, in ADR (0 = on the band). Up: distance above the daily 50 SMA, in ADR. The outlined box is the buy zone — <b>0 to +${zh} ADR</b> over the band and no more than ${cap} ADR above the 50 SMA. Colour = Entry Check location. Solid ring = in play, dashed ring = reclaim.${S.has.hist ? "" : ` <b>Entry Check locations need the stored price history</b> — load it on Data check; the map is empty until then.`}`;
+  let pool = VS().filter(r => ecX(r) && isFinite(ecX(r).dB) && isFinite(ecX(r).ext) && (r.rs ?? 0) >= (+$("mRS").value || 0) && (!$("mLiq").checked || !r.thin) && (!$("mLead").checked || r.groupLeader) && (!$("mIP").checked || r.inPlay) && (!$("mRC").checked || r.reclaim) && (!gSel.value || r.group === gSel.value));
   pool = pool.sort((a, b) => (b.rs ?? 0) - (a.rs ?? 0)).slice(0, CFG.dots || Infinity);
-  const col = S.ui.mColor === "trend" ? (r => trendColor(r.trend)) : S.ui.mColor === "gstate" ? (r => gStateColor(r.gState)) : (r => r.state ? ST[r.state].c : "var(--ink-3)");
-  const inBox = pool.filter(r => r.state === 1).length;
-  $("mapSub").textContent = `${pool.length} names shown · ${inBox} in the buy zone · ${pool.filter(r => r.inPlay).length} in play · ${pool.filter(r => r.reclaim).length} reclaiming · ${pool.filter(r => r.state === 4).length} stretched more than ${CFG.extCap} ADR`;
+  const col = S.ui.mColor === "trend" ? (r => trendColor(r.trend)) : S.ui.mColor === "gstate" ? (r => gStateColor(r.gState)) : (r => { const k = ecsOf(r); return k ? ECSK[k].c : "var(--ink-3)"; });
+  const inBox = pool.filter(r => ecsOf(r) === 1).length;
+  $("mapSub").textContent = `${pool.length} names shown · ${inBox} in the buy zone · ${pool.filter(r => ecsOf(r) === 2).length} just under · ${pool.filter(r => r.inPlay).length} in play · ${pool.filter(r => ecX(r).ext > cap).length} more than ${cap} ADR above the 50 SMA`;
   scatter($("mapPlot"), pool, {
-    x: r => r.zx, y: r => r.extU, id: r => r.sym, color: col, auto: true, xr: [-5, 7], yr: [-4, 12], minX: Math.min(-1.5, zl - 0.6), maxX: Math.max(3, zh + CFG.waitW + 0.5), minY: -1, maxY: 6,
-    zones: [{x0: -5, x1: zl, y0: -4, y1: 12, fill: "var(--down-soft)", op: .35, label: CFG.zMode === "band" ? "Under the 9/21 band" : "Below the zone", lc: "var(--st5)"},
-            {x0: zh, x1: zh + CFG.waitW, y0: -4, y1: 12, fill: "var(--up-soft)", op: .35, label: "Wait", lc: "var(--st2)"},
-            {x0: zh + CFG.waitW, x1: 7, y0: -4, y1: 12, fill: "var(--warn-soft)", op: .45, label: "Above the zone", lc: "var(--st3)"}],
-    box: {x0: zl, x1: zh, y0: 0, y1: CFG.extCap, label: `Buy zone · ${inBox}`},
-    hlines: [{y: CFG.extCap, c: "var(--down)", label: `${CFG.extCap} ADR above the 50 SMA`}, {y: 0, c: "var(--ink-3)", label: "50 SMA"}],
-    xLabel: `← below · distance from the ${zm().line} (ADR) · above →`, yLabel: "above the 50 SMA (ADR)",
+    x: r => ecX(r).dB, y: r => ecX(r).ext, id: r => r.sym, color: col, auto: true, xr: [-5, 7], yr: [-4, 12], minX: -1.5, maxX: 3, minY: -1, maxY: 6,
+    zones: [{x0: -5, x1: zl, y0: -4, y1: 12, fill: "var(--down-soft)", op: .35, label: "Under the buy zone", lc: "var(--st5)"},
+            {x0: zh, x1: 7, y0: -4, y1: 12, fill: "var(--warn-soft)", op: .45, label: "Too high above the buy zone", lc: "var(--st3)"}],
+    box: {x0: zl, x1: zh, y0: 0, y1: cap, label: `Buy zone · ${inBox}`},
+    hlines: [{y: cap, c: "var(--down)", label: `${cap} ADR above the 50 SMA`}, {y: 0, c: "var(--ink-3)", label: "50 SMA"}],
+    xLabel: "← under · distance from the top of the daily 9/21 band (ADR) · over →", yLabel: "above the 50 SMA (ADR)",
     rings: r => [r.inPlay ? "solid" : null, r.reclaim ? "dash" : null].filter(Boolean),
     labelIds: pool.slice(0, CFG.labels).map(r => r.sym)
   });
   attachTips($("mapPlot"), id => S.rows.find(r => r.sym === id), rowTip, openDrawer);
-  const legend = S.ui.mColor === "trend" ? [["Lead", "var(--lead)"], ["Mediocre", "var(--med)"], ["Lag", "var(--lag)"]] : S.ui.mColor === "gstate" ? ["Leading", "Improving", "Weakening", "Lagging"].map(s => [s, gStateColor(s)]) : STATES.map(s => [s.name, s.c]);
-  $("mapLegend").innerHTML = legend.map(([n, c]) => `<span><span class="sw" style="background:${c}"></span>${n}</span>`).join("") + `<span><span class="sw" style="background:transparent;border:1.5px solid var(--ink)"></span>in play</span><span><span class="sw" style="background:transparent;border:1.5px dashed var(--ink)"></span>reclaim</span><span class="small">· ${esc(zoneStamp())}</span>`;
-  // seven states
-  $("stateList").innerHTML = STATES.map(s => {
-    const m = pool.filter(r => r.state === s.k);
+  const legend = S.ui.mColor === "trend" ? [["Lead", "var(--lead)"], ["Mediocre", "var(--med)"], ["Lag", "var(--lag)"]] : S.ui.mColor === "gstate" ? ["Leading", "Improving", "Weakening", "Lagging"].map(s => [s, gStateColor(s)]) : ECS.map(s => [s.name, s.c]);
+  $("mapLegend").innerHTML = legend.map(([n, c]) => `<span><span class="sw" style="background:${c}"></span>${n}</span>`).join("") + `<span><span class="sw" style="background:transparent;border:1.5px solid var(--ink)"></span>in play</span><span><span class="sw" style="background:transparent;border:1.5px dashed var(--ink)"></span>reclaim</span><span class="small">· Entry Check (rules v6.1)</span>`;
+  // the Entry Check locations, best first
+  $("stateList").innerHTML = !S.has.hist ? `<div class="empty">${ECS_NONE}.</div>` : ECS.map(s => {
+    const m = pool.filter(r => ecsOf(r) === s.k);
     return `<div class="s" style="--c:${s.c}"><div class="t"><span>${s.name}</span><span>${m.length}</span></div><div class="d">${s.d}</div><div>${m.slice(0, 45).map(r => tkChip(r, r.rs ?? "")).join("") || "<span class='dim'>—</span>"}${m.length > 45 ? `<span class="small"> +${m.length - 45} more</span>` : ""}</div></div>`;
   }).join("");
   // where they cluster
   const gm = {}; pool.forEach(r => (gm[r.group] = gm[r.group] || []).push(r));
-  const gl = Object.entries(gm).filter(([, a]) => a.length >= 2).map(([n, a]) => ({n, a: a.sort((x, y) => ((x.state === 1 ? 0 : 1) - (y.state === 1 ? 0 : 1)) || (y.rs ?? 0) - (x.rs ?? 0)), buy: a.filter(r => r.state === 1).length, weak: a.filter(r => r.state === 2).length}))
+  const gl = Object.entries(gm).filter(([, a]) => a.length >= 2).map(([n, a]) => ({n, a: a.sort((x, y) => ((ecsOf(x) === 1 ? 0 : 1) - (ecsOf(y) === 1 ? 0 : 1)) || (y.rs ?? 0) - (x.rs ?? 0)), buy: a.filter(r => ecsOf(r) === 1).length, weak: a.filter(r => ecsOf(r) === 2).length}))
     .sort((x, y) => (y.buy - x.buy) || (y.weak - x.weak) || (y.a.length - x.a.length)).slice(0, 18);
   const maxN = Math.max(1, ...gl.map(g => g.a.length));
   $("stateClusters").innerHTML = gl.length ? gl.map(g => `<div style="margin-bottom:9px"><div style="display:flex;justify-content:space-between;gap:8px"><b style="font-size:12px;cursor:pointer" data-gopen="${esc(g.n)}">${esc(g.n)}</b><span class="small">${g.buy} in buy zone · ${g.a.length}</span></div>
-      <div class="hbar" style="width:${Math.max(12, g.a.length / maxN * 100)}%;margin:3px 0">${STATES.map(s => { const c = g.a.filter(r => r.state === s.k).length; return c ? `<span style="width:${c / g.a.length * 100}%;background:${s.c}" title="${s.name}: ${c}"></span>` : ""; }).join("")}</div>
-      <div>${g.a.slice(0, 8).map(r => tkChip(r, r.rs ?? "", r.state === 1 ? "buy" : "")).join("")}</div></div>`).join("") : `<div class="empty">No group has 2+ names in view.</div>`;
+      <div class="hbar" style="width:${Math.max(12, g.a.length / maxN * 100)}%;margin:3px 0">${ECS.map(s => { const c = g.a.filter(r => ecsOf(r) === s.k).length; return c ? `<span style="width:${c / g.a.length * 100}%;background:${s.c}" title="${s.name}: ${c}"></span>` : ""; }).join("")}</div>
+      <div>${g.a.slice(0, 8).map(r => tkChip(r, r.rs ?? "", ecsOf(r) === 1 ? "buy" : "")).join("")}</div></div>`).join("") : `<div class="empty">No group has 2+ names in view.</div>`;
 }
 
 /* ---------------- SETUPS / PLAN ---------------- */
@@ -2873,7 +2897,7 @@ function renderThemes(){
   const spot = [...S.groups].filter(g => g.grs != null && g.mom != null && g.grs >= 40).sort((a, b) => b.mom - a.mom).slice(0, 5);
   $("spotlight").innerHTML = spot.length ? `<div class="card"><div class="hd"><h2>Spotlight — fastest improving groups</h2><span class="sub">short-term RS minus longer-term RS, groups ranked 40+</span></div><div class="bd" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px">${spot.map((g, i) => {
     const top = g.leaders.slice(0, 4);
-    return `<div><div class="small">${String(i + 1).padStart(2, "0")} · ${esc(g.sector || "")}</div><div style="font-weight:650;cursor:pointer" data-gopen="${esc(g.name)}">${esc(g.name)}</div><div class="small" style="margin:3px 0 4px">Group RS ${g.grs} (${g.state.toLowerCase()}), short-term ${sg(g.mom, 0)} vs longer-term. ${g.n} names, ${pct0(g.a21)} above the 21 EMA, ${g.buy} in the buy area.</div>${top.map(r => tkChip(r, r.rs ?? "", r.state === 1 ? "buy" : "")).join("")}</div>`;
+    return `<div><div class="small">${String(i + 1).padStart(2, "0")} · ${esc(g.sector || "")}</div><div style="font-weight:650;cursor:pointer" data-gopen="${esc(g.name)}">${esc(g.name)}</div><div class="small" style="margin:3px 0 4px">Group RS ${g.grs} (${g.state.toLowerCase()}), short-term ${sg(g.mom, 0)} vs longer-term. ${g.n} names, ${pct0(g.a21)} above the 21 EMA, ${g.buy ?? "—"} in the buy zone.</div>${top.map(r => tkChip(r, r.rs ?? "", ecsOf(r) === 1 ? "buy" : "")).join("")}</div>`;
   }).join("")}</div></div>` : "";
   // rotation plot
   const pts = thin(G.filter(g => g.lvl != null && g.mom != null), g => g.grs);
@@ -2889,7 +2913,7 @@ function renderThemes(){
   // breadth
   $("thBreadth").innerHTML = G.slice(0, 60).map(g => `<div class="br" data-gopen="${esc(g.name)}" style="grid-template-columns:minmax(120px,190px) 1fr 92px 34px"><div class="nm">${esc(g.name)}</div>
     <div><div class="hbar" title="above 21 EMA ${pct0(g.a21)}"><span style="width:${(g.a21 || 0) * 100}%;background:var(--st1)"></span></div><div class="hbar" style="margin-top:2px;height:6px" title="above 50 SMA ${pct0(g.a50)}"><span style="width:${(g.a50 || 0) * 100}%;background:var(--st2)"></span></div></div>
-    <div class="val" style="white-space:nowrap">${pct0(g.a21)} · ${pct0(g.a50)}</div><div class="cnt" title="in the buy zone">${g.buy}</div></div>`).join("") || `<div class="empty">No groups.</div>`;
+    <div class="val" style="white-space:nowrap">${pct0(g.a21)} · ${pct0(g.a50)}</div><div class="cnt" title="in the buy zone (Entry Check)">${g.buy ?? "—"}</div></div>`).join("") || `<div class="empty">No groups.</div>`;
   // table
   const hz = S.hzAvail;
   const cols = [
@@ -2907,8 +2931,8 @@ function renderThemes(){
     ${G.map(g => `<tr data-gopen="${esc(g.name)}"><td class="l sym">${esc(g.name)}<div class="small">${esc(g.sector || "")}</div></td><td>${g.n}</td><td class="l">${gStateHTML(g.state)}</td><td>${rsBadge(g.grs)}</td><td class="${cls(g.mom)}">${g.mom == null ? "—" : sg(g.mom, 0)}</td>
       ${hz.map(h => `<td>${rsBadge(g["grs_" + h.k], `${h.label}: median ${pc(g["med_" + h.k])}`)}</td>`).join("")}
       <td class="l">${g.leaders.slice(0, 5).map(r => tkChip(r, r.rs ?? "", "hi")).join("")}</td>
-      <td class="l">${g.members.filter(r => r.state === 1 || r.state === 2).sort((a, b) => (b.rs ?? 0) - (a.rs ?? 0)).slice(0, 4).map(r => tkChip(r, r.rs ?? "", r.state === 1 ? "buy" : "")).join("") || "<span class='dim'>—</span>"}</td>
-      <td>${pct0(g.a21)}</td><td>${pct0(g.a50)}</td><td>${g.buy}</td>
+      <td class="l">${g.members.filter(r => ecsIn(r, 1, 2)).sort((a, b) => (b.rs ?? 0) - (a.rs ?? 0)).slice(0, 4).map(r => tkChip(r, r.rs ?? "", ecsOf(r) === 1 ? "buy" : "")).join("") || "<span class='dim'>—</span>"}</td>
+      <td>${pct0(g.a21)}</td><td>${pct0(g.a50)}</td><td>${g.buy ?? "—"}</td>
       ${hz.filter(h => h.k !== "today").map(h => `<td class="${cls(g["med_" + h.k])}">${pc(g["med_" + h.k], 1)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
   renderRadar(G);
   $("thTable").querySelectorAll("th[data-tk]").forEach(th => th.onclick = () => { const k = th.dataset.tk; S.ui.thSort = so.k === k ? {k, d: -so.d} : {k, d: k === "name" ? 1 : -1}; renderThemes(); });
@@ -2962,9 +2986,9 @@ function renderMarket(){
   $("mkRead").innerHTML = lines.map(l => `<p style="margin:0 0 8px">${l}</p>`).join("");
   // sector breadth
   const sm = {}; st.forEach(r => (sm[r.sector] = sm[r.sector] || []).push(r));
-  const rows = Object.entries(sm).map(([s, a]) => ({s, n: a.length, a21: a.filter(r => r.e21 != null && r.last > r.e21).length / a.length, a50: a.filter(r => r.a50).length / a.length, a200: a.filter(r => r.a200).length / a.length, lead: a.filter(r => r.trend === "Lead").length / a.length, rs: median(a.map(r => r.rs)), mv: median(a.map(r => r.move)), buy: a.filter(r => r.state === 1).length})).sort((x, y) => (y.rs ?? 0) - (x.rs ?? 0));
+  const rows = Object.entries(sm).map(([s, a]) => ({s, n: a.length, a21: a.filter(r => r.e21 != null && r.last > r.e21).length / a.length, a50: a.filter(r => r.a50).length / a.length, a200: a.filter(r => r.a200).length / a.length, lead: a.filter(r => r.trend === "Lead").length / a.length, rs: median(a.map(r => r.rs)), mv: median(a.map(r => r.move)), buy: S.has.hist ? a.filter(r => ecsOf(r) === 1).length : null})).sort((x, y) => (y.rs ?? 0) - (x.rs ?? 0));
   const bar = (v, c) => `<div style="display:flex;align-items:center;gap:6px;justify-content:flex-end"><div class="hbar" style="width:80px"><span style="width:${v * 100}%;background:${c}"></span></div><span style="width:34px">${pct0(v)}</span></div>`;
-  $("mkSector").innerHTML = `<div class="tscroll"><table><thead><tr><th class="l">Sector</th><th>Names</th><th>Median RS</th><th>Today</th><th>&gt; 21 EMA</th><th>&gt; 50 SMA</th><th>&gt; 200 SMA</th><th>Lead trend</th><th>Buy zone</th></tr></thead><tbody>${rows.map(x => `<tr data-sector-go="${esc(x.s)}"><td class="l">${esc(x.s)}</td><td>${x.n}</td><td>${rsBadge(x.rs == null ? null : Math.round(x.rs))}</td><td class="${cls(x.mv)}">${sg(x.mv)}</td><td>${bar(x.a21, "var(--st1)")}</td><td>${bar(x.a50, "var(--st2)")}</td><td>${bar(x.a200, "var(--st6)")}</td><td>${bar(x.lead, "var(--lead)")}</td><td>${x.buy}</td></tr>`).join("")}</tbody></table></div>`;
+  $("mkSector").innerHTML = `<div class="tscroll"><table><thead><tr><th class="l">Sector</th><th>Names</th><th>Median RS</th><th>Today</th><th>&gt; 21 EMA</th><th>&gt; 50 SMA</th><th>&gt; 200 SMA</th><th>Lead trend</th><th>Buy zone</th></tr></thead><tbody>${rows.map(x => `<tr data-sector-go="${esc(x.s)}"><td class="l">${esc(x.s)}</td><td>${x.n}</td><td>${rsBadge(x.rs == null ? null : Math.round(x.rs))}</td><td class="${cls(x.mv)}">${sg(x.mv)}</td><td>${bar(x.a21, "var(--st1)")}</td><td>${bar(x.a50, "var(--st2)")}</td><td>${bar(x.a200, "var(--st6)")}</td><td>${bar(x.lead, "var(--lead)")}</td><td>${x.buy ?? "—"}</td></tr>`).join("")}</tbody></table></div>`;
 }
 
 /* =====================================================================
@@ -3238,8 +3262,8 @@ const SCREENS = [
   {k: "factor", t: "Factor move", d: "Moved at least 1 ADR on 1.5x+ relative volume (closing well if high/low present). Strong runs usually start with one.", need: [], f: r => { const m = S.mode === "pm" ? r.ydayU : r.dayU; return (m ?? 0) >= 1 && (r.rvat ?? r.rvol ?? 0) >= 1.5 && (r.dcr == null || r.dcr >= 0.6); }, note: () => S.mode === "pm" ? "Premarket file — this uses yesterday's session." : ""},
   {k: "inplay", t: "Stocks in play", d: () => S.mode === "pm" ? "Heavy volume for the time of day and beating the benchmark." : (() => { const u = ipRule(); return `${u.when}: ${u.vol} and ${u.str}. Thin names included.`; })(), need: ["rvat"], f: r => r.inPlay === true, note: () => S.mode === "pm" ? "Regular-session files only — a premarket export has no intraday volume." : ""},
   {k: "reclaim", t: "Reclaims — right side of the V", d: () => `Today's low or open was under the daily 9, 21 or 50, and price is back above it — also above VWAP and the 30-min 21 EMA. ${S.rcRaw ? `Your filters on Today keep ${S.stocks.filter(r => r.reclaim).length} of ${S.rcRaw}.` : ""}`, need: ["lo1d", "vwap", "e21_30"], f: r => r.reclaim === true, note: () => S.mode === "pm" ? "Regular-session files only." : ""},
-  {k: "pb", t: "Playbook 1 — in the buy zone", d: () => `${zoneText()}, above the 50 SMA, ≤ ${CFG.extCap} ADR stretched. Wait for the 30-min trigger.`, need: [], f: r => r.state === 1},
-  {k: "weak", t: "Wait for a pullback — next to come in", d: () => `Trend intact, up to ${CFG.waitW} ADR above the top of the zone. Set alerts at the top of the zone.`, need: [], f: r => r.state === 2},
+  {k: "pb", t: "In the buy zone (Entry Check)", d: "0 to +0.5 ADR over the daily 9/21 band with the trend intact. The Setups lists add the other checks (stretch, group, RS, earnings). Wait for the 30-min trigger.", need: ["hist"], f: r => ecsOf(r) === 1},
+  {k: "weak", t: "Just under the buy zone — could reclaim", d: "Up to 0.25 ADR under the daily 9 EMA (Entry Check L2). The planned entry is a move back over yesterday's 9 EMA — set an alert there.", need: ["hist"], f: r => ecsOf(r) === 2},
   {k: "near", t: "Near 52-week highs", d: "Within 5% of the 52-week high and above the 50 SMA.", need: ["hi52"], f: r => r.offHigh != null && r.offHigh >= -5 && r.a50},
   {k: "newhi", t: "New 52-week high", d: "At or through the 52-week high in this snapshot. On a red day this is leadership.", need: ["hi52"], f: r => r.newHigh},
   {k: "rsnh", t: "RS line new high (RSNH)", d: () => `RS line (close ÷ ${esc(HIST.bSym || CFG.bench)}) at its highest in 52 weeks today, and price at a 52-week high too. Needs 200+ sessions of history.`, need: ["hist"], f: r => !!(r.rsl && r.rsl.nhToday), note: () => histNote()},
@@ -3251,12 +3275,12 @@ const SCREENS = [
   {k: "gapgo", t: "Gap and go", d: "Gapped at least the gapper threshold and still green from the open (premarket: moving that much with trend intact).", need: [], f: r => S.mode === "pm" ? (r.pmU ?? 0) >= CFG.gapTh && r.trend !== "Lag" : (r.gapU ?? 0) >= CFG.gapTh && (r.openU ?? -1) > 0},
   {k: "gapfade", t: "Gap and fade — avoid", d: "Gapped up the threshold but down 0.3+ ADR from the open.", need: ["cfo1d"], f: r => S.mode === "rth" && (r.gapU ?? 0) >= CFG.gapTh && (r.openU ?? 0) < -0.3},
   {k: "above10", t: "Above a rising 10 SMA", d: "Price above the 10 SMA, 10 SMA above the 20 SMA (rising), within 10% of highs. Survivors on weak days are the strong stocks.", need: ["s10", "s20"], f: r => r.a10 && r.s10rising && (r.offHigh ?? -99) >= -10},
-  {k: "trigger", t: "30-min trigger in play", d: "In the buy zone and trading above the 30-min 21 EMA — check whether the bar has closed above it.", need: ["e21_30"], f: r => r.state === 1 && r.t30 === true},
-  {k: "lod", t: "Actionable now — near the low of day", d: "In the buy zone and no more than 0.6 ADR above today's low (your entry check 6).", need: ["lo1d"], f: r => r.state === 1 && r.lodU != null && r.lodU <= CFG.lodCap},
+  {k: "trigger", t: "30-min trigger in play", d: "In the buy zone and trading above the 30-min 21 EMA — check whether the bar has closed above it.", need: ["e21_30", "hist"], f: r => ecsOf(r) === 1 && r.t30 === true},
+  {k: "lod", t: "Actionable now — near the low of day", d: "In the buy zone and no more than 0.6 ADR above today's low (Entry Check's day-low cap).", need: ["lo1d", "hist"], f: r => ecsOf(r) === 1 && r.lodU != null && r.lodU <= CFG.lodCap},
   {k: "vwap", t: "Holding VWAP", d: "Green on the day and above session VWAP.", need: ["vwap"], f: r => (r.vwapU ?? -1) > 0 && (r.dayU ?? 0) > 0},
-  {k: "narrow", t: "Quiet day in a good spot", d: "Today's range is half an ADR or less, and the name is in or just above the buy zone.", need: ["hi1d", "lo1d"], f: r => r.rangeU != null && r.rangeU <= 0.5 && (r.state === 1 || r.state === 2)},
+  {k: "narrow", t: "Quiet day in a good spot", d: "Today's range is half an ADR or less, and the name is in or just under the buy zone.", need: ["hi1d", "lo1d", "hist"], f: r => r.rangeU != null && r.rangeU <= 0.5 && ecsIn(r, 1, 2)},
   {k: "stage2", t: "Weekly Stage 2", d: "Price above the 10-week SMA, 10-week above 30-week, not more than 6 ADR above the 10-week.", need: ["s10w", "s30w"], f: r => r.stage2w && (r.extWU ?? 0) <= 6},
-  {k: "dry", t: "Volume dry-up in the zone", d: "In the buy zone with 10-day average volume under 80% of the 30-day average — sellers drying up.", need: ["avgv10", "avgv30"], f: r => r.state === 1 && r.dryUp != null && r.dryUp <= 0.8}
+  {k: "dry", t: "Volume dry-up in the zone", d: "In the buy zone with 10-day average volume under 80% of the 30-day average — sellers drying up.", need: ["avgv10", "avgv30", "hist"], f: r => ecsOf(r) === 1 && r.dryUp != null && r.dryUp <= 0.8}
 ];
 const histNote = () => S.has.hist ? (HIST.today ? `Today's bar: ${HIST.today.src === "live" ? "Massive snapshot " + HIST.live.hm + " NY (delayed)" : HIST.today.src === "board" ? "live board prices" : "your CSV"}.` : `As of the ${HIST.dates[HIST.nD - 1]} close.`) : "";
 function renderScreens(){
@@ -3363,7 +3387,7 @@ function openDrawer(sym){
     ${r.state === 4 ? `<div class="note"><b>Extended:</b> more than ${CFG.extCap} ADR above the 50 SMA. Chasing extended names is a repeat mistake — no new entry.</div>` : ""}
     ${r.hoodRule ? `<div class="note"><b>HOOD rule:</b> no gap-up or 5-min opening-range entries. Buy end of day on weakness at key pivots only.</div>` : ""}
     ${r.erSoon ? `<div class="note"><b>Earnings in ${r.erIn} days (${esc(r.eru)}).</b> Size and holding period have to respect the print.</div>` : ""}
-    ${g ? `<h4 style="margin:12px 0 4px;font-size:12px">Group peers · ${esc(g.name)}</h4><div>${g.leaders.slice(0, 12).map(p => tkChip(p, p.rs ?? "", p.sym === r.sym ? "hi" : p.state === 1 ? "buy" : "")).join("")}</div>` : ""}`;
+    ${g ? `<h4 style="margin:12px 0 4px;font-size:12px">Group peers · ${esc(g.name)}</h4><div>${g.leaders.slice(0, 12).map(p => tkChip(p, p.rs ?? "", p.sym === r.sym ? "hi" : ecsOf(p) === 1 ? "buy" : "")).join("")}</div>` : ""}`;
   $("drawer").classList.add("open");
   $("dx").onclick = closeDrawer;
   $("dCopy").onclick = () => copyText(tvSym(r), "Copied " + tvSym(r));
@@ -3380,9 +3404,9 @@ function groupDrawer(name){
   $("drawer").innerHTML = `<button class="btn x" id="dx">✕</button><h3>${esc(g.name)} ${g.state !== "—" ? gStateHTML(g.state) : ""}</h3>
     <div class="small">${esc(g.sector || "")} · ${g.n} names · group RS ${g.grs ?? "—"}${g.mom != null ? ` · short − long ${sg(g.mom, 0)}` : ""}</div>
     <div class="rsbars">${hz.map(h => `<div>${h.short}<b>${g["grs_" + h.k] ?? "—"}</b><span class="${cls(g["med_" + h.k])}">${pc(g["med_" + h.k], 1)}</span></div>`).join("")}</div>
-    <div class="kv"><div><span>Above 21 EMA</span><b>${pct0(g.a21)}</b></div><div><span>Above 50 SMA</span><b>${pct0(g.a50)}</b></div><div><span>Buy zone</span><b>${g.buy}</b></div><div><span>Wait for pullback</span><b>${g.weak}</b></div></div>
-    <table><thead><tr><th class="l">Ticker</th><th>RS</th><th class="l">State</th><th>Today</th><th>1M</th><th>3M</th><th>vs ${zm().short}</th><th>From 50</th></tr></thead><tbody>
-    ${g.leaders.map(r => `<tr data-sym="${esc(r.sym)}"><td class="l sym">${esc(r.sym)}</td><td>${rsBadge(r.rs)}</td><td class="l">${stHTML(r.state)}</td><td class="${cls(r.todayRaw)}">${pc(r.todayRaw, 1)}</td><td class="${cls(r.perf1m)}">${pc(r.perf1m, 1)}</td><td class="${cls(r.perf3m)}">${pc(r.perf3m, 1)}</td><td>${sg(r.zx)}</td><td>${sg(r.extU, 1)}</td></tr>`).join("")}</tbody></table>
+    <div class="kv"><div><span>Above 21 EMA</span><b>${pct0(g.a21)}</b></div><div><span>Above 50 SMA</span><b>${pct0(g.a50)}</b></div><div><span>In buy zone</span><b>${g.buy ?? "—"}</b></div><div><span>Just under buy zone</span><b>${g.weak ?? "—"}</b></div></div>
+    <table><thead><tr><th class="l">Ticker</th><th>RS</th><th class="l">Location</th><th>Today</th><th>1M</th><th>3M</th><th title="Distance from the top of the daily 9/21 band (Entry Check ADR)">vs 9/21 band</th><th>From 50</th></tr></thead><tbody>
+    ${g.leaders.map(r => `<tr data-sym="${esc(r.sym)}"><td class="l sym">${esc(r.sym)}</td><td>${rsBadge(r.rs)}</td><td class="l">${ecsHTML(r)}</td><td class="${cls(r.todayRaw)}">${pc(r.todayRaw, 1)}</td><td class="${cls(r.perf1m)}">${pc(r.perf1m, 1)}</td><td class="${cls(r.perf3m)}">${pc(r.perf3m, 1)}</td><td>${ecX(r) ? sg(ecX(r).dB) : "—"}</td><td>${sg(ecX(r) ? ecX(r).ext : r.extU, 1)}</td></tr>`).join("")}</tbody></table>
     <div style="margin-top:10px"><button class="btn sm" id="gTV">Export group to TradingView</button></div>`;
   $("drawer").classList.add("open");
   $("dx").onclick = closeDrawer;
@@ -3516,7 +3540,7 @@ function renderSettings(){
 }
 
 function footNote(){
-  return `<b>Filters</b> (the bar under the tabs) choose which names you see on every tab and chart — they never change how a name is ranked or scored. Click any card title to fold it away. <b>How to read it.</b> Moves are divided by the stock's own ADR%, so a 6% move on a 6% ADR name (1.0 ADR) compares fairly with a 2% move on a 2% ADR name. <b>RS numbers (1–99)</b> are each name's rank inside this file — 99 is the strongest. <b>RS today</b> uses the ADR-adjusted move; the timeframe columns (WTD, MTD, 1W, 1M, 3M, 6M, YTD, 1Y) use returns${CFG.normADR ? " divided by ADR" : ""}; <b>composite RS</b> blends them with your weights (${S.compHz ? S.compHz.map(h => h.short + " " + ((CFG.wPreset === "custom" ? CFG.w : W_PRESETS[CFG.wPreset].w)[h.k] || "eq")).join(" · ") : ""}). Group RS ranks each group's median return the same way. States follow Chart &amp; Entry Spec v6.0: under the 200 SMA but above the 50 stays tradable one grade lower; "widest stop" is the half-ADR ceiling, your real stop is the 30-min pullback low (type it in a ticker's panel to size off it). ETFs are ranked among ETFs on % returns, structure only. <b>ETF file</b>: loaded separately, ranked only against other ETFs on % returns, judged on structure; leveraged and inverse funds are listed but never ranked. <b>MAP</b> and <b>HELD</b> tags come from the lists you type on the Setups tab. News comes from Massive using your own key. Daily moving averages come from the export (as of the last close); distances use the live price. ${liveFoot()}`;
+  return `<b>Filters</b> (the bar under the tabs) choose which names you see on every tab and chart — they never change how a name is ranked or scored. Click any card title to fold it away. <b>How to read it.</b> Moves are divided by the stock's own ADR%, so a 6% move on a 6% ADR name (1.0 ADR) compares fairly with a 2% move on a 2% ADR name. <b>RS numbers (1–99)</b> are each name's rank inside this file — 99 is the strongest. <b>RS today</b> uses the ADR-adjusted move; the timeframe columns (WTD, MTD, 1W, 1M, 3M, 6M, YTD, 1Y) use returns${CFG.normADR ? " divided by ADR" : ""}; <b>composite RS</b> blends them with your weights (${S.compHz ? S.compHz.map(h => h.short + " " + ((CFG.wPreset === "custom" ? CFG.w : W_PRESETS[CFG.wPreset].w)[h.k] || "eq")).join(" · ") : ""}). Group RS ranks each group's median return the same way. Board states (In zone, Wait, Extended…) are the board's general read of where price sits — entries follow Entry Check (rules v6.1) on Setups and in the ticker panel: the stop is the day low at the 30-min trigger, no more than 0.6 ADR under the entry (the ticker panel's calculator sizes off it). ETFs are ranked among ETFs on % returns, structure only. <b>ETF file</b>: loaded separately, ranked only against other ETFs on % returns, judged on structure; leveraged and inverse funds are listed but never ranked. <b>MAP</b> and <b>HELD</b> tags come from the lists you type on the Setups tab. News comes from Massive using your own key. Daily moving averages come from the export (as of the last close); distances use the live price. ${liveFoot()}`;
 }
 
 /* =====================================================================
@@ -4010,7 +4034,7 @@ const HH = () => !!S.has.hist;
 const hxv = (r, k) => r.hx && r.hx[k] != null ? r.hx[k] : null;
 const CRIT = [
   // structure
-  {k: "state", cat: "Structure", l: "Setup state is", type: "multi", p: [1, 2], opts: () => STATES.map(s => [s.k, s.name]), t: (r, p) => r.state != null && p.map(Number).includes(r.state)},
+  {k: "state", cat: "Structure", l: "Entry Check location is", type: "multi", p: [1, 2], need: () => S.has.hist, opts: () => ECS.map(s => [s.k, s.name]), t: (r, p) => ecsOf(r) != null && p.map(Number).includes(ecsOf(r))},
   {k: "trend", cat: "Structure", l: "Daily stack is", type: "multi", p: ["Lead"], opts: () => [["Lead", "Lead (9 > 21 > 50)"], ["Mediocre", "Mediocre"], ["Lag", "Lag (9 < 21 < 50)"]], t: (r, p) => p.includes(r.trend)},
   {k: "a50", cat: "Structure", l: "Above the 50 SMA", t: r => r.a50},
   {k: "a200", cat: "Structure", l: "Above the 200 SMA", t: r => r.a200},
@@ -4060,7 +4084,7 @@ const CRIT = [
   {k: "focus", cat: "Lists", l: "On today's MAP focus list", t: r => r.focus},
   {k: "held", cat: "Lists", l: "Held", t: r => r.held},
   {k: "notHeld", cat: "Lists", l: "Not held", t: r => !r.held},
-  {k: "newZone", cat: "Lists", l: "New into the buy zone since the last file", t: r => r.prevState != null && r.state === 1 && r.prevState !== 1},
+  // "New into the buy zone since the last file" left 22 Oct: it read the old buy-zone state, and the earlier file has no Entry Check location
   // weakness
   {k: "sscore", cat: "Weakness (shorts)", l: "Short score {p}+ of 7", type: "num", p: 5, step: 1, t: (r, p) => r.ss ? r.ss.n >= p : null},
   {k: "rej", cat: "Weakness (shorts)", l: "Rejection (pushed above the daily 9/21/50 today, now back under)", t: r => r.reject},
@@ -4380,7 +4404,7 @@ function extCompute(){
 /* =====================================================================
    SHARED RENDER BITS — status, size grade, trend alignment, 30-session strip
    ===================================================================== */
-function statusOf(r){
+function statusOf60(r){
   const zh = zr()[1];
   switch (r.state) {
     case 1: return r.t30 === true ? {k: "trig", t: "At trigger", c: "go", d: "In the zone and above the 30-min 21 EMA — check the 30-min bar has closed above it"} : {k: "zone", t: "In buy zone", c: "zone", d: "In the zone — wait for the 30-min trigger"};
@@ -4393,7 +4417,15 @@ function statusOf(r){
     default: return {k: "na", t: "—", c: "", d: ""};
   }
 }
-const STATUS_ORDER = {trig: 0, zone: 1, close: 2, wait: 3, above: 4, ext: 5, under: 6, u50: 7, broken: 8, na: 9};
+// on screen: the Entry Check location (22 Oct); statusOf60 = the old buy-zone read, kept only for the Board log's frozen facts
+function statusOf(r){
+  if (!r || r.etf) return statusOf60(r);
+  const k = ecsOf(r); if (!k) return {k: "na", t: "—", c: "", d: ECS_NONE};
+  const E = ECSK[k], c = {1: "zone", 2: "close", 3: "wait", 4: "", 5: "bad", 6: "bad"}[k];
+  if (k === 1 && r.t30 === true) return {k: "ec1t", t: "In buy zone · over 30m 21", c: "go", d: "In the buy zone and above the 30-min 21 EMA — check on the chart that a 30-min candle has closed above it"};
+  return {k: "ec" + k, t: E.name, c, d: E.d};
+}
+const STATUS_ORDER = {trig: 0, zone: 1, close: 2, wait: 3, above: 4, ext: 5, under: 6, u50: 7, broken: 8, na: 9, ec1t: 0, ec1: 1, ec2: 2, ec3: 3, ec4: 4, ec5: 5, ec6: 6};
 const statusPill = r => { const s = statusOf(r); return `<span class="pill ${s.c}" title="${esc(s.d)}">${esc(s.t)}</span>`; };
 function sizeGrade(r){ let gi = GRADES.findIndex(g => g[0] === CFG.grade); if (gi < 0) gi = 2; const s = gi + (r.smaStep || 0); return {g: GRADES[Math.min(GRADES.length - 1, s)][0], capped: s > GRADES.length - 1, step: r.smaStep || 0}; }
 const gradeBadge = r => { const z = sizeGrade(r); return `<span class="grade g${z.g.replace("+", "p")}" title="Your base grade ${esc(CFG.grade)}${z.step ? `, stepped down ${z.step} by the 50/200 SMA gate` : ""}${z.capped ? " (already at the smallest size)" : ""}">${z.g}</span>`; };
@@ -4574,13 +4606,13 @@ function radarAxes(){
     {l: "Above 21 EMA", f: g => g.a21 == null ? null : g.a21 * 100, raw: g => pct0(g.a21) + " of members"},
     {l: "Above 50 SMA", f: g => g.a50 == null ? null : g.a50 * 100, raw: g => pct0(g.a50) + " of members"},
     {l: "Turning up", f: g => g.mom == null ? null : clamp(50 + g.mom * 50 / 60, 0, 100), raw: g => `short-term minus long-term RS ${sg(g.mom, 0)}`},
-    {l: "Names in or near the zone", f: g => g.zoneRank ?? null, raw: g => `${g.buy + g.weak} of ${g.n} names · ranked vs other groups`}
+    {l: "Names in or just under the zone", f: g => g.zoneRank ?? null, raw: g => g.buy == null ? "needs the price history" : `${g.buy + g.weak} of ${g.n} names · ranked vs other groups`}
   ];
 }
 function renderRadar(G){
   const card = $("radarCard"), lad = $("ladderCard"); if (!card) return;
   const big = S.groups.filter(g => g.grs != null);
-  rate(big, g => (g.buy + g.weak) / g.n, "zoneRank");
+  rate(big, g => g.buy == null ? null : (g.buy + g.weak) / g.n, "zoneRank");
   const byName = new Map(big.map(g => [g.name, g]));
   let sel = (S.ui.radarSel || []).filter(n => byName.has(n));
   if (!sel.length) sel = [...G].sort((a, b) => (b.grs ?? 0) - (a.grs ?? 0)).slice(0, 3).map(g => g.name);
@@ -4652,9 +4684,9 @@ const _flags0 = flagsHTML;
 flagsHTML = function(r){ return _flags0(r) + (r.reject ? `<span class="flag rej" title="Pushed above the daily ${r.rejectLv.join(" / ")} today and is back under it, also under VWAP and the 30-min 21 EMA">rejected ${r.rejectLv.join("·")}</span>` : ""); };
 SCREENS.push(
   {k: "washret", t: "Washout retest", d: "Closed 2.5+ ADR under the 50 SMA in the last 30 sessions, and is now back above the 21 EMA — the first flush set the low and the bounce is holding.", need: ["hist"], f: r => r.hx && r.hx.washMin != null && r.hx.washMin <= -2.5 && r.e21 != null && r.last > r.e21},
-  {k: "vcoil", t: "Coiled in the zone (RMV+)", d: "In or just above the buy zone with volatility state Coiled: both RMV gates pass and 3+ of 4 confirmations, no wide bars or open gaps lately.", need: ["hist"], f: r => (r.state === 1 || r.state === 2) && vsOf(r) && vsOf(r).k === "coiled"},
-  {k: "vwild", t: "In the zone but Wild", d: "In or just above the buy zone while the volatility state is Wild — the half-ADR stop sits inside the noise.", need: ["hist"], f: r => (r.state === 1 || r.state === 2) && vsOf(r) && vsOf(r).k === "wild"},
-  {k: "coil", t: "Quiet coil in the zone", d: "In or just above the buy zone, no new 5-day low for 8+ sessions, and last session's volume under its 20-day average.", need: ["hist"], f: r => (r.state === 1 || r.state === 2) && r.hx && r.hx.hld >= 8 && r.hx.volR != null && r.hx.volR < 1},
+  {k: "vcoil", t: "Coiled in the zone (RMV+)", d: "In or just under the buy zone with volatility state Coiled: both RMV gates pass and 3+ of 4 confirmations, no wide bars or open gaps lately.", need: ["hist"], f: r => ecsIn(r, 1, 2) && vsOf(r) && vsOf(r).k === "coiled"},
+  {k: "vwild", t: "In the zone but Wild", d: "In or just under the buy zone while the volatility state is Wild — a day-low stop sits inside the noise.", need: ["hist"], f: r => ecsIn(r, 1, 2) && vsOf(r) && vsOf(r).k === "wild"},
+  {k: "coil", t: "Quiet coil in the zone", d: "In or just under the buy zone, no new 5-day low for 8+ sessions, and last session's volume under its 20-day average.", need: ["hist"], f: r => ecsIn(r, 1, 2) && r.hx && r.hx.hld >= 8 && r.hx.volR != null && r.hx.volR < 1},
   {k: "accum", t: "Accumulation", d: "Buying volume at least 1.3× selling volume over 20 sessions, beating the benchmark over 4 weeks, above the 50 SMA.", need: ["hist"], f: r => r.hx && r.hx.accum >= 1.3 && r.hx.rs4w > 0 && r.a50},
   {k: "rsspeed", t: "RS speeding up", d: "Beating the benchmark over 2 weeks at a faster pace than over 10 weeks, RS 60+.", need: ["hist"], f: r => r.hx && r.hx.accel > 0 && r.hx.rs2w > 0 && (r.rs ?? 0) >= 60},
   {k: "shortw", t: "Short watch — relative weakness", d: () => `Short score ${CFG.shortMin}+ of 7 and liquid. Watch only unless the tape read and MAP both say Defensive.`, need: [], f: r => r.ss && r.ss.n >= CFG.shortMin && !r.thin},
@@ -5248,7 +5280,7 @@ function trMargin(r){
 }
 // the six questions from the daily process (unknown = shown as "no data", doesn't fail the name)
 function trAList(r){
-  const s = statusOf(r).k, al = alignOf(r), D = al[0].ok, W = al[2].ok, v = vsOf(r);
+  const s = statusOf60(r).k, al = alignOf(r), D = al[0].ok, W = al[2].ok, v = vsOf(r);   // Training keeps the old board states (22 Oct)
   const above = S.plan.plan.filter(x => x.group === r.group && x.sym !== r.sym && (x.rs ?? 0) > (r.rs ?? 0)).length;
   const items = [
     {t: "In the zone or close (no more than 0.25 ADR above it)", ok: ["trig", "zone", "close"].includes(s)},
@@ -7142,16 +7174,16 @@ renderFocus = function(){
   const part = (syms, key, title, sub, empty) => {
     const rows = syms.map(s => by.get(s)).filter(Boolean), miss = syms.filter(s => !by.has(s));
     return `<div class="hd ml-hd"><h2 class="ml-t ml-${key}">${title}</h2><span class="sub">${syms.length ? `${rows.length} of ${syms.length} in this file · ${sub}` : empty}</span></div>
-      ${rows.length ? planList(rows, "ml" + key, true) : ""}${miss.length ? `<div class="fmiss">Not in this file: ${miss.map(esc).join(", ")}</div>` : ""}`;
+      ${rows.length ? ecListHTML(rows) : ""}${miss.length ? `<div class="fmiss">Not in this file: ${miss.map(esc).join(", ")}</div>` : ""}`;
   };
   const hr = H.map(s => by.get(s)).filter(Boolean), hm = H.filter(s => !by.has(s));
-  const addable = hr.filter(r => r.state === 1 || r.state === 2), other = hr.filter(r => !(r.state === 1 || r.state === 2));
-  box.innerHTML = `${part(A, "A", "A list — MAP's top 5", "same checks as the plan", "no A list typed")}
+  const addable = hr.filter(r => ecsIn(r, 1, 2)), other = hr.filter(r => !ecsIn(r, 1, 2));
+  box.innerHTML = `${part(A, "A", "A list — MAP's top 5", "the same Entry Check as Setups", "no A list typed")}
     ${part(B, "B", "B list — ready, passed on", "kept for tracking: were the passes right?", "no B list typed")}
-    ${part(SK, "S", "On deck / stalk — waiting for a pullback", "the buy zone and how far away it is are on each row", "no stalk names typed")}
-    <div class="hd ml-hd"><h2 class="ml-t">Held — add candidates</h2><span class="sub">held names back in the buy zone or just above it · adding to a held name on a pullback is a priority</span></div>
-    ${addable.length ? planList(addable, "held", true) : `<div class="fmiss">${H.length ? "No held name is in or just above the buy zone right now." : "No held names typed."}</div>`}
-    ${other.length ? `<div class="fmiss">Other held names: ${other.map(r => tkChip(r, r.state ? ST[r.state].name : "—")).join("")}</div>` : ""}
+    ${part(SK, "S", "On deck / stalk — waiting for a pullback", "the Entry Check location and what's missing are on each row", "no stalk names typed")}
+    <div class="hd ml-hd"><h2 class="ml-t">Held — add candidates</h2><span class="sub">held names back in the buy zone or just under it · adding to a held name on a pullback is a priority</span></div>
+    ${addable.length ? ecListHTML(addable) : `<div class="fmiss">${!H.length ? "No held names typed." : S.has.hist ? "No held name is in or just under the buy zone right now." : "Load the price history to see where your held names sit."}</div>`}
+    ${other.length ? `<div class="fmiss">Other held names: ${other.map(r => tkChip(r, ecsName(r))).join("")}</div>` : ""}
     ${hm.length ? `<div class="fmiss">Held but not in this file: ${hm.map(esc).join(", ")}</div>` : ""}`;
 };
 // ---------- tracker
@@ -7257,6 +7289,11 @@ if (WS) {
 "use strict";
 /* =====================================================================
    DECISION LOG (18 Oct) — Decide › Decision log, both layouts. Tracking only: never changes rows, ranks, states or the plan.
+   22 Oct (Eugene: "i no longer want to track whether i take/stalk/pass … only track whether the board is surfacing the right
+   names"): the page is the BOARD LOG. No calls, reasons, notes, chart notes or trade inputs (old records keep theirs and the CSV
+   still carries every column); a logging status card (jnLogCard / jnSource — Live mode logs from the file under the live prices)
+   and a chip beside Frozen / Live; scores replay the Entry Check levels (jnLv: planned entry, stop = entry − 1R est, 2R) — days
+   logged under Spec 6.0 keep their 6.0 levels and are left off the page. The text below describes the 18 Oct design.
    One record per PLAN DAY (the session the list is for):
      premarket file dated D → plan day D (data = the session before) · regular-session file of session D0 → plan day = next weekday.
      Live mode doesn't log (its data refreshes all day).
@@ -7291,7 +7328,6 @@ const JN_SRC = {zone: "Plan · in zone", wait: "Plan · wait", deck: "On deck", 
 const JN_BOARD = ["zone", "wait", "deck", "a61", "d61"];
 const jn61 = o => o.src.includes("a61") || o.src.includes("d61");
 const JN_OUT = {target: "+2R first", stop: "Stopped", time: "T+3 exit", open: "Running", nofill: "Never reached entry", gap: "Gapped past a level", pending: "Waiting for bars", nodata: "No price data", nolv: "No levels"};
-const JN_TRIG = ["T1", "T4", "Other"];
 const JN_RSO = ["90+", "80–89", "60–79", "under 60", "—"];
 
 /* ---------------- dates ---------------- */
@@ -7327,7 +7363,7 @@ const jr = x => x == null || !isFinite(x) ? null : +(+x).toFixed(4);
 const jnEr = r => r.erIn == null || r.erIn < 0 ? "unknown" : r.erSoon ? "soon" : "clear";
 function jnFacts(r, why){
   const v = vsOf(r); let x = null; try { x = s6Of(r); } catch (e) {}
-  return {last: jr(r.last), st: r.state || null, status: statusOf(r).t, rs: r.rs ?? null, grp: r.group || null, gs: r.gState && r.gState !== "—" ? r.gState : null,
+  return {last: jr(r.last), st: r.state || null, status: statusOf60(r).t, rs: r.rs ?? null, grp: r.group || null, gs: r.gState && r.gState !== "—" ? r.gState : null,
     entry: jr(r.entry), stop: jr(r.stop), tgt: jr(r.target), adr: jr(r.adr), zx: jr(r.zx), ext: jr(r.extU), grade: sizeGrade(r).g,
     vs: v ? v.k : null, er: jnEr(r), erIn: r.erIn ?? null, piv: x ? (x.pass ? "pass" : x.why || "fail") : null, thin: !!r.thin, ...(why ? {why} : {}), s61: jnF61(r)};
 }
@@ -7365,6 +7401,7 @@ function jnRecord(){
     let o = by.get(r.sym);
     if (!o) { o = {s: r.sym, src: [], first: now, f: jnFacts(r, why)}; by.set(r.sym, o); rec.n.push(o); }
     if (!o.src.includes(src)) o.src.push(src);
+    if (!o.f.s61 && S.has.hist) o.f.s61 = jnF61(r);
   };
   if (sp61) {
     // needs the stored bars — until they load, only MAP's lists are logged and the card says so
@@ -7394,7 +7431,6 @@ setMapRegime = function(v, c){ _setMapRegimeJ(v, c); jnSoon(); };
 // Spec 6.1 lists need the stored bars: log again once history is ready, and when the switch is flipped
 const _applyHistJ = applyHist;
 applyHist = function(){ _applyHistJ.apply(this, arguments); if (S.has.hist && jnSpec61()) jnSoon(); };
-document.addEventListener("change", e => { if (e.target && e.target.id === "s61LiveSw") jnSoon(); });
 
 /* ---------------- scoring ---------------- */
 let JNH = {key: ""};
@@ -7445,10 +7481,17 @@ function jnSim(f, i, t0){
 }
 const jnFinished = s => s && (s.k === "stop" || s.k === "target" || s.k === "time");
 const jnFilled = s => s && (jnFinished(s) || s.k === "open");
+// the levels a name is scored on (22 Oct, Spec 6.0 retired): Entry Check planned entry, stop = entry − 1R (the frozen 0.6 ADR
+// estimate), target = 2R. Names logged under Spec 6.0 keep their 6.0 board levels (entry, widest stop, 2R) so their CSV rows don't move.
+function jnLv(o, rec){
+  const f = o.f, g = f.s61, sp = o.spec || (rec && rec.spec) || "6.0";
+  if (sp !== "6.1") return {entry: f.entry, stop: f.stop, tgt: f.tgt, last: f.last};
+  return g && g.entry != null && g.r1 ? {entry: g.entry, stop: jr(g.entry - g.r1), tgt: jr(g.entry + 2 * g.r1), last: f.last} : {entry: null, stop: null, tgt: null, last: f.last};
+}
 function jnScoreName(o, rec, t0){
   const i = HIST.idx ? HIST.idx.get(o.s) : null;
   if (!HIST.nD) return {sim: {k: "nodata"}, m5: null, m10: null};
-  return {sim: jnSim(o.f, i ?? null, t0), m5: jnMove(i, t0, 5), m10: jnMove(i, t0, 10)};
+  return {sim: jnSim(jnLv(o, rec), i ?? null, t0), m5: jnMove(i, t0, 5), m10: jnMove(i, t0, 10)};
 }
 // baselines for one record: whole file, strong-not-surfaced, and how many of the top 20 liquid 5-day gainers were surfaced
 function jnBase(rec, t0){
@@ -7493,14 +7536,6 @@ function jnMine(o){
   return {fill: F, exit: X, stop: st, from: st == null ? null : mine ? "yours" : g ? "6.1 est" : "board", R: X != null && st != null ? (X - F) / (F - st) : null,
     slip: adr && jnE(o) != null ? (F - jnE(o)) / adr : null, risk: adr && st != null ? (F - st) / adr : null};
 }
-const jnMineTxt = m => !m ? "" : m.R != null ? `your trade <b class="${jnCls(m.R)}">${jnFmtR(m.R)}</b> <span class="dim">(${m.from} stop)</span>`
-  : m.stop == null ? `<span class="dim">open · no stop under the fill to measure R</span>` : `<span class="dim">open · risk ${m.risk == null ? "—" : m.risk.toFixed(2) + " ADR"}</span>`;
-function jnTradeHTML(p, o){
-  const m = jnMine(o), id = `data-p="${p}" data-s="${esc(o.s)}"`;
-  return `<label class="tog small" title="Tick if you actually bought it — a fact, so it stays editable"><input type="checkbox" data-jt ${id} ${o.took ? "checked" : ""}> entered</label>
-    ${o.took ? `<div class="jn-fx"><input type="number" step="0.01" data-jf="fill" ${id} value="${o.fill ?? ""}" placeholder="fill" title="Your average fill price"><input type="number" step="0.01" data-jf="exit" ${id} value="${o.exit ?? ""}" placeholder="exit" title="Your average exit price — leave blank while the trade is open"></div>
-    <div class="small">${jnMineTxt(m)}${m && m.slip != null ? `<div class="dim">fill ${m.slip >= 0 ? "+" : ""}${m.slip.toFixed(2)} ADR vs the board's entry${m.slip > 0.25 ? ` <span class="neg">chased</span>` : ""}</div>` : ""}</div>` : ""}`;
-}
 // every logged name with its score (newest day first)
 function jnItems(){
   const out = [];
@@ -7516,37 +7551,33 @@ function jnMissed(){
 }
 
 /* ---------------- page ---------------- */
-document.querySelector('#tabs button[data-tab="shorts"]').insertAdjacentHTML("afterend", `<button data-tab="journal" data-sub="Log decisions, score what surfaced" title="Log decisions, score what surfaced">Decision log</button>`);
-$("foot").insertAdjacentHTML("beforebegin", `<section class="tab" id="tab-journal"><p class="lede">Every name the board surfaces is logged here, one list per trading day. Mark each one Take, Stalk or Pass before the session. Names you don't mark are logged as "no decision", and days you don't load a file are logged as missed. Later the stored daily bars score what happened, so you can see how good the board is at surfacing names and how good your calls are. Nothing here changes the board's rankings, states or plan.</p><div id="jnBody"></div></section>`);
+document.querySelector('#tabs button[data-tab="shorts"]').insertAdjacentHTML("afterend", `<button data-tab="journal" data-sub="What the board surfaced · how it did" title="What the board surfaced · how it did">Board log</button>`);
+$("foot").insertAdjacentHTML("beforebegin", `<section class="tab" id="tab-journal"><p class="lede">The board logs the names it puts forward — every Entry Check Ready to trade and On deck name, plus your MAP lists — one list per trading day, by itself. Nothing to click. Later the stored daily bars score what happened, so you can see whether the board is surfacing the right names. Nothing here changes the board's rankings, states or lists.</p><div id="jnBody"></div></section>`);
 document.head.insertAdjacentHTML("beforeend", `<style>
 #tabs button[data-tab="journal"]{--ic:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M9 11l3 3 8-8'/><path d='M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9'/></svg>")}
 .jn-t td{vertical-align:top}
-.jn-t tr.jn-sub td{border-top:0;padding-top:0;background:var(--surface-2)}
-.jn-t tr.jn-main.jn-has td{background:var(--surface-2)}
-.jn-dec{display:inline-flex;gap:4px}
-.jn-dec button,.jn-chip{border:1px solid var(--line-strong);background:var(--surface);color:var(--ink-2);border-radius:6px;padding:2px 8px;font-size:12px;cursor:pointer}
-.jn-dec button.on[data-v="take"]{background:var(--st1);border-color:var(--st1);color:#fff}
-.jn-dec button.on[data-v="stalk"]{background:var(--st2);border-color:var(--st2);color:#fff}
-.jn-dec button.on[data-v="pass"]{background:var(--ink-3);border-color:var(--ink-3);color:#fff}
-.jn-dec button:disabled,.jn-chip:disabled{cursor:default;opacity:.55}
-.jn-chip{font-size:11px;padding:1px 7px;margin:2px 3px 2px 0}
-.jn-chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
 .jn-src{display:inline-block;font-size:10.5px;padding:0 5px;border-radius:4px;margin:1px 3px 1px 0;background:var(--chip);color:var(--ink-2);white-space:nowrap}
+.jn-src.a61{background:var(--good-soft);border:1px solid var(--st1)}.jn-src.d61{background:var(--up-soft);border:1px solid var(--st2)}
 .jn-src.zone{background:var(--good-soft);border:1px solid var(--st1)}.jn-src.wait{background:var(--up-soft);border:1px solid var(--st2)}
 .jn-src.A{background:var(--accent);color:#fff}.jn-src.B,.jn-src.S{border:1px solid var(--accent)}
-.jn-sub input[type=text],.jn-sub input[type=number]{font-size:12px;padding:2px 6px;border:1px solid var(--line-strong);border-radius:6px;background:var(--surface);color:var(--ink)}
-.jn-sub input[type=number]{width:84px}
-.jn-sub .jn-l{display:inline-flex;align-items:center;gap:5px;margin:3px 12px 3px 0;font-size:12px;color:var(--ink-3)}
 .jn-out{white-space:nowrap}
 .jn-warn{padding:6px 10px;border-radius:8px;background:var(--up-soft);font-size:12.5px;margin:0 0 10px}
 .jn-ft td.l b{font-weight:650}
 .jn-ft tr.jn-fh td{background:var(--surface-2);font-weight:650}
-.jn-fx{display:flex;gap:4px;margin:3px 0}
-.jn-fx input{width:70px;font-size:12px;padding:2px 5px;border:1px solid var(--line-strong);border-radius:6px;background:var(--surface);color:var(--ink)}
 .jn-ctl{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin:0 0 8px}
 .jn-ctl .jn-n{opacity:.7;font-size:11px}
-.jn-what{margin:0 0 8px;font-size:12.5px}.jn-what summary{cursor:pointer;color:var(--accent)}.jn-what p{margin:5px 0}
-.jn-tr{min-width:150px}
+.jn-st h2{display:flex;align-items:center;gap:8px}
+.jn-dot{width:10px;height:10px;border-radius:50%;background:var(--ink-3);display:inline-block;flex:none}
+.jn-st.on .jn-dot{background:var(--good);box-shadow:0 0 0 3px var(--good-soft)}
+.jn-st.on{border-left:3px solid var(--good)} .jn-st.off{border-left:3px solid var(--line-strong)}
+.jn-st p{margin:0 0 4px;font-size:13px}
+.jn-stg{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 16px;margin:0 0 8px}
+.jn-stg>div{display:flex;flex-direction:column;gap:1px}
+.jn-stg i{font-style:normal;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3)}
+.jn-stg b{font-size:13.5px;word-break:break-all} .jn-stg small{font-size:11.5px;color:var(--ink-2)}
+#logChip{cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+#logChip .jn-dot{width:8px;height:8px}
+#logChip.on .jn-dot{background:var(--good);box-shadow:none}
 </style>`);
 const jnFmtR = v => v == null ? "—" : (v > 0 ? "+" : "") + v.toFixed(2) + "R";
 const jnFmtP = v => v === undefined ? `<span class="dim">…</span>` : v == null ? "—" : (v > 0 ? "+" : "") + v.toFixed(1) + "%";
@@ -7563,182 +7594,143 @@ function jnOutHTML(sc){
 }
 const jnFew = n => n < 10 ? ` <span class="small dim">(too few to read)</span>` : n < 30 ? ` <span class="small dim">(early read)</span>` : "";
 
-function jnTodayCard(){
-  const dd = jnDays(), ps = Object.keys(JN.recs).sort(), openP = ps.filter(jnOpenDay), p = dd && JN.recs[dd.p] && jnOpenDay(dd.p) ? dd.p : openP[openP.length - 1];
-  if (!p) {
-    const why = !S.snap ? "Load today's files to start the log." : S.snap.live ? "Live mode isn't logged — its prices refresh all day. Load the CSV files (or a snapshot) to log a list."
-      : !dd ? "This file can't be logged (no stocks in it)." : `This file is for <b>${jnDay(dd.p)}</b>, and that session has already finished — the log only opens a list for a day that hasn't closed yet, so nothing is decided with hindsight.`;
-    return `<div class="card g1" id="jnToday"><div class="hd"><h2>Today's list</h2><span class="sub">nothing open to decide right now</span></div><div class="bd"><div class="empty" style="padding:4px 0">${why}</div></div></div>`;
+// ---- which file the log records from, and why it is / isn't logging (22 Oct: one clear status, frozen or live) ----
+// Live mode: the log records from the stock file under the live prices (LV.base.snap — see the Live-mode fix further down),
+// never from live prices. Returns {live, file (the snap logged from), dd (plan day + data session or null)}.
+function jnSource(){
+  if (!S.snap) return {live: false, file: null, dd: null};
+  const live = !!S.snap.live;
+  const file = !live ? S.snap : typeof jnLiveBase === "function" && jnLiveBase() ? LV.base.snap : null;
+  if (!file) return {live, file: null, dd: null};
+  const keep = S.snap; let dd = null;
+  try { S.snap = file; dd = jnDays(); } finally { S.snap = keep; }
+  return {live, file, dd};
+}
+// the record the log is filling right now (null = not logging)
+function jnNowRec(){ const src = jnSource(); return src.dd && jnOpenDay(src.dd.p) && JN.recs[src.dd.p] ? JN.recs[src.dd.p] : null; }
+const jnListOf = o => o.src.includes("a61") ? "a61" : o.src.includes("d61") ? "d61" : o.src.includes("zone") || o.src.includes("wait") ? "p60" : o.src.includes("deck") ? "dk60" : "map";
+const JN_LN = {a61: "Ready to trade", d61: "On deck", p60: "Old plan (6.0)", dk60: "Old on deck (6.0)", map: "MAP list only"};
+const jnLocW = loc => !loc ? "—" : typeof ecLocCode === "function" ? ecLocCode(loc) : loc;
+function jnLogCard(){
+  const src = jnSource(), dd = src.dd, ps = Object.keys(JN.recs).sort(), rec = jnNowRec();
+  const fileTxt = f => `<b>${esc(f.files.map(x => x.name).join(" + "))}</b>`;
+  if (!rec) {
+    const why = !S.snap ? "No stock file is loaded. Load today's stock CSV (after the close, or premarket) — logging starts by itself, nothing to click."
+      : src.live && !src.file ? "Live mode is on but there's no stock file underneath it. Load the stock CSV — the log records from the file, never from live prices."
+      : !dd ? "This file has no stocks in it, so there's nothing to log."
+      : !jnOpenDay(dd.p) ? `This file is the plan for <b>${jnDay(dd.p)}</b>, and that session has already closed. Old files never log (nothing is logged with hindsight) — load the latest after-close or premarket file to log the next session.`
+      : "Getting the list ready…";
+    return `<div class="card g1 jn-st off" id="jnLogSt"><div class="hd"><h2><span class="jn-dot"></span>Not logging right now</h2></div><div class="bd"><p>${why}</p>
+      ${ps.length ? `<p class="small dim">${ps.length} day${ps.length === 1 ? "" : "s"} already logged — scored below.</p>` : ""}</div></div>`;
   }
-  const rec = JN.recs[p], open = jnOpenDay(p), rowBy = S.rowBySym || new Map();
-  const ord = o => o.src.includes("zone") || o.src.includes("a61") ? 0 : o.src.includes("wait") ? 1 : o.src.includes("deck") || o.src.includes("d61") ? 2 : 3;
-  const L = [...rec.n].sort((a, b) => ord(a) - ord(b) || (b.f.rs ?? 0) - (a.f.rs ?? 0));
-  const sp61 = rec.spec === "6.1", ADR61 = o => o.f.s61 && o.f.s61.r1 ? o.f.s61.r1 / S61.risk : null;
-  const nDec = rec.n.filter(o => o.dec).length, nPres = typeof jnPres === "function" ? rec.n.filter(o => jnPres(o, rec)).length : rec.n.length;
-  // view filters — visibility only: every name stays logged and scored
-  const v = JN.view, gfOn = typeof GF !== "undefined" && GF.on;
+  const n = {a61: 0, d61: 0, map: 0, old: 0}; rec.n.forEach(o => { const k = jnListOf(o); if (k === "a61" || k === "d61") n[k]++; else if (k === "map") n.map++; else n.old++; });
+  const last = Math.max(rec.at || 0, ...rec.n.map(o => o.first || 0)), et = jnET(), started = et.d === rec.p && et.m >= 570;
+  const dataTxt = rec.mode === "pm" ? `premarket file · data to the ${jnDay(rec.d0)} close` : `after-close file of ${jnDay(rec.d0)}`;
+  return `<div class="card g1 jn-st on" id="jnLogSt"><div class="hd"><h2><span class="jn-dot"></span>Logging — list for ${jnDay(rec.p)}</h2><span class="sub">automatic · nothing to click</span><span class="spacer"></span><button class="btn sm" data-ja="lognow" title="Re-reads the file on screen and adds any name that qualifies now (names already logged keep the facts they were logged with)">Update now</button></div><div class="bd">
+    <div class="jn-stg">
+      <div><i>From</i>${fileTxt(src.file)}<small>${dataTxt}</small></div>
+      <div><i>Mode</i><b>${src.live ? "Live" : "Frozen CSV"}</b><small>${src.live ? "the log still records from the file above — live prices are never logged; they only update the Now column" : "the file exactly as exported"}</small></div>
+      <div><i>Logged</i><b>${rec.n.length} names</b><small>${n.a61} ready to trade · ${n.d61} on deck · ${n.map} MAP only${n.old ? ` · ${n.old} from the old 6.0 plan` : ""}</small></div>
+      <div><i>Open until</i><b>16:00 ET ${jnDay(rec.p)}</b><small>${started ? "the session is open" : "then it locks and the scoring starts"} · last added ${esc(fmtWhen(last))}</small></div>
+    </div>
+    ${S.has.hist ? "" : `<div class="jn-warn">The Entry Check lists need the stored price history, so right now only your MAP lists are being logged. <button class="btn sm" data-hist="full">Load price history</button> — the lists are logged as soon as it's in.</div>`}
+    <div class="small dim">What's logged: every Entry Check <b>Ready to trade</b> and <b>On deck</b> name in the whole file (your filter bar doesn't change it), plus your MAP A / B / stalk lists. Each name's facts are frozen the first time it appears. Loading a newer file, editing the MAP lists or loading the price history before 16:00 ET adds names; nothing is ever removed except a MAP name you take off a MAP list.</div></div></div>`;
+}
+function jnTodayCard(){
+  const rec = jnNowRec(); if (!rec) return "";
+  const p = rec.p, rowBy = S.rowBySym || new Map(), v = JN.view, gfOn = typeof GF !== "undefined" && GF.on;
+  const ord = {a61: 0, d61: 1, p60: 2, dk60: 3, map: 4};
+  const L = [...rec.n].sort((a, b) => ord[jnListOf(a)] - ord[jnListOf(b)] || (b.f.rs ?? 0) - (a.f.rs ?? 0));
   const has = (o, ...k) => k.some(x => o.src.includes(x));
-  const TL = {all: () => true, plan: o => has(o, "zone", "wait", "a61"), zone: o => has(o, "zone", "a61"), deck: o => has(o, "deck", "d61"), map: o => has(o, "A", "B", "S")};
+  const TL = {all: () => true, a61: o => has(o, "a61"), d61: o => has(o, "d61"), map: o => has(o, "A", "B", "S")};
   const tl = TL[v.tl] ? v.tl : "all";
-  const shown = L.filter(o => TL[tl](o) && !(v.tp && o.dec && o.dec.k === "pass") && !(v.tf && gfOn && !(rowBy.has(o.s) && gOK(rowBy.get(o.s)))));
-  const secOf = o => has(o, "a61") ? "Entry Check · Ready to trade" : has(o, "zone") ? "Plan · in zone" : has(o, "wait") ? "Plan · wait for pullback" : has(o, "d61") ? "Entry Check · On deck" : has(o, "deck") ? "On deck" : "MAP lists";
-  JN.shown = {p, list: shown.map(o => o.s), sec: shown.map(o => [o.s, secOf(o)])};
+  const shown = L.filter(o => TL[tl](o) && !(v.tf && gfOn && !(rowBy.has(o.s) && gOK(rowBy.get(o.s)))));
+  JN.shown = {p, list: shown.map(o => o.s), sec: shown.map(o => [o.s, JN_LN[jnListOf(o)]])};
   const row = o => {
-    const f = o.f, d = o.dec, k = d ? d.k : null, dis = open ? "" : "disabled", show = d || o.note || o.ch || JN.open.has(p + ":" + o.s);
-    const er = f.er === "unknown" ? `<span class="neg">earnings date unknown</span>` : f.er === "soon" ? `<span class="neg">earnings in ${f.erIn}d</span>` : `no earnings in ${CFG.erDays}d`;
-    const meta = [esc(f.status), `RS ${f.rs ?? "—"}`, `grade ${esc(f.grade || "—")}`, f.vs ? esc(VSL[f.vs].n) : "", er, f.piv == null ? "" : f.piv === "pass" ? "Pivot script ✓" : /^needs/.test(f.piv) ? `<span class="dim">Pivot script ? ${esc(f.piv)}</span>` : `Pivot script ✕ <span class="dim">${esc(f.piv)}</span>`].filter(Boolean).join(" · ");
-    const g = jn61(o) ? f.s61 : null, cap = g ? S61.risk : 0.5, adrD = g ? ADR61(o) : f.adr && f.last ? f.adr / 100 * f.last : null;
-    const rr = jnRoom(o), riskAdr = o.ch && o.ch.stop != null && jnE(o) != null && adrD ? (jnE(o) - o.ch.stop) / adrD : null;
-    const m61 = f.s61 ? `<div class="${g ? "" : "dim"}">Entry Check: ${esc((LIST61[f.s61.list] || {n: f.s61.list}).n)}${f.s61.loc ? " · " + esc(ecLocCode(f.s61.loc)) : ""} · grade ${esc(f.s61.grade)}${f.s61.erN != null ? ` · earnings in ${f.s61.erN} sessions, exit by ${esc(f.s61.exitBy || "—")}` : " · earnings unknown"}${f.s61.ff ? ` · what stopped it <span class="neg">${esc(ecPlain(f.s61.ff))}</span>` : ""}</div>` : "";
-    const pres = typeof jnPres !== "function" || jnPres(o, rec);
-    const main = `<tr class="jn-main ${show ? "jn-has" : ""} ${pres ? "" : "jn-unseen"}"><td class="l"><span class="sym" ${rowBy.has(o.s) ? `data-jsym="${esc(o.s)}" style="cursor:pointer"` : ""}><b>${esc(o.s)}</b></span><div>${jnSrcHTML(o)}${o.spec ? `<span class="jn-src">Spec ${esc(o.spec)}</span>` : ""}</div>${pres ? "" : `<div class="small dim" title="Outside the shortlist you were shown (first 5 Ready to trade / first 6 On deck / the plan / MAP lists). Open it or mark it and it counts.">qualified, not shown</div>`}</td>
-      <td class="l small">${meta}${m61}${f.why ? `<div class="dim">${g ? "Blocker" : "On deck"}: ${esc(f.why)}</div>` : ""}<div class="dim">${esc(f.grp || "")}${f.gs ? " · group " + esc(f.gs) : ""}</div></td>
-      <td>${g ? (g.entry == null ? "—" : `${f2(g.entry)}<div class="small dim">1R est ${f2(g.r1)} · ${g.nh ? "NH" : `1st res ${f2(g.fr)} · ${g.room == null ? "—" : g.room.toFixed(2) + "R"}`}</div>`)
-        : f.entry == null ? "—" : `${f2(f.entry)}<div class="small dim">stop ${f2(f.stop)} · 2R ${f2(f.tgt)}</div>`}</td>
-      <td class="l"><span class="jn-dec">${["take", "stalk", "pass"].map(v => `<button data-jd="${v}" data-v="${v}" data-p="${p}" data-s="${esc(o.s)}" class="${k === v ? "on" : ""}" ${dis}>${JN_DEC[v]}</button>`).join("")}</span>
-        ${d && d.ao ? `<div class="small dim">decided after the open</div>` : ""}${!show ? `<div><a class="small" data-jx="${p}:${esc(o.s)}" style="cursor:pointer">+ reasons, note, chart</a></div>` : ""}</td>
-      <td class="l">${jnTradeHTML(p, o)}</td></tr>`;
-    if (!show) return main;
-    const ch = o.ch || {};
-    const reasons = k === "pass" || k === "stalk" ? `<div class="small" style="margin-bottom:3px">Why ${k === "pass" ? "pass" : "stalk"}: ${JN_REASONS.map(([rk, rl]) => `<button class="jn-chip ${(d.why || []).includes(rk) ? "on" : ""}" data-jw="${rk}" data-p="${p}" data-s="${esc(o.s)}" ${dis}>${rl}</button>`).join("")}</div>` : "";
-    return main + `<tr class="jn-sub"><td></td><td class="l" colspan="4">${reasons}
-      <span class="jn-l">Note <input type="text" data-jn="note" data-p="${p}" data-s="${esc(o.s)}" value="${esc(o.note || "")}" placeholder="one line" style="width:220px" ${dis}></span>
-      <span class="jn-l">Trigger ${JN_TRIG.map(t => `<button class="jn-chip ${ch.trig === t ? "on" : ""}" data-jtr="${t}" data-p="${p}" data-s="${esc(o.s)}" ${dis}>${t}</button>`).join("")}</span>
-      <span class="jn-l">Real stop <input type="number" step="0.01" data-jn="stop" data-p="${p}" data-s="${esc(o.s)}" value="${ch.stop ?? ""}" ${dis}></span>
-      <span class="jn-l">First resistance <input type="number" step="0.01" data-jn="res" data-p="${p}" data-s="${esc(o.s)}" value="${ch.res ?? ""}" ${dis}></span>
-      <span class="jn-l">${rr == null ? `<span class="dim">room — enter both</span>` : `room <b class="${rr >= 2 ? "pos" : "neg"}">${rr.toFixed(2)}R</b>`}${riskAdr != null ? ` · risk ${riskAdr.toFixed(2)} ADR${riskAdr > cap + 1e-9 ? ` <span class="neg">over ${g ? "0.6" : "½"} ADR</span>` : ""}` : ""}</span></td></tr>`;
+    const f = o.f, g = f.s61, r = rowBy.get(o.s), lv = jnLv(o, rec);
+    const now = r && r.last != null && f.last ? (r.last / f.last - 1) * 100 : null;
+    const er = g ? (g.erN == null ? `<span class="neg">earnings date unknown</span>` : g.erN < S61.erMin ? `<span class="neg">earnings in ${g.erN} sessions</span>` : `earnings in ${g.erN} sessions`) : "";
+    const saw = g ? [esc(jnLocW(g.loc)), `RS ${f.rs ?? "—"}`, `grade ${esc(g.grade || "—")}`, er, g.ff && !has(o, "a61") && !/^9\b/.test(g.ff) ? `<span class="neg">${esc(ecPlain(g.ff))}</span>` : ""].filter(Boolean).join(" · ")
+      : `RS ${f.rs ?? "—"} · <span class="dim">no Entry Check facts (price history wasn't loaded when it was logged)</span>`;
+    return `<tr><td class="l"><span class="sym" ${r ? `data-jsym="${esc(o.s)}" style="cursor:pointer"` : ""}><b>${esc(o.s)}</b></span><div>${jnSrcHTML(o)}</div></td>
+      <td class="l small">${saw}<div class="dim">${esc(f.grp || "")}${f.gs ? " · group " + esc(f.gs) : ""}</div></td>
+      <td>${lv.entry == null ? "—" : `${f2(lv.entry)}<div class="small dim">1R ${f2(lv.entry - lv.stop)} · ${g && g.nh ? "no resistance (NH)" : g && g.fr != null ? `1st res ${f2(g.fr)}` : "—"}</div>`}</td>
+      <td>${f.last != null ? f2(f.last) : "—"}</td><td>${r && r.last != null ? f2(r.last) : "—"}${now != null ? `<div class="small ${cls(now)}">${pc(now, 1)}</div>` : ""}</td></tr>`;
   };
-  const n = jnET(), lockTxt = open ? `decide by 16:00 ET ${jnDay(p)}${n.d === p && n.m >= 570 ? " · <b>the session is open</b> — new calls are marked \"after the open\"" : ""}` : "locked";
-  const dataTxt = rec.mode === "pm" ? `premarket file · data to the ${jnDay(rec.d0)} close` : `regular-session file of ${jnDay(rec.d0)}`;
-  const tlSeg = `<span class="seg" id="jnTl">${[["all", "All"], ["plan", "Plan only"], ["zone", "In zone"], ["deck", "On deck"], ["map", "MAP lists"]].map(([k, l]) => `<button data-jtl="${k}" class="${tl === k ? "on" : ""}">${l} <span class="jn-n">${L.filter(TL[k]).length}</span></button>`).join("")}</span>`;
-  const tog = (k, l, t) => `<label class="tog small" title="${t}"><input type="checkbox" data-jvt="${k}" ${v[k] ? "checked" : ""}> ${l}</label>`;
-  const ctl = `<div class="jn-ctl">${tlSeg}${tog("tp", "Hide passes", "Hide names you've marked Pass")}${tog("tf", "Only names that pass my filter bar", "Use the filter bar (the presets you use on Stocks and Setups) to narrow this view")}
+  const seg = `<span class="seg" id="jnTl">${[["all", "All"], ["a61", "Ready to trade"], ["d61", "On deck"], ["map", "MAP lists"]].map(([k, l]) => `<button data-jtl="${k}" class="${tl === k ? "on" : ""}">${l} <span class="jn-n">${L.filter(TL[k]).length}</span></button>`).join("")}</span>`;
+  const ctl = `<div class="jn-ctl">${seg}<label class="tog small" title="Use the filter bar (the presets you use on Stocks and Setups) to narrow this view"><input type="checkbox" data-jvt="tf" ${v.tf ? "checked" : ""}> Only names that pass my filter bar</label>
     <span class="small dim">showing <b>${shown.length}</b> of ${rec.n.length}${shown.length < rec.n.length ? " — hidden names are still logged and scored" : ""}${v.tf && !gfOn ? " · your filter bar is off, so that tick does nothing" : ""}</span></div>`;
-  const why61 = `<details class="jn-what"><summary>What puts a name on this list?</summary><div class="small">
-    <p><b>"Entry Check drives the plan" is on, so this list is the Entry Check lists</b> — the same as Setups › Entry Check lists, for the whole file.</p>
-    <p><b>Ready to trade</b> (tag "6.1 · Focus A-eligible") — in the buy zone (L1) and every check 1–9 passes: liquidity, clean data, above a rising daily 21 EMA / daily 50 SMA / weekly 10-week line, not Stage 1 or 3, ≤ 4 ADR above the daily 50 SMA, group not Lagging, RS 75+, no earnings in the next 5 sessions. Room to the first resistance is shown, never a blocker.</p>
-    <p><b>On deck</b> (tag "6.1 · On deck") — just under the buy zone (L2) with nothing else missing, or in the buy zone with exactly one soft blocker (stage or earnings). The blocker is shown on each row.</p>
-    <p><b>MAP A / B / stalk</b> — the lists you typed on Setups.</p>
-    <p><b>Entry</b> shows the Entry Check planned entry, the pre-open 1R estimate (0.6 ADR) and the first resistance. Your live stop is the day low at the trigger — type it as the real stop.</p>
-    <p><b>Scoring.</b> The scores further down still replay the Spec 6.0 levels for every name (one yardstick across all days). The real Entry Check (rules v6.1) test score (T+5 primary, ladder secondary) comes from your Candidate Episode Outcomes task; the CSV export carries every 6.1 fact it needs.</p>
-    <p>Your filter bar doesn't change what's logged — the view controls above only hide rows.</p></div></details>`;
-  const why = sp61 ? why61 : `<details class="jn-what"><summary>What puts a name on this list?</summary><div class="small">
-    <p><b>Plan · in zone / wait</b> — the same list as Setups › The plan: stocks in the buy zone (${zoneText()}) or up to ${CFG.waitW} ADR above it, above the 50 SMA and no more than ${CFG.extCap} ADR above it, with RS ${CFG.rsMin}+${CFG.hideER ? ", earnings inside the window left out" : ""}. Sorted by RS, the best <b>${CFG.planN}</b> make it${CFG.perGroup > 0 ? `, at most ${CFG.perGroup} per group` : ""}.</p>
-    <p><b>On deck</b> — names one check short of the plan (RS ${CFG.rsMin - 10}+), or ones that passed but missed the cut because the list was full. Up to 16.</p>
-    <p><b>MAP A / B / stalk</b> — the lists you typed on Setups.</p>
-    <p><b>Why your filter bar and Stocks screens don't drive it.</b> The log is there to score the board's rules over weeks, so it records the plan with the filter bar off — otherwise the scores would change with whatever filter you had on that night. The view controls above (and "Only names that pass my filter bar") hide rows only.</p>
-    <p><b>To shorten the list itself</b>, lower Plan list size (now ${CFG.planN}) or raise RS minimum (now ${CFG.rsMin}) in Settings or on Setups — that shortens Setups › The plan too. It applies from the next file you load; names already logged today stay.</p></div></details>`;
-  const warn61 = sp61 && !S.has.hist ? `<div class="jn-warn">Entry Check drives the plan, and its lists are built from the stored price history — <button class="btn sm" data-hist="full">Load price history</button>. The list fills in once it has loaded; until then only your MAP lists are logged.</div>`
-    : rec.s61 && !sp61 ? `<div class="jn-warn">Entry Check was driving the plan earlier today, and is off now — names from both rule sets are on this list (each row is tagged).</div>`
-    : sp61 && rec.n.some(o => has(o, "zone", "wait", "deck")) ? `<div class="jn-warn">This day started on the Spec 6.0 plan before "Entry Check drives the plan" was switched on — names from both rule sets are on this list (each row is tagged).</div>` : "";
-  return `<div class="card g1" id="jnToday"><div class="hd"><h2>Today's list — plan for ${jnDay(p)}</h2><span class="sub"><b>${sp61 ? "Entry Check lists" : "Spec 6.0 plan"}</b> · ${dataTxt} · ${lockTxt} · <b>${nDec} of ${nPres}</b> shown to you decided${nPres < rec.n.length ? ` · ${rec.n.length - nPres} more qualified, not shown` : ""}</span><span class="spacer"></span>
+  return `<div class="card g1" id="jnToday"><div class="hd"><h2>Today's list — ${jnDay(p)}</h2><span class="sub">what the board put forward, frozen when each name first appeared</span><span class="spacer"></span>
       ${rec.n.length ? `<button class="btn sm" data-ja="tvcopy" title="Copies the names shown below as one comma-separated line — paste it into TradingView's Add symbol box">Copy for TradingView</button><button class="btn sm" data-ja="tvfile" title="Downloads the names shown below as a TradingView watchlist file, with sections (Watchlist menu → Import list)">TradingView watchlist</button>` : ""}</div>
-    <div class="bd">${warn61}${dd && dd.p !== p ? `<div class="jn-warn">The file on screen is for ${jnDay(dd.p)}, which can't be logged any more — showing the open list for ${jnDay(p)}.</div>` : ""}
-    ${!rec.n.length ? `<div class="empty">The board surfaced nothing for this day, and no MAP lists are typed. That's a valid result.</div>` : `${ctl}${why}
-    <div class="tscroll" style="max-height:none"><table class="mini jn-t"><thead><tr><th class="l">Ticker</th><th class="l">What the board saw (frozen when it first appeared)</th><th>Entry</th><th class="l">Your call</th><th class="l">Your trade</th></tr></thead><tbody>${shown.map(row).join("")}</tbody></table></div>${shown.length ? "" : `<div class="empty" style="padding:6px 0">Nothing matches the view — switch back to All.</div>`}`}
-    <div class="small" style="margin-top:6px">Lists come from the board's plan and on deck with the filter bar off (so the log doesn't depend on what you were viewing), plus your MAP A / B / stalk lists as typed on Setups. Names you leave blank are logged as "no decision" when the day locks. Entry, stop and 2R are the board's levels; the real stop and resistance are yours from the chart. Fill and exit are your own prices — they stay editable after the lock (also in "Every logged name" below), so you can add the exit when you close the trade.</div></div></div>`;
+    <div class="bd">${!rec.n.length ? `<div class="empty">Nothing qualifies for this day yet${S.has.hist ? "" : " (the Entry Check lists need the price history)"}, and no MAP lists are typed. That's a valid result.</div>` : `${ctl}
+    <div class="tscroll" style="max-height:560px"><table class="mini jn-t"><thead><tr><th class="l">Ticker</th><th class="l">What the board saw</th><th>Planned entry</th><th>Then</th><th>Now</th></tr></thead><tbody>${shown.map(row).join("")}</tbody></table></div>${shown.length ? "" : `<div class="empty" style="padding:6px 0">Nothing matches the view — switch back to All.</div>`}`}</div></div>`;
 }
 
 function jnRender(){
-  const items = jnSpecF(jnItems()), locked = items.filter(x => !jnOpenDay(x.rec.p)), missed = jnMissed(), hist = !!HIST.nD;
-  const recs = Object.keys(JN.recs).length;
-  // scorecard
-  const by = k => locked.filter(x => x.dec === k), A = {take: jnAgg(by("take")), stalk: jnAgg(by("stalk")), pass: jnAgg(by("pass")), none: jnAgg(by("none")), unseen: jnAgg(by("unseen"))};
-  const all = jnAgg(locked), surfAll = items.filter(x => x.o.src.some(k => JN_BOARD.includes(k)));
-  const lockedDays = Object.keys(JN.recs).filter(p => !jnOpenDay(p)).length;
-  const shownL = locked.filter(x => x.dec !== "unseen"), decided = shownL.filter(x => x.dec !== "none").length;
-  const tile = (k, v, n, cls = "") => `<div class="kpi card"><div class="k">${k}</div><div class="v ${cls}">${v}</div><div class="n">${n}</div></div>`;
-  const specSeg = `<div class="jn-ctl"><span class="small"><b>Rules</b></span><span class="seg" id="jnSpec">${[["cur", `Current (${s61Live() ? "Entry Check" : "Spec 6.0"})`], ["6.0", "Spec 6.0"], ["6.1", "Entry Check (6.1)"], ["all", "All — mixed"]].map(([k, l]) => `<button data-jsp="${k}" class="${(JN.view.spec || "cur") === k ? "on" : ""}">${l}</button>`).join("")}</span><span class="small dim">statistics below read one rule set at a time — each name keeps the rules it was logged under</span></div>`;
-  const kpis = specSeg + `<div class="note jn60"><b>These scores replay the Spec 6.0 levels</b> — for every name, including names logged from the Entry Check lists (one yardstick across all days) (fill at a touch of the board's entry, widest stop = entry − ½ ADR, 2R target, T+3 close). They are not the Entry Check strategy (30-min trigger from 10:00 ET, day-low stop ≤ 0.6 ADR, T+5 primary score, Ladder R) and not your real fills — read them as "did the board's 6.0 levels work", not as your expectancy. Your own fills and exits are scored separately in "Your real trades".</div><div class="kpis">${tile("Days logged", recs, `${lockedDays} locked · ${recs - lockedDays} open`)}${tile("Missed sessions", missed.length, hist ? "trading days with no file loaded" : "needs the price history", missed.length ? "neg" : "")}
-    ${tile("Calls made", shownL.length ? jnPct(decided / shownL.length * 100) : "—", `${decided} of ${shownL.length} names shown to you on locked days${A.unseen.n ? ` · ${A.unseen.n} qualified, not shown (not counted)` : ""}`)}
-    ${tile("Take · avg R", jnFmtR(A.take.avgR), `${A.take.fin} finished of ${A.take.n}`, jnCls(A.take.avgR))}${tile("Pass · avg R", jnFmtR(A.pass.avgR), `${A.pass.fin} finished of ${A.pass.n}`, jnCls(A.pass.avgR))}
-    ${tile("No decision · avg R", jnFmtR(A.none.avgR), `${A.none.fin} finished of ${A.none.n}`, jnCls(A.none.avgR))}</div>`;
-  const histNote = hist ? "" : `<div class="jn-warn">Scoring needs the stored price history (Massive). <button class="btn sm" data-hist="full">Load price history</button> — the log itself works without it.</div>`;
-  // decisions table
-  const aggRow = (label, g, note = "") => `<tr><td class="l"><b>${label}</b>${note ? `<div class="small dim">${note}</div>` : ""}</td><td>${g.n}</td><td>${jnPct(g.fillRate)}</td><td>${g.fin}${jnFew(g.fin)}</td><td>${jnPct(g.win)}</td><td class="${jnCls(g.avgR)}"><b>${jnFmtR(g.avgR)}</b></td><td class="${jnCls(g.sumR)}">${jnFmtR(g.sumR)}</td><td class="${jnCls(g.m5)}">${jnFmtP(g.m5)}</td><td>${jnPct(g.up5)}</td><td class="${jnCls(g.m10)}">${jnFmtP(g.m10)}</td></tr>`;
-  const head = first => `<thead><tr><th class="l">${first}</th><th>Names</th><th>Reached entry</th><th>Finished</th><th>Won</th><th>Avg R</th><th>Total R</th><th>Median 5d</th><th>Up after 5d</th><th>Median 10d</th></tr></thead>`;
-  const took = locked.filter(x => x.o.took), ao = locked.filter(x => x.o.dec && x.o.dec.ao), bo = locked.filter(x => x.o.dec && !x.o.dec.ao);
-  const decT = `<div class="card g1" id="jnDec"><div class="hd"><h2>Your calls</h2><span class="sub">locked days only · R from the daily-bar estimate below · a good "Pass" row is one that loses money</span></div><div class="bd">
-    <table class="mini">${head("Call")}<tbody>${aggRow("Take", A.take)}${aggRow("Stalk", A.stalk)}${aggRow("Pass", A.pass)}${aggRow("No decision", A.none, "shown to you and left blank")}${aggRow("Qualified, not shown", A.unseen, "logged for research — never counted as your indecision")}${aggRow("Everything logged", all)}
-      ${aggRow("Entered (you ticked it)", jnAgg(took), "what you actually bought, scored the same way — your real fills live in your trade log")}${aggRow("Calls before the open", jnAgg(bo))}${aggRow("Calls after the open", jnAgg(ao))}</tbody></table></div></div>`;
-  // your real trades — every day, open or locked (fill / exit are facts)
-  const mineAll = items.map(x => ({x, m: jnMine(x.o)})).filter(y => y.m), shut = mineAll.filter(y => y.m.R != null);
-  const avg = a => { const w = a.filter(z => z != null && isFinite(z)); return w.length ? w.reduce((q, z) => q + z, 0) / w.length : null; };
-  const mR = shut.map(y => y.m.R), simSame = shut.map(y => jnFinished(y.x.sc.sim) ? y.x.sc.sim.R : null), slips = mineAll.map(y => y.m.slip);
-  const aS = avg(slips), aR = avg(mR), aSim = avg(simSame);
-  const realT = `<div class="card g1" id="jnReal"><div class="hd"><h2>Your real trades</h2><span class="sub">names you ticked "entered" and gave a fill · R = (exit − fill) ÷ (fill − your real stop, else the board's widest stop)</span></div><div class="bd">
-    ${mineAll.length ? `<table class="mini"><thead><tr><th class="l">Trades</th><th>With a fill</th><th>Closed</th><th>Won</th><th>Avg R</th><th>Total R</th><th>Avg fill vs board entry</th><th>Board's estimate, same names</th></tr></thead><tbody>
-      <tr><td class="l"><b>All entered</b></td><td>${mineAll.length}</td><td>${shut.length}${jnFew(shut.length)}</td><td>${jnPct(mR.length ? mR.filter(z => z > 0).length / mR.length * 100 : null)}</td><td class="${jnCls(aR)}"><b>${jnFmtR(aR)}</b></td><td class="${jnCls(mR.length ? mR.reduce((q, z) => q + z, 0) : null)}">${jnFmtR(mR.length ? mR.reduce((q, z) => q + z, 0) : null)}</td>
-      <td class="${aS != null && aS > 0.25 ? "neg" : ""}">${aS == null ? "—" : (aS >= 0 ? "+" : "") + aS.toFixed(2) + " ADR"}</td><td class="${jnCls(aSim)}">${jnFmtR(aSim)} <span class="small dim">${simSame.filter(z => z != null).length} finished</span></td></tr></tbody></table>
-    <div class="small" style="margin-top:6px">"Avg fill vs board entry" above +0.25 ADR means you're paying up over the board's level — chasing. Compare your avg R with the board's estimate for the same names: a big gap is execution (fills, exits, sizing of the stop), not the list.</div>`
-    : `<div class="empty" style="padding:4px 0">No real trades yet — tick "entered" on a name and type your fill (and the exit once you're out).</div>`}</div></div>`;
-  // board surfacing
-  const grp = k => items.filter(x => x.o.src.includes(k));
+  const all = jnItems(), items = all.filter(x => jnSpecOf(x) === "6.1"), old = all.length - items.length;
+  const locked = items.filter(x => !jnOpenDay(x.rec.p)), missed = jnMissed(), hist = !!HIST.nD;
+  const recs = Object.keys(JN.recs).length, lockedDays = Object.keys(JN.recs).filter(p => !jnOpenDay(p)).length;
+  const tile = (k, v, n, c = "") => `<div class="kpi card"><div class="k">${k}</div><div class="v ${c}">${v}</div><div class="n">${n}</div></div>`;
+  const grp = k => items.filter(x => x.o.src.includes(k)), board = items.filter(x => x.o.src.some(k => k === "a61" || k === "d61")), B = jnAgg(board);
   let bU5 = [], bU10 = [], bS5 = [], bS10 = [], topN = 0, topHit = 0, topDays = 0;
   if (hist) for (const p of Object.keys(JN.recs)) { const rec = JN.recs[p], t0 = jnT0(rec.d0), b = jnBase(rec, t0); bU5 = bU5.concat(b.u5); bU10 = bU10.concat(b.u10); bS5 = bS5.concat(b.s5); bS10 = bS10.concat(b.s10); if (b.top) { topN += b.top.n; topHit += b.top.hit.length; topDays++; } }
-  const bRow = (label, a5, a10) => `<tr><td class="l"><b>${label}</b><div class="small dim">baseline</div></td><td>${a5.filter(x => x != null && isFinite(x)).length}</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td class="${jnCls(jnMed(a5))}">${jnFmtP(jnMed(a5))}</td><td>${jnPct(jnUp(a5))}</td><td class="${jnCls(jnMed(a10))}">${jnFmtP(jnMed(a10))}</td></tr>`;
-  const surfT = `<div class="card g1" id="jnSurf"><div class="hd"><h2>Is the board surfacing the right names?</h2><span class="sub">every logged day · moves are close to close after the data session · baselines use the same days</span></div><div class="bd">
-    <table class="mini">${head("List")}<tbody>${aggRow("Plan · in zone", jnAgg(grp("zone")))}${aggRow("Plan · wait for pullback", jnAgg(grp("wait")))}${aggRow("On deck", jnAgg(grp("deck")))}${grp("a61").length + grp("d61").length ? aggRow("Entry Check · Ready to trade", jnAgg(grp("a61")), "scored on the 6.0 replay levels") + aggRow("Entry Check · On deck", jnAgg(grp("d61")), "scored on the 6.0 replay levels") : ""}${aggRow("Everything the board surfaced", jnAgg(surfAll))}
+  const histNote = hist ? "" : `<div class="jn-warn">Scoring needs the stored price history (Massive). <button class="btn sm" data-hist="full">Load price history</button> — the log itself works without it.</div>`;
+  const kpis = `<div class="kpis">${tile("Days logged", recs, `${lockedDays} locked · ${recs - lockedDays} open`)}${tile("Missed sessions", missed.length, hist ? "trading days with no file loaded" : "needs the price history", missed.length ? "neg" : "")}
+    ${tile("Names the board put forward", board.length, "ready to trade + on deck, every logged day")}${tile("Reached the planned entry", jnPct(B.fillRate), "within 5 sessions")}
+    ${tile("Avg R · finished", jnFmtR(B.avgR), `${B.fin} finished${jnFew(B.fin).replace(/<[^>]+>/g, "")}`, jnCls(B.avgR))}${tile("Median 5-day move", jnFmtP(B.m5), hist ? `whole file ${jnFmtP(jnMed(bU5)).replace(/<[^>]+>/g, "")}` : "needs the price history", jnCls(B.m5))}</div>`;
+  const aggRow = (label, g, note = "") => `<tr><td class="l"><b>${label}</b>${note ? `<div class="small dim">${note}</div>` : ""}</td><td>${g.n}</td><td>${jnPct(g.fillRate)}</td><td>${g.fin}${jnFew(g.fin)}</td><td>${jnPct(g.win)}</td><td class="${jnCls(g.avgR)}"><b>${jnFmtR(g.avgR)}</b></td><td class="${jnCls(g.sumR)}">${jnFmtR(g.sumR)}</td><td class="${jnCls(g.m5)}">${jnFmtP(g.m5)}</td><td>${jnPct(g.up5)}</td><td class="${jnCls(g.m10)}">${jnFmtP(g.m10)}</td></tr>`;
+  const head = first => `<thead><tr><th class="l">${first}</th><th>Names</th><th>Reached entry</th><th>Finished</th><th>Won</th><th>Avg R</th><th>Total R</th><th>Median 5d</th><th>Up after 5d</th><th>Median 10d</th></tr></thead>`;
+  const bRow = (label, a5, a10) => `<tr><td class="l"><b>${label}</b><div class="small dim">baseline — moves only</div></td><td>${a5.filter(x => x != null && isFinite(x)).length}</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td class="${jnCls(jnMed(a5))}">${jnFmtP(jnMed(a5))}</td><td>${jnPct(jnUp(a5))}</td><td class="${jnCls(jnMed(a10))}">${jnFmtP(jnMed(a10))}</td></tr>`;
+  const surfT = `<div class="card g1" id="jnSurf"><div class="hd"><h2>Is the board surfacing the right names?</h2><span class="sub">every logged day · Entry Check levels on daily bars · moves are close to close after the data session</span></div><div class="bd">
+    ${kpis}<table class="mini">${head("List")}<tbody>${aggRow("Ready to trade", jnAgg(grp("a61")))}${aggRow("On deck", jnAgg(grp("d61")))}${aggRow("Everything the board put forward", B)}
       ${aggRow("MAP A list", jnAgg(grp("A")))}${aggRow("MAP B list", jnAgg(grp("B")))}${aggRow("MAP stalk", jnAgg(grp("S")))}
-      ${hist ? bRow(`Strong, not surfaced (RS ${CFG.momRS}+, above the 50)`, bS5, bS10) + bRow("Whole file", bU5, bU10) : ""}</tbody></table>
-    ${topDays ? `<div class="small" style="margin-top:6px">Caught <b>${topHit} of ${topN}</b> of the top 20 five-day gainers (liquid names, $20M+ a day) across ${topDays} day${topDays === 1 ? "" : "s"}. Many big gainers are already extended when they run, so a low number here isn't automatically bad — compare it with the rows above.</div>` : ""}</div></div>`;
-  // factors
+      ${hist ? bRow(`Strong, not put forward (RS ${CFG.momRS}+, above the 50)`, bS5, bS10) + bRow("Whole file", bU5, bU10) : ""}</tbody></table>
+    ${topDays ? `<div class="small" style="margin-top:6px">Caught <b>${topHit} of ${topN}</b> of the top 20 five-day gainers (liquid names, $20M+ a day) across ${topDays} day${topDays === 1 ? "" : "s"}. Many big gainers are already extended when they run, so a low number here isn't automatically bad — compare it with the rows above.</div>` : ""}
+    <div class="small dim" style="margin-top:4px">Read it with the sample size: under 30 finished names a row is a hint, not a result. The board is doing its job when "Everything the board put forward" beats "Strong, not put forward" and "Whole file" over many weeks.</div></div></div>`;
+  const g61 = x => x.o.f.s61 || {};
   const FACT = [
-    ["Board list", x => x.o.src.includes("a61") ? "Entry Check · Ready to trade" : x.o.src.includes("d61") ? "Entry Check · On deck" : x.o.src.includes("zone") ? "Plan · in zone" : x.o.src.includes("wait") ? "Plan · wait" : x.o.src.includes("deck") ? "On deck" : "MAP only"],
-    ["Rules logged", x => x.rec.spec === "6.1" ? "Entry Check lists" : "Spec 6.0 plan"],
+    ["Board list", x => JN_LN[jnListOf(x.o)]],
+    ["Location when logged", x => jnLocW(g61(x).loc)],
     ["MAP list", x => x.o.src.includes("A") ? "A list" : x.o.src.includes("B") ? "B list" : x.o.src.includes("S") ? "Stalk" : "Not on MAP's lists"],
     ["RS", x => x.o.f.rs == null ? "—" : x.o.f.rs >= 90 ? "90+" : x.o.f.rs >= 80 ? "80–89" : x.o.f.rs >= 60 ? "60–79" : "under 60"],
+    ["Room to first resistance (board estimate)", x => { const g = g61(x); return g.nh ? "No resistance (new highs)" : g.room == null ? "—" : g.room >= 2 ? "2R or more" : "under 2R"; }],
+    ["Earnings", x => { const e = g61(x).erN; return e == null ? "Date unknown" : e < S61.erMin ? "Within 5 sessions" : e <= 10 ? "6–10 sessions" : "More than 10 sessions"; }],
     ["Volatility", x => x.o.f.vs ? VSL[x.o.f.vs].n : "no history then"],
     ["Group", x => x.o.f.gs || "—"],
-    ["Earnings", x => ({clear: "None in the window", soon: "Inside the window", unknown: "Date unknown"})[x.o.f.er] || "—"],
-    ["Pivot script (6.0X)", x => x.o.f.piv == null ? "—" : x.o.f.piv === "pass" ? "Passes" : /^needs/.test(x.o.f.piv) ? "Not known (no history then)" : "Fails"],
-    ["Size grade", x => x.o.f.grade || "—"],
+    ["Entry Check grade", x => g61(x).grade || "—"],
     ["Tape read", x => x.rec.tape || "no breadth file"],
-    ["MAP call", x => x.rec.map || "not set"],
-    ["Room to resistance (your chart)", x => { const r = jnRoom(x.o); return r == null ? "not entered" : r >= 2 ? "2R or more" : "under 2R"; }],
-    ["Planned trigger", x => (x.o.ch && x.o.ch.trig) || "not entered"]
+    ["MAP call", x => x.rec.map || "not set"]
   ];
-  const fScope = JN.view.fsc || "all", fItems = fScope === "take" ? locked.filter(x => x.dec === "take") : locked;
-  const factT = `<div class="card g1 jn-ft" id="jnFact"><div class="hd"><h2>What goes with better results</h2><span class="sub">locked days · each name counted once per factor</span><span class="spacer"></span>
-      <span class="seg" id="jnFsc">${[["all", "Everything logged"], ["take", "Only my Takes"]].map(([k, l]) => `<button data-jfs="${k}" class="${fScope === k ? "on" : ""}">${l}</button>`).join("")}</span></div><div class="bd">
-    ${fItems.length ? `<table class="mini">${head("Factor")}<tbody>${FACT.map(([name, fn]) => { const m = new Map(); fItems.forEach(x => { const v = fn(x); if (!m.has(v)) m.set(v, []); m.get(v).push(x); });
+  const factT = `<div class="card g1 jn-ft" id="jnFact"><div class="hd"><h2>What goes with better results</h2><span class="sub">locked days · each name counted once per factor</span></div><div class="bd">
+    ${locked.length ? `<table class="mini">${head("Factor")}<tbody>${FACT.map(([name, fn]) => { const m = new Map(); locked.forEach(x => { const v = fn(x); if (!m.has(v)) m.set(v, []); m.get(v).push(x); });
       return `<tr class="jn-fh"><td class="l" colspan="10">${name}</td></tr>` + [...m].sort((a, b) => name === "RS" ? JN_RSO.indexOf(a[0]) - JN_RSO.indexOf(b[0]) : b[1].length - a[1].length).map(([v, L]) => aggRow(esc(v), jnAgg(L))).join(""); }).join("")}</tbody></table>`
       : `<div class="empty" style="padding:4px 0">Nothing locked yet — this fills in once a logged day has closed.</div>`}
-    <div class="small" style="margin-top:6px">A factor is only worth acting on when the same pattern holds across many names and several weeks. Under 30 finished trades in a row, read it as a hint, not a rule.</div></div></div>`;
-  // pass reasons
-  const pr = new Map(); locked.filter(x => x.o.dec && (x.dec === "pass" || x.dec === "stalk")).forEach(x => { const w = x.o.dec.why && x.o.dec.why.length ? x.o.dec.why : ["(none given)"]; w.forEach(k => { const id = x.dec + "|" + k; if (!pr.has(id)) pr.set(id, []); pr.get(id).push(x); }); });
-  const prT = `<div class="card g1" id="jnWhy"><div class="hd"><h2>Why you passed or stalked</h2><span class="sub">locked days · if a reason keeps showing positive R, it's costing you trades</span></div><div class="bd">
-    ${pr.size ? `<table class="mini">${head("Reason")}<tbody>${[...pr].sort((a, b) => b[1].length - a[1].length).map(([id, L]) => { const [d, k] = id.split("|"); return aggRow(`${JN_DEC[d]} · ${esc(JN_RN[k] || k)}`, jnAgg(L)); }).join("")}</tbody></table>` : `<div class="empty" style="padding:4px 0">No passes or stalks on locked days yet.</div>`}</div></div>`;
-  // full log
-  const v = JN.view, rows = items.filter(x => (v.dec === "all" || (v.dec === "took" ? x.o.took : x.dec === v.dec)) && (v.list === "all" || x.o.src.includes(v.list)));
-  const MAXR = 400;
-  const logRows = rows.slice(0, MAXR).map(x => { const o = x.o, f = o.f, d = o.dec;
-    return `<tr><td class="l">${jnDay(x.rec.p)}</td><td class="l"><b ${S.rowBySym && S.rowBySym.has(o.s) ? `data-jsym="${esc(o.s)}" style="cursor:pointer"` : ""}>${esc(o.s)}</b></td><td class="l">${jnSrcHTML(o)}</td><td class="l small">${esc(f.status)} · RS ${f.rs ?? "—"}</td>
-      <td class="l">${JN_DEC[x.dec]}${d && d.why && d.why.length ? `<div class="small dim">${d.why.map(k => esc(JN_RN[k] || k)).join(", ")}</div>` : ""}${o.note ? `<div class="small dim">“${esc(o.note)}”</div>` : ""}${o.took ? ` <span class="jn-src">entered</span>` : ""}</td>
-      <td>${f.entry == null ? "—" : f2(f.entry)}</td><td class="l">${jnOutHTML(x.sc)}</td><td class="${jnCls(x.sc.m5)}">${jnFmtP(x.sc.m5)}</td><td class="${jnCls(x.sc.m10)}">${jnFmtP(x.sc.m10)}</td><td class="l jn-tr">${jnTradeHTML(x.rec.p, o)}</td></tr>`; }).join("");
-  const segs = (id, key, opts) => `<span class="seg" id="${id}">${opts.map(([k, l]) => `<button data-jv="${key}" data-k="${k}" class="${v[key] === k ? "on" : ""}">${l}</button>`).join("")}</span>`;
+    <div class="small" style="margin-top:6px">A factor is only worth acting on when the same pattern holds across many names and several weeks. Under 30 finished names in a row, read it as a hint, not a rule.</div></div></div>`;
+  const v = JN.view, lk = ["all", "a61", "d61", "A", "B", "S"].includes(v.list) ? v.list : "all", rows = items.filter(x => lk === "all" || x.o.src.includes(lk)), MAXR = 400;
+  const logRows = rows.slice(0, MAXR).map(x => { const o = x.o, f = o.f, g = f.s61, lv = jnLv(o, x.rec);
+    return `<tr><td class="l">${jnDay(x.rec.p)}</td><td class="l"><b ${S.rowBySym && S.rowBySym.has(o.s) ? `data-jsym="${esc(o.s)}" style="cursor:pointer"` : ""}>${esc(o.s)}</b></td><td class="l">${jnSrcHTML(o)}</td>
+      <td class="l small">${g ? `${esc(jnLocW(g.loc))} · RS ${f.rs ?? "—"} · grade ${esc(g.grade || "—")}` : `RS ${f.rs ?? "—"}`}</td>
+      <td>${lv.entry == null ? "—" : f2(lv.entry)}</td><td class="l">${jnOutHTML(x.sc)}</td><td class="${jnCls(x.sc.m5)}">${jnFmtP(x.sc.m5)}</td><td class="${jnCls(x.sc.m10)}">${jnFmtP(x.sc.m10)}</td></tr>`; }).join("");
   const logT = `<div class="card g1" id="jnLog"><div class="hd"><h2>Every logged name</h2><span class="sub">${items.length} name-days · ${missed.length} missed session${missed.length === 1 ? "" : "s"}</span><span class="spacer"></span>
       <button class="btn sm" data-ja="csv">Export CSV</button>${recs ? `<button class="btn sm" data-ja="clear">Clear log</button>` : ""}</div><div class="bd">
-    <div class="controls" style="margin-bottom:8px;display:flex;gap:10px;flex-wrap:wrap">${segs("jnVd", "dec", [["all", "All calls"], ["take", "Take"], ["stalk", "Stalk"], ["pass", "Pass"], ["none", "No decision"], ["open", "Not decided yet"], ["took", "Entered"]])}
-      ${segs("jnVl", "list", [["all", "All lists"], ["zone", "In zone"], ["wait", "Wait"], ["deck", "On deck"], ["a61", "Entry Check · Ready"], ["d61", "Entry Check · On deck"], ["A", "MAP A"], ["B", "MAP B"], ["S", "Stalk"]])}</div>
+    <div class="jn-ctl"><span class="seg" id="jnVl">${[["all", "All"], ["a61", "Ready to trade"], ["d61", "On deck"], ["A", "MAP A"], ["B", "MAP B"], ["S", "MAP stalk"]].map(([k, l]) => `<button data-jv="list" data-k="${k}" class="${lk === k ? "on" : ""}">${l}</button>`).join("")}</span>
+      ${old ? `<span class="small dim">${old} name-day${old === 1 ? "" : "s"} logged under the retired Spec 6.0 rules ${old === 1 ? "is" : "are"} left out here — still in Export CSV.</span>` : ""}</div>
     ${missed.length ? `<div class="small" style="margin-bottom:6px"><b>Missed sessions:</b> ${missed.slice(-30).map(jnDay).join(", ")}${missed.length > 30 ? ` and ${missed.length - 30} earlier` : ""}</div>` : ""}
-    ${rows.length ? `<div class="tscroll" style="max-height:520px"><table class="mini"><thead><tr><th class="l">Plan day</th><th class="l">Ticker</th><th class="l">Lists</th><th class="l">Board then</th><th class="l">Call</th><th>Entry</th><th class="l">Outcome</th><th>5d</th><th>10d</th><th class="l">Your trade</th></tr></thead><tbody>${logRows}</tbody></table></div>${rows.length > MAXR ? `<div class="small">Showing the newest ${MAXR} of ${rows.length} — Export CSV has them all.</div>` : ""}` : `<div class="empty" style="padding:4px 0">${recs ? "Nothing matches these buttons." : "Nothing logged yet. Load today's files — the board's list opens here automatically."}</div>`}</div></div>`;
-  const how = `<div class="card g1" id="jnHow"><div class="hd"><h2>How the scoring works</h2><span class="sub">plain rules, so the numbers can be checked by hand</span></div><div class="bd small">
-    <p><b>Which names.</b> While "Entry Check drives the plan" is off, each day logs the Spec 6.0 plan + on deck. Once it's on, the day logs the Entry Check lists (Ready to trade + On deck, whole file) instead, tagged "6.1", with the Entry Check facts frozen (planned entry, 1R estimate, first resistance, room, first fail, grade, earnings / exit by) — all in the CSV.</p>
-    <p><b>Which rules.</b> The Spec 6.0 plan's levels, replayed on daily bars, for every name. Since 19 Oct your live stop is the day low at the trigger (≤ 0.6 ADR) and the Entry Check (rules v6.1) test is scored by stop / T+5 close / Exit By with a separate Ladder R — that scoring runs outside the board (Candidate Episode Outcomes). Use these numbers to judge the board's 6.0 levels, not your strategy or your execution.</p>
-    <p><b>Which day.</b> A premarket file dated Monday is the plan for Monday. A regular-session file from Monday is the plan for Tuesday. A list opens only for a day that hasn't closed yet, and calls lock at 16:00 ET that day.</p>
-    <p><b>Reached entry.</b> Within 5 sessions after the data, price trades back to the board's entry (or up through it, when the entry is above where price was). The fill is the entry, or the open if it opened past it.</p>
-    <p><b>Result.</b> The trade ends at the board's widest stop (entry − ½ ADR) or the 2R target, whichever is hit first. If neither is hit, it ends at the close of the 3rd session after the fill (your T+3 rule). On the fill day only the stop counts; if the stop and target are both inside one day it counts as the stop. R = (exit − fill) ÷ (entry − widest stop).</p>
-    <p><b>Not checked yet.</b> This uses daily bars: it doesn't see your 30-min trigger, your real stop, slippage, the trim, or the runner. It's a fair, identical yardstick for every name — not your P&amp;L.</p>
-    <p><b>Your real trades.</b> When you tick "entered" and type a fill and an exit, R = (exit − fill) ÷ (fill − stop), using your real stop from the chart notes when it's under the fill, otherwise the board's widest stop. Use your average fill and average exit if you scaled out. "Fill vs board entry" = (fill − board entry) ÷ ADR, from the ADR frozen when the name was logged.</p>
-    <p><b>Moves.</b> Close-to-close % change 5 and 10 sessions after the data session. "Whole file" and "Strong, not surfaced" are measured over the same days, so you can see whether the board's picks beat simply owning strong names.</p></div></div>`;
-  return histNote + kpis + decT + realT + jnExpHTML(items) + surfT + factT + prT + logT + how;
+    ${rows.length ? `<div class="tscroll" style="max-height:520px"><table class="mini"><thead><tr><th class="l">Plan day</th><th class="l">Ticker</th><th class="l">List</th><th class="l">Board then</th><th>Planned entry</th><th class="l">Outcome</th><th>5d</th><th>10d</th></tr></thead><tbody>${logRows}</tbody></table></div>${rows.length > MAXR ? `<div class="small">Showing the newest ${MAXR} of ${rows.length} — Export CSV has them all.</div>` : ""}` : `<div class="empty" style="padding:4px 0">${recs ? "Nothing matches these buttons." : "Nothing logged yet. Load today's files — the board's list is logged automatically."}</div>`}</div></div>`;
+  const how = `<div class="card g1" id="jnHow"><div class="hd"><h2>How the logging and scoring work</h2><span class="sub">plain rules, so the numbers can be checked by hand</span></div><div class="bd small">
+    <p><b>Which names.</b> Every Entry Check (rules v6.1) <b>Ready to trade</b> and <b>On deck</b> name in the whole file — your filter bar never changes it — plus your MAP A / B / stalk lists. Each name's facts (planned entry, 1R estimate = 0.6 ADR, first resistance, room, location, grade, earnings) are frozen the first time it appears that day.</p>
+    <p><b>Which day.</b> A premarket file dated Monday is the list for Monday. An after-close file from Monday is the list for Tuesday. A list opens only for a day that hasn't closed yet, and locks at 16:00 ET that day — so nothing is logged with hindsight. Live mode logs too: it records from the stock file under the live prices, never the live prices themselves.</p>
+    <p><b>Reached entry.</b> Within 5 sessions after the data, price trades to the planned entry (or up through it, when the entry is above where price was). The fill is the entry, or the open if it opened past it.</p>
+    <p><b>Result.</b> Stop = planned entry − 1R (0.6 ADR, the Entry Check cap); target = 2R. The trade ends at the stop or the target, whichever is hit first; if neither, at the close of the 3rd session after the fill (T+3). On the fill day only the stop counts; stop and target inside one day = the stop. R = (exit − fill) ÷ 1R.</p>
+    <p><b>Not checked.</b> Daily bars only: no 30-min trigger, no real day-low stop (often tighter than 0.6 ADR), no slippage, trim or runner. It's the same yardstick for every name — a test of the list, not your P&amp;L. The full Entry Check test score (T+5, ladder) still comes from your Candidate Episode Outcomes task; Export CSV carries every fact it needs.</p>
+    <p><b>Moves.</b> Close-to-close % change 5 and 10 sessions after the data session. "Whole file" and "Strong, not put forward" are measured over the same days, so you can see whether the board's picks beat simply owning strong names.</p></div></div>`;
+  return histNote + surfT + logT + factT + how;
 }
 function renderJournal(){
   const box = $("jnBody"); if (!box) return;
   if (!JN.loaded) { box.innerHTML = `<div class="empty">Loading the log…</div>`; JN.ready.then(() => { if (S.ui.tab === "journal") renderJournal(); }); return; }
   const y = scrollY, a = document.activeElement, keep = a && box.contains(a) && (a.dataset.jf || a.dataset.jn) ? [a.closest(".card") && a.closest(".card").id, a.dataset.jf ? "jf" : "jn", a.dataset.jf || a.dataset.jn, a.dataset.p, a.dataset.s] : null;
-  box.innerHTML = jnTodayCard() + jnRender();
+  box.innerHTML = jnLogCard() + jnTodayCard() + jnRender();
   // typing fill → Tab → exit: the re-render keeps the cursor where it went
   if (keep) { const el = [...box.querySelectorAll(`#${keep[0]} [data-${keep[1]}="${keep[2]}"]`)].find(e => e.dataset.p === keep[3] && e.dataset.s === keep[4]); if (el) el.focus(); }
   scrollTo(0, y);
@@ -7763,28 +7755,27 @@ $("tab-journal").addEventListener("click", e => {
   const t = e.target;
   const sym = t.closest("[data-jsym]"); if (sym) { openDrawer(sym.dataset.jsym); return; }
   const b = t.closest("button,a"); if (!b) return;
-  const p = b.dataset.p, s = b.dataset.s;
-  if (b.dataset.jd) return jnEdit(p, s, o => { const k = b.dataset.jd; if (o.dec && o.dec.k === k) delete o.dec; else { const now = JN.now(); o.dec = {k, why: o.dec && o.dec.k === k ? o.dec.why : [], at: now, ao: jnAfterOpen(p, now)}; } });
-  if (b.dataset.jw) return jnEdit(p, s, o => { if (!o.dec) return; const w = new Set(o.dec.why || []), k = b.dataset.jw; w.has(k) ? w.delete(k) : w.add(k); o.dec.why = [...w]; });
-  if (b.dataset.jtr) return jnEdit(p, s, o => { const c = o.ch || {}; c.trig = c.trig === b.dataset.jtr ? null : b.dataset.jtr; o.ch = c; });
-  if (b.dataset.jx) { JN.open.add(b.dataset.jx); renderJournal(); return; }
-  if (b.dataset.jfs) { JN.view.fsc = b.dataset.jfs; store.set("adrb.jnView", JN.view); renderJournal(); return; }
   if (b.dataset.jv) { JN.view[b.dataset.jv] = b.dataset.k; store.set("adrb.jnView", JN.view); renderJournal(); return; }
-  if (b.dataset.ja === "csv") return jnCSV();
   if (b.dataset.jtl) { JN.view.tl = b.dataset.jtl; store.set("adrb.jnView", JN.view); renderJournal(); return; }
-  if (b.dataset.jsp) { JN.view.spec = b.dataset.jsp; store.set("adrb.jnView", JN.view); renderJournal(); return; }
+  if (b.dataset.ja === "csv") return jnCSV();
+  if (b.dataset.ja === "lognow") return jnLogNow();
   if (b.dataset.ja === "tvcopy" || b.dataset.ja === "tvfile") return jnTv(b.dataset.ja === "tvfile");
-  if (b.dataset.ja === "clear") { if (confirm("Delete the whole decision log from this browser? Snapshots you've saved keep their copy.")) { JN.recs = {}; JNH = {key: ""}; jnSaveNow(); renderJournal(); } }
+  if (b.dataset.ja === "clear") { if (confirm("Delete the whole log from this browser? Snapshots you've saved keep their copy.")) { JN.recs = {}; JNH = {key: ""}; jnSaveNow(); renderJournal(); } }
 });
 $("tab-journal").addEventListener("change", e => {
-  const t = e.target, p = t.dataset.p, s = t.dataset.s;
-  if (t.matches("[data-jt]")) return jnEdit(p, s, o => { o.took = t.checked; o.tookAt = JN.now(); }, true);
-  if (t.dataset.jvt) { JN.view[t.dataset.jvt] = t.checked; store.set("adrb.jnView", JN.view); renderJournal(); return; }
-  if (t.dataset.jf) return jnEdit(p, s, o => { const k = t.dataset.jf, v = t.value === "" ? null : +t.value; if (v != null && isFinite(v) && v > 0) { o[k] = v; if (k === "fill" && !o.took) { o.took = true; o.tookAt = JN.now(); } } else delete o[k]; }, true, true);
-  const k = t.dataset.jn; if (!k) return;
-  if (k === "note") return jnEdit(p, s, o => { const v = t.value.trim().slice(0, 300); if (v) o.note = v; else delete o.note; }, false, true);
-  jnEdit(p, s, o => { const c = o.ch || {}, v = t.value === "" ? null : +t.value; c[k] = v != null && isFinite(v) && v > 0 ? v : null; o.ch = c; }, false, true);
+  const t = e.target;
+  if (t.dataset.jvt) { JN.view[t.dataset.jvt] = t.checked; store.set("adrb.jnView", JN.view); renderJournal(); }
 });
+// "Update now": the same recording a file load runs (it never removes a board name or changes frozen facts)
+function jnLogNow(){
+  JN.ready.then(() => {
+    const before = Object.values(JN.recs).reduce((a, r) => a + r.n.length, 0); let ok = false;
+    try { ok = jnRecord(); } catch (e) { console.warn("log", e); }
+    const rec = jnNowRec(), added = Object.values(JN.recs).reduce((a, r) => a + r.n.length, 0) - before;
+    toast(!rec ? "Not logging right now — the card says why" : `Logged ${rec.n.length} names for ${jnDay(rec.p)}${added > 0 ? ` (${added} new)` : ok ? " (updated)" : " — nothing new"}`);
+    renderJournal();
+  });
+}
 
 // the names shown on Today's list (after the view filters), as TradingView symbols
 function jnTv(file){
@@ -7811,7 +7802,7 @@ function jnCSV(){
       o.fill ?? "", o.exit ?? "", r4(m.stop), m.from || "", r4(m.R), r4(m.slip), r4(m.risk),
       x.rec.spec || "6.0", g.list || "", g.loc || "", g.entry ?? "", g.r1 ?? "", g.nh ? "NH" : g.fr ?? "", g.nh ? "NH" : g.room ?? "", g.ff || "", g.grade || "", g.erN ?? "", g.exitBy || "", g.sq ?? "",
       x.dec === "unseen" ? "no" : "yes", o.spec || x.rec.spec || "6.0", o.trim ?? "", r4(m.net), r4(m.trimR), r4(m.runR), r4(m.roomA), r4(m.res), m.resFrom || "", o.roomWhy || "",
-      m.R != null ? "executed" : jnFinished(s) ? "simulated (6.0 replay)" : "", o.st || "", o.stWhy || ""].map(q).join(","));
+      m.R != null ? "executed" : jnFinished(s) ? ((o.spec || x.rec.spec || "6.0") === "6.1" ? "simulated (Entry Check levels)" : "simulated (6.0 replay)") : "", o.st || "", o.stWhy || ""].map(q).join(","));
   }
   for (const d of jnMissed()) L.push([d, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "MISSED SESSION"].map(q).join(","));
   download(`deep-space-decision-log-${fmtDate(new Date())}.csv`, L.join("\n"), "text/csv");
@@ -8179,7 +8170,7 @@ function feedRows(){
     let vs = null; try { vs = vsOf(r); } catch (e) {} let stg = null; try { const s = stageOf(r); stg = s ? s.lab : null; } catch (e) {}
     out.push({sym: r.sym, r, d, th, six: {tier: six.tier, gate: six.gate, wk: x ? x.g.wk : null, e21: x ? x.g.e21 : null, s50: x ? x.g.s50 : null, zone: x ? Math.min(x.z9, x.z21) : null, zoneOk: x ? x.g.zone : null,
       ext: x ? x.ext : null, extOk: x ? x.g.ext : null, lod: x ? x.lod : null, room: x ? x.room : null},
-      b: [r.state ? ST[r.state].name : "", statusOf(r).t, r.rs ?? "", r.group || "", r.gState && r.gState !== "—" ? r.gState : "", inPlan.get(r.sym) || "", lists, r.eru || "", r.erIn ?? "",
+      b: [r.state ? ST[r.state].name : "", statusOf60(r).t, r.rs ?? "", r.group || "", r.gState && r.gState !== "—" ? r.gState : "", inPlan.get(r.sym) || "", lists, r.eru || "", r.erIn ?? "",
         r.erIn == null || r.erIn < 0 ? "unknown" : r.erSoon ? "inside " + CFG.erDays + "d" : "clear", mc ?? "", to == null ? "" : (to / 1e6).toFixed(1), elig, vs ? VSL[vs.k].n : "", stg || "", d ? d.bars : "", d ? d.to : "", r.etf ? "etf (file)" : "stock"]});
   }
   // the TAS tape and theme proxies, from the stored bars, when the files don't carry them (the in-theme join needs them)
@@ -8382,7 +8373,8 @@ const NYSE_HOL = new Set(["2026-01-01", "2026-01-19", "2026-02-16", "2026-04-03"
 const isSess = d => isWkday(d) && !NYSE_HOL.has(d);
 const nextSess = d => { let x = addDays(d, 1); while (!isSess(x)) x = addDays(x, 1); return x; };
 const prevSess = d => { let x = addDays(d, -1); while (!isSess(x)) x = addDays(x, -1); return x; };
-const s61Live = () => !!store.get("adrb.s61Live", false);
+// 22 Oct (Eugene: "remove spec 6.0 entirely"): Entry Check (rules v6.1) is the only rule set — always on; adrb.s61Live is ignored.
+const s61Live = () => true;
 const s61Me = () => store.get("adrb.s61Me", {}) || {};
 const s61Cat = () => new Set(store.get("adrb.s61Cat", []) || []);
 const LOC61 = {L1: {n: "Continuation — in zone", c: "go", code: 1}, L2: {n: "Reclaim watch", c: "zone", code: 2}, L3: {n: "Background", c: "", code: 3},
@@ -8618,7 +8610,7 @@ function s61VsPill(r){ const d = r && !r.etf && S.has.hist ? dssOf(r.sym) : null
    This is the Detailed view (every check on its own row). The Simple view (the default since 21 Oct) is built in the
    Entry Check script at the end from the same pieces: s61RowHTML, s61ChipsHTML, s61LiveHTML, s61SizeHTML. */
 const ecTagHTML = () => `<span class="ectag" title="Rules: Unified Spec 6.1 (Chart &amp; Entry Spec 6.1 in Notion · Deep Space Screener v5.0 · Intraday Pivot on the 30-min chart)">rules v6.1</span>`;
-const ecNotLive = () => s61Live() ? "" : `<span class="pill" title="The plan above still runs on Spec 6.0. Turn on Settings › Entry Check drives the plan on test day 1.">Not driving the plan yet</span>`;
+const ecNotLive = () => "";
 // one check row; information-only checks never show a red ✕: under the guide reads as a neutral "!"
 function s61RowHTML(c){
   const ic = ok => `<span class="ic ${ok == null ? "na" : ok ? "ok" : "no"}">${ok == null ? "·" : ok ? "✓" : "✕"}</span>`;
@@ -8719,9 +8711,9 @@ function renderS61Card(){
   const live = s61Live();
   // live: the lists take the plan's place; off: they sit under the plan
   if (live && planCard) planCard.before(box); else if (!live) $("s6pBox").before(box);
-  [planCard, deckCard, rules, $("s6pBox")].forEach(el => el && el.classList.toggle("hidden", live));
-  const wt = $("planCtl") && $("planCtl").querySelector('[data-c="wildDeck"]'); if (wt) wt.closest("label").classList.toggle("hidden", live);
-  const hd = `<div class="hd"><h2>Entry Check lists</h2><span class="ectag" title="Rules: Unified Spec 6.1 (Chart &amp; Entry Spec 6.1 in Notion · Deep Space Screener v5.0)">rules v6.1</span><span class="sub">${live ? "<b>live</b> — Entry Check drives the plan" : "not driving the plan yet — the plan above still runs on Spec 6.0 (Settings › Entry Check drives the plan)"}</span><span class="spacer"></span>${S.has.hist ? `<button class="btn sm" id="s61Tv">Copy ready + on deck for TradingView</button>` : ""}</div>`;
+  // 22 Oct: Spec 6.0 retired — the old plan / on deck / rules card / Board-vs-Pivot card / plan controls never show
+  [planCard, deckCard, rules, $("s6pBox"), $("planCtl"), $("sinceBox")].forEach(el => el && el.classList.add("hidden"));
+  const hd = `<div class="hd"><h2>Entry Check lists</h2><span class="ectag" title="Rules: Unified Spec 6.1 (Chart &amp; Entry Spec 6.1 in Notion · Deep Space Screener v5.0)">rules v6.1</span><span class="sub">every stock in the file, filter bar applied · these are the names the board puts forward</span><span class="spacer"></span>${S.has.hist ? `<button class="btn sm" id="s61Tv">Copy ready + on deck for TradingView</button>` : ""}</div>`;
   if (!S.has.hist) { box.innerHTML = hd + `<div class="bd"><div class="empty" style="padding:4px 0">Entry Check is built from the stored daily bars (swing pivots, the weekly 10-week line, slopes). <button class="btn sm" data-hist="full">Load price history</button></div></div>`; return; }
   const L = s61Lists(false), all = s61Lists(true), RG = s61Reg(), mr = mapRegime().v || "", me = s61Me(), def = RG.v === "Defensive";
   const ffc = {}; all.Out.forEach(s => { const k = [1, 2, 3, 5, 7, 8].find(n => s.ck[n].ok !== true) ?? s.ff; ffc[k] = (ffc[k] || 0) + 1; });
@@ -8787,10 +8779,9 @@ renderSettings = function(){
   const reset = $("sReset"); if (!reset) return;
   const box = document.createElement("div");
   box.innerHTML = `<h4>Entry Check <span class="ectag" title="Rules: Unified Spec 6.1 (Chart &amp; Entry Spec 6.1 in Notion · Deep Space Screener v5.0 · Intraday Pivot)">rules v6.1</span></h4>
-    <div class="row"><div>Entry Check drives the plan<div class="d">Off for the parity week: the Entry Check lists and ticker block are shown beside today's plan, which still runs on Spec 6.0. Turn on for test day 1 — the lists take the plan's place and the Spec 6.0 ticket, Board plan / Pivot script blocks, Wild volatility and the HOOD / gapper hints are folded away. Off brings everything back.</div></div><div><input type="checkbox" id="s61LiveSw" ${s61Live() ? "checked" : ""}></div></div>
+    <div class="row"><div>Rules in force<div class="d">Entry Check (rules v6.1) is the only rule set since 22 Oct — Spec 6.0 is retired. The Setups lists, the ticker panel, the chart levels and the Board log all read it.</div></div><div></div></div>
     <div class="row"><div>Entry Check panel: detailed view<div class="d">Off (default): one call at the top in words, the key prices, the checks strip and one sentence per failing check — every row behind "Show the working". On: the older layout, every check on its own row. The same switch sits on the panel (Simple / Detailed). Display only.</div></div><div><input type="checkbox" id="ecViewSw" ${store.get("adrb.ecView", "simple") === "detailed" ? "checked" : ""}></div></div>`;
   reset.parentElement.before(box);
-  $("s61LiveSw").onchange = e => { store.set("adrb.s61Live", e.target.checked); s61Reset(); computePlan(); renderAll(); toast(e.target.checked ? "Entry Check now drives the plan" : "Back to the Spec 6.0 plan (Entry Check lists shown beside it)"); };
   $("ecViewSw").onchange = e => { store.set("adrb.ecView", e.target.checked ? "detailed" : "simple"); if ($("drawer").classList.contains("open") && EC.sym) openDrawer(EC.sym); toast(e.target.checked ? "Entry Check: detailed view" : "Entry Check: simple view"); };
 };
 
@@ -8856,7 +8847,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
    Spec 6.0 levels. stopCalc is re-pointed at the rule in force: the 0.6-ADR LOD cap, plus room to the first 5/5 swing
    pivot from the typed entry (Spec 6.1 check 10/11, gate from test day 1).
    ===================================================================== */
-const RULES_NOW = `<b>Execution rules since 19 Oct (Entry Check, rules v6.1):</b> no entry before 10:00 ET · trigger = a 30-min close above the 30-min 21 EMA, enter the next 30-min bar · stop = the day low at the trigger, entry no more than 0.6 ADR above it · first third at 2R or the T+3 close (a T+3 close below the entry = sell the whole position). The widest stop (entry − ½ ADR) and 2R shown with the Spec 6.0 plan are the old levels, kept until test day 1 — don't place stops from them.`;
+const RULES_NOW = `<b>Execution rules since 19 Oct (Entry Check, rules v6.1):</b> no entry before 10:00 ET · trigger = a 30-min close above the 30-min 21 EMA, enter the next 30-min bar · stop = the day low at the trigger, entry no more than 0.6 ADR above it · first third at 2R or the T+3 close (a T+3 close below the entry = sell the whole position).`;
 stopCalc = function(r){
   const out = $("dStopOut"); if (!out) return;
   const e = parseFloat($("dEntry").value), s = parseFloat($("dStop").value);
@@ -8999,7 +8990,7 @@ function popShow(sym){
   const r = S.rowBySym && S.rowBySym.get(sym); if (!r) return;
   const d = POP.w.document; POP.sym = sym; d.getElementById("popRoot").dataset.sym = sym;
   d.title = `${sym} · Deep Space chart`;
-  d.getElementById("pSym").textContent = sym; d.getElementById("pState").innerHTML = r.etf ? "" : stHTML(r.state);
+  d.getElementById("pSym").textContent = sym; d.getElementById("pState").innerHTML = r.etf ? "" : ecsHTML(r);
   d.getElementById("pDesc").textContent = [r.desc, r.sector, r.group].filter(Boolean).join(" · ");
   d.getElementById("pTv").href = tvURL(r);
   const L = WSI.list || [], i = L.indexOf(sym);
@@ -9058,7 +9049,7 @@ const BC_STYLE = {e9: "#f5b800", e21: "#43a047", s50: "#2962ff", s200: "#787b86"
 const BC = {ic: new Map(), last: null, tok: 0, main: null, pop: null};
 const bcEng = () => store.get("adrb.chartEng", "board") === "tv" ? "tv" : "board";
 const bcShow = () => ({vol: true, l60: true, l61: true, piv: true, rs: true, ...(store.get("adrb.bcShow", {}) || {})});
-const BC_TOG = [["vol", "Volume"], ["l60", "6.0 levels"], ["l61", "6.1 levels"], ["piv", "Pivots"], ["rs", "RS line"]];
+const BC_TOG = [["vol", "Volume"], ["l61", "Entry levels"], ["piv", "Pivots"], ["rs", "RS line"]];
 // daily bars: stored history + today's bar (same sources as the rest of the board); a missing open = the prior close
 function bcDaily(sym){
   if (!HIST.nD || !HIST.idx) return null;
@@ -9119,14 +9110,14 @@ async function bcModel(r, iv){
   M.vol = sh.vol ? bars.map(b => ({time: b.time, value: b.volume, color: b.close >= b.open ? "rgba(8,153,129,.35)" : "rgba(242,54,69,.35)"})) : null;
   // levels
   const L = (price, color, title, style = 2) => { if (fin(price)) M.lines.push({price, color, title, lineStyle: style}); };
-  if (sh.l60 && !r.etf && r.zLo != null) { L(r.zLo, BC_STYLE.zone, "zone lo", 1); L(r.zHi, BC_STYLE.zone, "zone hi", 1); L(r.stop, BC_STYLE.stop, "6.0 widest stop"); L(r.target, BC_STYLE.tgt, "6.0 2R"); }
   let s = null; try { s = !r.etf && typeof s61Of === "function" ? s61Of(r) : null; } catch (e) {}
   const D = s && fin(s.x.D) ? s.x.D : r.adrD;
   let lod = null;
   if (intra) { const day = bars[bars.length - 1].d, td = bars.filter(b => b.d === day); lod = Math.min(...td.map(b => b.low)); M.lodDay = day; }
   else if (s && s.live) lod = s.live.lo;
   if (sh.l61) {
-    if (s && fin(s.x.entry)) L(s.x.entry, BC_STYLE.entry, s.x.loc === "L2" ? "6.1 entry (prior 9E)" : "6.1 entry", 0);
+    if (s && fin(s.x.bandTop) && fin(D)) { L(s.x.bandTop, BC_STYLE.zone, "buy zone lo", 1); L(s.x.bandTop + S61.above * D, BC_STYLE.zone, "buy zone hi", 1); }
+    if (s && fin(s.x.entry)) L(s.x.entry, BC_STYLE.entry, s.x.loc === "L2" ? "planned entry (prior 9E)" : "planned entry", 0);
     if (s && fin(s.x.fr) && !s.x.nh) L(s.x.fr, BC_STYLE.res, "1st resistance", 0);
     if (lod != null && fin(lod)) { L(lod, BC_STYLE.lod, "LOD stop", 0); if (fin(D)) L(lod + S61.lod * D, BC_STYLE.maxE, "max entry (LOD + 0.6 ADR)", 1); }
   }
@@ -9509,7 +9500,7 @@ function wlRow(r){
 }
 
 /* ---------------- the Daily Plan ---------------- */
-const DP_L = {A: "MAP Focus A", B: "MAP Focus B", S: "MAP On deck / Stalk", q: "Ready to trade", d: "Board On deck", zone: "Plan · in zone", wait: "Plan · wait", deck: "On deck"};
+const DP_L = {A: "MAP Focus A", B: "MAP Focus B", S: "MAP On deck / Stalk", q: "Ready to trade", d: "On deck", zone: "Plan · in zone", wait: "Plan · wait", deck: "On deck"};
 const DP_BOARD = ["q", "d", "zone", "wait", "deck"];
 const DP_TOP = {q: 5, d: 6, deck: 6};
 const dpLockAt = p => p;                                                       // the plan day; lock = 09:30 ET that day
@@ -9629,7 +9620,7 @@ function dpCardHTML(compact){
     <div class="small" style="margin:4px 0 8px"><b>Plan for ${jnDay(p)}</b> · v${R.n} of ${pl.revs.length} · ${lockTxt} · data to the ${jnDay(R.d0)} close${pl.revs.length > 1 || R.ed ? `<details class="tp-fold" style="display:inline-block;margin-left:8px"><summary>revisions</summary><div class="small">${revTxt}</div></details>` : ""}</div>
     ${order.map(k => `<h4 style="margin:8px 0 2px">${esc(DP_L[k])} <span class="small dim">${groups[k].length}</span></h4><div class="tscroll" style="max-height:none"><table class="mini dpt"><thead><tr><th>#</th><th class="l">Ticker</th><th class="l">Why · why now / what could fail (frozen)</th><th>At plan</th><th>Now</th><th class="l">Live status</th></tr></thead><tbody>${groups[k].map(row).join("")}</tbody></table></div>`).join("") || `<div class="empty">The plan is empty — nothing qualified and no MAP lists typed. That's a valid plan.</div>`}
     ${disc}
-    <div class="small dim" style="margin-top:6px">${S.has.hist ? "" : "The why-lines use the Spec 6.0 row until the price history is loaded (then Entry Check's location, room and blockers). "}Live status uses the data on screen (Massive is 15 minutes delayed). "In the zone" is a location, not a trigger: the trigger is a 30-min close over the 30-min 21 EMA, from 10:00 ET, checked on the chart.</div></div>`;
+    <div class="small dim" style="margin-top:6px">${S.has.hist ? "" : "The board's lists need the price history — until it's loaded only MAP's lists are in the plan. "}Live status uses the data on screen (Massive is 15 minutes delayed). "In the zone" is a location, not a trigger: the trigger is a 30-min close over the 30-min 21 EMA, from 10:00 ET, checked on the chart.</div></div>`;
 }
 function dpPaint(){ const b = $("dpBox"); if (b) { b.innerHTML = dpCardHTML(); b.querySelectorAll("tbody").forEach(tb => tb.addEventListener("click", e => { const t = e.target.closest("tr[data-sym]"); if (t && S.rowBySym && S.rowBySym.has(t.dataset.sym)) openDrawer(t.dataset.sym); })); } }
 const _renderTabC = renderTab;
@@ -9721,45 +9712,7 @@ jnMine = function(o){
   m.needWhy = m.roomA != null && m.roomA < 2 && !o.roomWhy;
   return m;
 };
-const jnFmtN = v => v == null ? "—" : (v > 0 ? "+" : "") + v.toFixed(2) + "R";
-const _jnTradeHTMLD = jnTradeHTML;
-jnTradeHTML = function(p, o){
-  let h = _jnTradeHTMLD(p, o); if (!o.took) return h;
-  const m = jnMine(o), id = `data-p="${p}" data-s="${esc(o.s)}"`;
-  // the trim box sits after exit, so fill → Tab → exit stays the typing order
-  h = h.replace(/(<input type="number" step="0\.01" data-jf="exit"[^>]*>)/, `$1<input type="number" step="0.01" data-jf="trim" ${id} value="${o.trim ?? ""}" placeholder="trim" title="Optional: your first-third trim price (Entry Check exits: ⅓ at 2R or the T+3 close). Leave blank if you sold in one go.">`);
-  const extra = !m ? "" : `<div class="small">${m.net != null ? `net <b class="${jnCls(m.net)}">${jnFmtN(m.net)}</b> <span class="dim">after ${JN_COST}R cost${m.trimR != null ? ` · trim ${jnFmtN(m.trimR)} + runner ${jnFmtN(m.runR)}` : ""}</span>` : ""}
-    ${m.roomA != null ? `<div>room from your fill <b class="${m.roomA >= 2 ? "pos" : "neg"}">${m.roomA.toFixed(2)}R</b> <span class="dim">to ${f2(m.res)} (${esc(m.resFrom)}${m.resFrom === "board estimate" ? " — check the chart; type your own first resistance in the notes" : ""})</span></div>` : m.resFrom ? `<div class="dim">room: ${esc(m.resFrom)}</div>` : ""}
-    ${m.roomA != null && m.roomA < 2 ? `<div class="${o.roomWhy ? "" : "neg"}">Under 2R — why did you take it? <input type="text" data-jrw ${id} value="${esc(o.roomWhy || "")}" placeholder="one line (information only — never blocks)" style="width:210px"></div>` : ""}</div>`;
-  return h + extra;
-};
-$("tab-journal").addEventListener("change", e => {
-  const t = e.target; if (!t.matches("[data-jrw]")) return;
-  jnEdit(t.dataset.p, t.dataset.s, o => { const v = t.value.trim().slice(0, 200); if (v) o.roomWhy = v; else delete o.roomWhy; }, true, true);
-});
-// expectancy from executed trades
-function jnExpHTML(items){
-  const T = items.map(x => ({x, m: jnMine(x.o)})).filter(y => y.m && y.m.net != null).sort((a, b) => a.x.rec.p < b.x.rec.p ? -1 : a.x.rec.p > b.x.rec.p ? 1 : (a.x.o.tookAt || 0) - (b.x.o.tookAt || 0));
-  const agg = L => { const R = L.map(y => y.m.net), w = R.filter(v => v > 0), l = R.filter(v => v <= 0), sw = w.reduce((a, b) => a + b, 0), sl = l.reduce((a, b) => a + b, 0);
-    let cum = 0, peak = 0, dd = 0; for (const v of R) { cum += v; peak = Math.max(peak, cum); dd = Math.min(dd, cum - peak); }
-    return {n: R.length, tot: R.length ? sw + sl : null, avg: R.length ? (sw + sl) / R.length : null, win: R.length ? w.length / R.length * 100 : null, aw: w.length ? sw / w.length : null, al: l.length ? sl / l.length : null, pf: sl < 0 ? sw / -sl : w.length ? Infinity : null, dd: R.length ? dd : null}; };
-  const few = n => n < 20 ? ` <span class="small dim">(too few to judge)</span>` : n < 60 ? ` <span class="small dim">(early read)</span>` : "";
-  const row = (label, g) => `<tr><td class="l"><b>${label}</b></td><td>${g.n}${few(g.n)}</td><td>${jnPct(g.win)}</td><td class="${jnCls(g.avg)}"><b>${jnFmtN(g.avg)}</b></td><td class="${jnCls(g.tot)}">${jnFmtN(g.tot)}</td><td class="pos">${jnFmtN(g.aw)}</td><td class="neg">${jnFmtN(g.al)}</td><td>${g.pf == null ? "—" : g.pf === Infinity ? "∞" : g.pf.toFixed(2)}</td><td class="neg">${g.dd == null ? "—" : g.dd.toFixed(2) + "R"}</td></tr>`;
-  const by = (f) => { const M = new Map(); T.forEach(y => { const k = f(y); if (!M.has(k)) M.set(k, []); M.get(k).push(y); }); return [...M].sort((a, b) => b[1].length - a[1].length); };
-  const loc = y => { const g = y.x.o.f.s61; return g && g.loc ? ecLocCode(g.loc) : "no Entry Check location logged"; };
-  const all = agg(T), trims = T.filter(y => y.m.trimR != null), sTrim = trims.reduce((a, y) => a + y.m.trimR, 0), sRun = trims.reduce((a, y) => a + y.m.runR, 0);
-  const slip = T.map(y => y.m.slip).filter(v => v != null), lossers = T.filter(y => y.m.R != null && y.m.R < 0), beyond = lossers.filter(y => y.m.R < -1.05);
-  const head = `<thead><tr><th class="l"></th><th>Trades</th><th>Won</th><th>Avg net R</th><th>Total net R</th><th>Avg win</th><th>Avg loss</th><th>Profit factor</th><th>Max drawdown</th></tr></thead>`;
-  return `<div class="card g1" id="jnExp"><div class="hd"><h2>Your expectancy — executed trades</h2><span class="sub">your fills and exits only · net of ${JN_COST}R a trade · ${esc(jnSpecCur() === "all" ? "all rule sets (mixed)" : "Spec " + jnSpecCur())}</span></div><div class="bd">
-    ${T.length ? `<table class="mini">${head}<tbody>${row("All closed trades", all)}
-      ${by(loc).map(([k, L]) => row(esc(k), agg(L))).join("")}
-      ${by(y => "MAP call: " + (y.x.rec.map || "not set")).map(([k, L]) => row(esc(k), agg(L))).join("")}</tbody></table>
-      <div class="small" style="margin-top:6px">${trims.length ? `First third vs runner (${trims.length} trades with a trim typed): trim <b>${jnFmtN(sTrim)}</b> · runner <b>${jnFmtN(sRun)}</b>. ` : "Type the trim price on a trade to split the first third from the runner. "}
-      ${slip.length ? `Fill vs plan entry: average <b>${(slip.reduce((a, b) => a + b, 0) / slip.length).toFixed(2)} ADR</b>. ` : ""}${lossers.length ? `Losses: ${beyond.length} of ${lossers.length} lost more than 1R (stop slippage or a gap).` : ""}</div>
-      <div class="small dim">Read with the sample size. Entry Check's rules (v6.1) change only at the 60-session review, and only when the gap is ≥ 1R or the 95% interval excludes zero — never on a handful of trades. A high RS or a 2R target is not expectancy; this table is.</div>`
-      : `<div class="empty" style="padding:4px 0">No closed trades with a fill, an exit and a stop yet under these rules. Tick "entered", type the fill, the real stop (chart notes) and the exit.</div>`}</div></div>`;
-}
-document.head.insertAdjacentHTML("beforeend", `<style>.jn-t tr.jn-unseen td{opacity:.6}</style>`);
+
 </script>
 <script>
 "use strict";
@@ -9788,7 +9741,8 @@ document.head.insertAdjacentHTML("beforeend", `<style>.jn-t tr.jn-unseen td{opac
      adrb.dpanel, per ticker and day) give risk in $ / share, ADR and position $; room from that risk (the board's
      resistance is labelled an estimate). Status: Watch / Ready for chart confirmation / Triggered / Passed /
      Invalidated / Taken + reason, written to the day's Decision-log record (Taken = entered). The board never calls a
-     trigger by itself: data is 15 minutes delayed and the earliest entry is 10:00 ET. Everything else — every check,
+     trigger by itself: data is 15 minutes delayed and the earliest entry is 10:00 ET. [22 Oct: the panel is now the trade
+     calculator only — no status buttons, nothing written to the log.] Everything else — every check,
      the size card, the 6.0 ticket, Pivot script, entry checks — sits in "Evidence", one click away.
    ===================================================================== */
 
@@ -9806,7 +9760,7 @@ const NAV2 = [
   ["Discover", [["today", "Movers, gaps, in play"], ["market", "Tape, breadth, highs & lows"], ["themes", "Group strength & rotation"], ["map", "Where each name sits"], ["etfs", "ETF rotation"], ["screens", "Preset scans"], ["shorts", "Relative weakness · research"]]],
   ["Watchlist", [["watch", "MAP lists, favourites, held"]]],
   ["Setups", [["plan", "Per-name checks · the lists"]]],
-  ["Review", [["journal", "Decisions, results, expectancy"]]],
+  ["Review", [["journal", "What the board surfaced · how it did"]]],
   ["Tools", [["data", "Files, MAP source, feed, self-check"], ["train", "Eye-training games"]]]
 ];
 if (WS) {
@@ -10071,65 +10025,38 @@ renderS61Card = function(){ _renderS61CardE(); const box = $("s61Box"); if (!box
 const _dpEntryE = dpEntry;
 dpEntry = function(r, l, k){ const e = _dpEntryE(r, l, k); if (["A", "B", "S"].includes(l)) { const n = mapNote(r.sym); if (n) e.map = mapNoteTxt(n); } return e; };
 
-/* ---------------- the decision panel ---------------- */
-const DPN_ST = [["watch", "Watch"], ["ready", "Ready for chart confirmation"], ["trig", "Triggered"], ["pass", "Passed"], ["inval", "Invalidated"], ["taken", "Taken"]];
+/* ---------------- the trade calculator (was the decision panel; 22 Oct: no status buttons, nothing logged) ---------------- */
+// Eugene, 22 Oct: "i no longer want to track whether i take/stalk/pass". The panel keeps only the arithmetic — your planned fill,
+// the day low at the trigger and the first resistance → risk $ / ADR vs the 0.6 ADR cap, shares and room. Kept in this browser
+// per ticker for the plan day (localStorage adrb.dpanel) so the numbers survive flipping between tickers; never written to the log.
 const dpnAll = () => store.get("adrb.dpanel", {}) || {};
 function dpnGet(sym){ const o = dpnAll()[sym], p = curPlanDay(); return o && o.day === p ? o : {day: p}; }
 function dpnSet(sym, f){ const A = dpnAll(), o = dpnGet(sym); f(o); A[sym] = o; for (const k in A) if (A[k].day < addDays(curPlanDay(), -10)) delete A[k]; store.set("adrb.dpanel", A); }
-// the open Decision-log record the status goes to (adds the name when it isn't logged — you marked it, so it was shown)
-function dpnRec(sym, add){
-  const p = typeof dpCur === "function" ? dpCur() : null, rec = p ? JN.recs[p] : null; if (!rec || !jnOpenDay(p)) return null;
-  let o = rec.n.find(x => x.s === sym);
-  if (!o && add) { const r = S.rowBySym && S.rowBySym.get(sym); if (!r) return null; o = {s: sym, src: ["P"], first: JN.now(), f: jnFacts(r), spec: jnSpec61() ? "6.1" : "6.0", pre: true}; rec.n.push(o); }
-  return o ? {p, rec, o} : null;
-}
-JN_SRC.P = "Marked on the panel";
 function dpanelHTML(r){
   if (r.etf) return "";
   const s = S.has.hist ? s61Of(r) : null, x = s ? s.x : null, st = dpnGet(r.sym), n = jnET(), sess = isSess(n.d), pm = !sess || n.m < 570, early = sess && n.m < 600, closed = !sess || n.m >= 960;
   const D = x ? x.D : r.adrD || (r.adr && r.last ? r.adr / 100 * r.last : null), cap = S61.lod;
-  // 1 valid setup?
   const p = typeof dpCur === "function" ? dpCur() : null, rec = p ? JN.recs[p] : null, inPlan = rec && rec.plan && rec.plan.revs.length ? rec.plan.revs[rec.plan.revs.length - 1].names.find(e => e.s === r.sym) : null;
-  const valid = s ? `<span class="pill ${LIST61[s.list].c}">${esc(LIST61[s.list].n)}</span> · trend ${x.structOk ? "✓" : "✕"} · ${esc(ecLoc(x))} · group ${esc(r.gState || "—")} · MAP ${esc(mapRegime().v || "not set")}${inPlan ? ` · in today's plan (${esc(DP_L[inPlan.l])} #${inPlan.k})${inPlan.f && inPlan.f.loc && x.loc !== inPlan.f.loc ? ` <span class="neg">— was ${esc(inPlan.f.loc)} at the plan: reassess</span>` : ""}` : " · not in today's plan"}${s.ffTxt && s.list !== "A-eligible" ? `<div class="small neg">${esc(s61Clear(s).map(clearTxt).join("; ") || s.ffTxt)}</div>` : ""}`
-    : `${statusPill(r)} <span class="small dim">— Entry Check needs the price history</span>`;
-  // 2 entry now?
-  const entry = closed ? "Market closed — plan only." : early ? `<b>No.</b> Before 10:00 ET any entry is a rule break (earliest: the close of the first 30-min bar).` : st.st === "trig" || st.st === "taken" ? `<b>${st.st === "taken" ? "Taken" : "Triggered"}</b> — your call.` : `<b>Not confirmed.</b> Check the 30-min bar on the chart: a close over the 30-min 21 EMA, enter at the next bar's open.${S.snap && S.snap.live && r.t30 === true ? " The board's last 30-min reading is over the 21 EMA but the bar may still be forming and the data is 15 minutes delayed." : ""}`;
-  // 3 risk · 4 reward
-  const fill = st.fill ?? (S.snap && S.snap.live && !pm ? r.last : x && fin(x.entry) ? +x.entry.toFixed(2) : r.entry ?? null), stop = st.stop ?? (!pm && r.lo1d != null ? r.lo1d : null);
+  const when = closed ? "Market closed — plan only." : early ? "Before 10:00 ET — no entry yet (the earliest trigger is the close of the 10:00 30-min candle)." : "Enter only on the 30-min trigger — confirm it on the chart (Massive is 15 minutes delayed).";
+  const fill = st.fill ?? (S.snap && S.snap.live && !pm ? r.last : x && fin(x.entry) ? +x.entry.toFixed(2) : null), stop = st.stop ?? (!pm && r.lo1d != null ? r.lo1d : null);
   const R1 = fill != null && stop != null && fill > stop ? fill - stop : null, adrU = R1 != null && D ? R1 / D : null;
-  const pct = s ? s.size.final[1] : sizeGrade(r) ? (GRADES.find(g => g[0] === sizeGrade(r).g) || [0, 0])[1] : null;
-  const sh = R1 && CFG.nlv && pct ? Math.floor(CFG.nlv * pct / 100 / R1) : null;
+  const pct = s ? s.size.final[1] : null, sh = R1 && CFG.nlv && pct ? Math.floor(CFG.nlv * pct / 100 / R1) : null;
   const auto = x && fill != null ? x.resAbove(fill) : null, res = st.res ?? (auto && fin(auto.fr) ? +auto.fr.toFixed(2) : null), resFrom = st.res != null ? "yours" : auto ? (fin(auto.fr) ? "board estimate" : "nothing above (NH)") : null;
   const room = R1 && res != null ? (res - fill) / R1 : null;
   const inp = (k, v, ph) => `<input type="number" step="0.01" data-dpn="${k}" data-s="${esc(r.sym)}" value="${v ?? ""}" placeholder="${ph}">`;
-  const risk = `${inp("fill", st.fill, fill != null ? f2(fill) : "fill")} fill − ${inp("stop", st.stop, stop != null ? f2(stop) : "LOD")} LOD stop = ${R1 != null ? `<b>$${f2(R1)}</b> / share · <b class="${adrU > cap + 1e-9 ? "neg" : ""}">${adrU != null ? adrU.toFixed(2) + " ADR" : "—"}</b>${adrU > cap + 1e-9 ? ` <span class="neg">over the 0.6 ADR cap — no entry</span>` : ""}${sh != null ? ` · ${sh.toLocaleString()} sh = <b>$${Math.round(sh * R1).toLocaleString()}</b> at risk (${s ? s.size.final[0] : sizeGrade(r).g} ${pct}% NLV)` : CFG.nlv ? "" : " · add NLV in Settings for shares"}` : `<span class="dim">type your planned fill and the low of day at the trigger</span>`}`;
-  const reward = `${inp("res", st.res, res != null ? f2(res) : "resistance")} first resistance${resFrom ? ` <span class="small dim">(${esc(resFrom)}${resFrom === "board estimate" ? " — from the board's pivots; check the chart" : ""})</span>` : ""} → ${room != null ? `room <b class="${room >= 2 ? "pos" : "neg"}">${room.toFixed(2)}R</b> from your risk${room < 2 ? ` <span class="neg">under 2R — information only; if you take it, log a reason</span>` : ""}` : `<span class="dim">needs fill, stop and resistance</span>`}`;
-  // 5 decision
-  const dec = `<div class="stb">${DPN_ST.map(([k, l]) => `<button data-dpst="${k}" data-s="${esc(r.sym)}" class="${st.st === k ? "on" : ""}">${l}</button>`).join("")}</div><input type="text" data-dpn="why" data-s="${esc(r.sym)}" value="${esc(st.why || "")}" placeholder="reason (one line)" style="width:100%;max-width:420px;font-size:12px">${st.at ? `<div class="small dim">${esc(DPN_ST.find(z => z[0] === st.st) ? DPN_ST.find(z => z[0] === st.st)[1] : "")} · ${esc(fmtWhen(st.at))}${dpnRec(r.sym, false) ? " · in the Decision log" : " · not logged (no open plan day)"}</div>` : ""}`;
-  const mn = mapNote(r.sym);
-  return `<div class="dpn"><div class="small" style="margin:2px 0 4px"><b>Decision</b> ${wlPin(r.sym)} ${mn ? `<span class="mapwhy">MAP: ${esc(mapNoteTxt(mn))}</span>` : ""}</div>
-    <div class="q"><b>Valid setup?</b><div>${valid}</div></div>
-    <div class="q"><b>Entry now?</b><div>${entry}</div></div>
-    <div class="q"><b>What am I risking?</b><div>${risk}</div></div>
-    <div class="q"><b>Potential reward</b><div>${reward}</div></div>
-    <div class="q"><b>Decision</b><div>${dec}</div></div></div>`;
+  const risk = `${inp("fill", st.fill, fill != null ? f2(fill) : "fill")} fill − ${inp("stop", st.stop, stop != null ? f2(stop) : "LOD")} day-low stop = ${R1 != null ? `<b>$${f2(R1)}</b> / share · <b class="${adrU > cap + 1e-9 ? "neg" : ""}">${adrU != null ? adrU.toFixed(2) + " ADR" : "—"}</b>${adrU > cap + 1e-9 ? ` <span class="neg">over the 0.6 ADR cap — no entry</span>` : ""}${sh != null ? ` · ${sh.toLocaleString()} sh = <b>$${Math.round(sh * R1).toLocaleString()}</b> at risk (${s.size.final[0]} ${pct}% NLV)` : CFG.nlv ? "" : " · add NLV in Settings for shares"}` : `<span class="dim">type your planned fill and the low of day at the trigger</span>`}`;
+  const reward = `${inp("res", st.res, res != null ? f2(res) : "resistance")} first resistance${resFrom ? ` <span class="small dim">(${esc(resFrom)}${resFrom === "board estimate" ? " — check the chart" : ""})</span>` : ""} → ${room != null ? `room <b class="${room >= 2 ? "pos" : "neg"}">${room.toFixed(2)}R</b>${room < 2 ? ` <span class="dim">under 2R — information only</span>` : ""}` : `<span class="dim">needs fill, stop and resistance</span>`}`;
+  return `<div class="dpn"><div class="dpn-h"><b>Trade calculator</b><span class="small dim">your numbers, for planning — nothing here is logged</span>${inPlan ? `<span class="small">in today's Daily Plan: ${esc(DP_L[inPlan.l])} #${inPlan.k}</span>` : ""}</div>
+    <div class="q"><b>When</b><div>${when}</div></div>
+    <div class="q"><b>Risk</b><div>${risk}</div></div>
+    <div class="q"><b>Reward</b><div>${reward}</div></div></div>`;
 }
 function dpnRefresh(sym){ const box = document.querySelector("#drawer .dpn"); if (!box) return; const r = S.rowBySym && S.rowBySym.get(sym); if (!r) return; const a = document.activeElement, k = a && a.dataset ? a.dataset.dpn : null; box.outerHTML = dpanelHTML(r); if (k) { const el = document.querySelector(`#drawer .dpn [data-dpn="${k}"]`); if (el) el.focus(); } }
 $("drawer").addEventListener("change", e => {
   const t = e.target.closest("[data-dpn]"); if (!t) return;
   const k = t.dataset.dpn, sym = t.dataset.s;
-  dpnSet(sym, o => { if (k === "why") { const v = t.value.trim().slice(0, 200); if (v) o.why = v; else delete o.why; } else { const v = t.value === "" ? null : +t.value; if (v != null && isFinite(v) && v > 0) o[k] = v; else delete o[k]; } });
-  const L = dpnRec(sym, false);
-  if (L) { const o = L.o, st = dpnGet(sym); if (k === "why") { if (st.why) o.stWhy = st.why; else delete o.stWhy; } if (k === "stop" || k === "res") { const c = o.ch || {}; c[k] = st[k] ?? null; o.ch = c; } o.ed = JN.now(); jnSave(); }
+  dpnSet(sym, o => { const v = t.value === "" ? null : +t.value; if (v != null && isFinite(v) && v > 0) o[k] = v; else delete o[k]; });
   setTimeout(() => dpnRefresh(sym), 0);
-});
-$("drawer").addEventListener("click", e => {
-  const b = e.target.closest("[data-dpst]"); if (!b) return;
-  const sym = b.dataset.s, k = b.dataset.dpst, now = JN.now();
-  let cur = null; dpnSet(sym, o => { if (o.st === k) { delete o.st; delete o.at; } else { o.st = k; o.at = now; } cur = o.st || null; });
-  const L = dpnRec(sym, !!cur);
-  if (L) { const o = L.o, st = dpnGet(sym); if (cur) { o.st = cur; o.stAt = now; if (st.why) o.stWhy = st.why; if (cur === "taken") { o.took = true; o.tookAt = o.tookAt || now; if (st.fill != null && o.fill == null) o.fill = st.fill; } if (st.stop != null || st.res != null) { const c = o.ch || {}; if (st.stop != null) c.stop = st.stop; if (st.res != null) c.res = st.res; o.ch = c; } } else { delete o.st; delete o.stAt; } o.ed = now; jnSave(); }
-  dpnRefresh(sym);
 });
 // where it goes: the top of the ticker panel's plan pane (everything else into "Evidence"); the classic drawer under the title
 if (WS) {
@@ -10361,6 +10288,141 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 .ec-ok{color:var(--good)} .ec-no{color:var(--crit);font-weight:700} .ec-warn{color:var(--med);font-weight:700} .ec-na{color:var(--ink-3)} .ec-inf{color:var(--med)}
 .ecwhy{font-size:12.5px;margin:2px 0}
 .ecsz{margin:6px 0} .ecsz>summary{cursor:pointer;font-size:12.5px} .ecsz .s61sz{margin-top:4px}
+</style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   ENTRY CHECK ONLY (22 Oct; Eugene after three sessions: "remove spec 6.0 entirely … clean up the plan & checks page as
+   well so there's only 1 entry check … ensure consistency and clean UI"). Display only — rows, ranks, states and the
+   Entry Check lists / sizes are unchanged.
+   - Setups: the lede and the Entry Check card's bar carry what the old plan controls did for Entry Check (NLV, base
+     grade); the old plan / on deck / rules / Board-vs-Pivot / Since-the-last-file cards and the 6.0 controls stay hidden
+     (renderS61Card), the "Execution rules" note goes (the card and the panel say it).
+   - Ticker panel (workspace): the Plan & checks tab = the Entry Check block (Simple or Detailed), the trade calculator
+     (nothing logged), and "Since a date, AVWAP & recent events" folded. Gone: the 6.0 ticket, Board plan / Pivot script
+     blocks, the 6.0 entry-check rows, the 6.0 plan note, the half-ADR stop check and the Evidence fold. The header
+     chips show Entry Check's buy zone, planned entry, 1R, first resistance and grade; the title pill is the Entry
+     Check call. Classic drawer: the same 6.0 pieces are removed.
+   - Logging chip beside Frozen CSV / Live: whether the Board log is recording right now, for which day, from which
+     file — click it for the log.
+   ===================================================================== */
+const EO = {};
+// the panel header: Entry Check levels (the 6.0 zone / widest stop / 2R / grade chips are gone)
+function ecLvHTML(r){
+  const s = S.has.hist && !r.etf ? s61Of(r) : null;
+  if (!s) return `<div class="tp-lv"><span>Last <b>${f2(r.last)}</b></span><span>ADR <b>${f2(r.adr)}%</b></span>${r.erIn != null ? `<span>Earnings <b>${r.erIn}d</b></span>` : ""}<span>Entry Check levels need the price history</span></div>`;
+  const x = s.x, D = x.D, d = typeof dssOf === "function" ? dssOf(r.sym) : null;
+  return `<div class="tp-lv">${fin(x.bandTop) && fin(D) ? `<span>Buy zone <b>${f2(x.bandTop)} – ${f2(x.bandTop + S61.above * D)}</b></span>` : ""}<span>Last <b>${f2(r.last)}</b></span>
+    ${fin(x.entry) ? `<span>Planned entry <b>${f2(x.entry)}</b></span>` : ""}${fin(D) ? `<span class="s" title="Before the open 1R is estimated at 0.6 ADR; live it is the entry minus the day low at the trigger">1R ≈ <b>${f2(S61.risk * D)}</b></span>` : ""}
+    <span class="t">${x.nh ? "No resistance above (NH)" : fin(x.fr) ? `1st resistance <b>${f2(x.fr)}</b>` : "1st resistance —"}</span><span>Grade <b>${esc(s.size.final[0])}</b></span>
+    ${fin(D) && fin(x.close) ? `<span title="Entry Check ADR: the 20-day mean of (high − low) ÷ close, from the stored bars">ADR (20d) <b>${(D / x.close * 100).toFixed(2)}%</b></span>` : ""}${d && fin(d.rmv) ? `<span>RMV <b>${Math.round(d.rmv)}${d.rmv <= S61.rmvC ? " · compressed" : ""}</b></span>` : ""}
+    <span>Earnings <b>${s.er.n == null ? "date unknown" : s.er.n + " sessions"}</b></span></div>`;
+}
+const ecCallPill = r => { const s = S.has.hist && !r.etf ? s61Of(r) : null, c = s && typeof EC_CALL !== "undefined" ? EC_CALL[s.list] : null; return c ? `<span class="pill eccall ${c.c}" title="Entry Check (rules v6.1)">${c.t}</span>` : ""; };
+// the old Spec 6.0 pieces, wherever they sit in the drawer
+function ecStrip60(dr){
+  dr.querySelectorAll("h4").forEach(h => { if (/^Board plan · Chart/.test(h.textContent.trim())) { let n = h.nextElementSibling; while (n && n.classList.contains("chk")) { const x = n.nextElementSibling; n.remove(); n = x; } h.remove(); } });
+  dr.querySelectorAll(".tkt, .bpck, .s6p, .rnow, .stopcalc, #dStopOut").forEach(el => el.remove());
+  dr.querySelectorAll(".note").forEach(n => { if (/^Plan:/.test(n.textContent.trim())) n.remove(); });
+}
+// the title: the Entry Check call in place of the 6.0 state
+function ecTitle(h3, r){
+  if (!h3 || r.etf) return;
+  const st = h3.querySelector(".st"), p = ecCallPill(r);
+  if (st) { if (p) st.outerHTML = p; else st.remove(); }
+}
+if (WS) {
+  const _tpBuildEO = tpBuild;
+  tpBuild = function(r){
+    _tpBuildEO(r);
+    const dr = $("drawer"); if (!dr.classList.contains("open") || r.etf) return;
+    ecStrip60(dr);
+    ecTitle(dr.querySelector(".tp-head h3"), r);
+    const lv = dr.querySelector(".tp-head .tp-lv"); if (lv) lv.outerHTML = ecLvHTML(r);
+    const cx = [...dr.querySelectorAll(".tp-ctx .cx")].find(c => (c.querySelector("i") || {}).textContent === "Stock"), sm = cx && cx.querySelector("small");
+    const s = S.has.hist ? s61Of(r) : null;
+    if (sm) sm.textContent = `RS ${r.rs ?? "—"} of ${S.stocks.length.toLocaleString()}${s ? " · " + LIST61[s.list].n : ""}`;
+    // Plan & checks: one Entry Check, the calculator, then the AVWAP / events note folded
+    const pane = dr.querySelector('.tp-pane[data-p="plan"]'); if (!pane) return;
+    const ec = pane.querySelector(".s61p"), calc = pane.querySelector(".dpn");
+    const tsH = [...pane.querySelectorAll("h4")].find(h => /^Since a date/.test(h.textContent.trim())), tsN = tsH && tsH.nextElementSibling;
+    pane.innerHTML = "";
+    if (ec) pane.appendChild(ec);
+    if (calc) pane.appendChild(calc);
+    if (tsN) { const f = document.createElement("details"); f.className = "tp-fold"; f.open = !!store.get("adrb.tsfOpen", false); f.innerHTML = "<summary>Since a date, AVWAP &amp; recent events</summary>"; f.appendChild(tsN); f.addEventListener("toggle", () => store.set("adrb.tsfOpen", f.open)); pane.appendChild(f); }
+    const tb = dr.querySelector('.tp-tabs button[data-tpt="plan"]'); if (tb) tb.textContent = "Entry Check";
+  };
+} else {
+  const _openDrawerEO = openDrawer;
+  openDrawer = function(sym){
+    _openDrawerEO(sym);
+    const r = S.rowBySym && S.rowBySym.get(sym), dr = $("drawer"); if (!r || r.etf || !dr.classList.contains("open")) return;
+    ecStrip60(dr); ecTitle(dr.querySelector("h3"), r);
+    // one Entry Check, the calculator under it
+    const ec = dr.querySelector(".s61p"), calc = dr.querySelector(".dpn"); if (ec && calc) ec.after(calc);
+  };
+}
+
+/* ---------------- an Entry Check row list (MAP lists, held names) — the same columns as the Setups lists ---------------- */
+function ecListHTML(rows){
+  if (!S.has.hist) return `<div class="fmiss">${rows.map(r => tkChip(r, r.rs ?? "")).join("")} <span class="dim">— Entry Check needs the price history</span></div>`;
+  const tr = r => { const s = !r.etf ? s61Of(r) : null, x = s && s.x, c = s && EC_CALL[s.list], W = s && typeof ecWhy === "function" ? ecWhy(s) : {};
+    const why = s ? s.blockers.map(n => W[n] ? `<div class="neg">${esc(W[n])}</div>` : "").join("") || (s.ffTxt && s.list !== "A-eligible" ? `<span class="neg">${esc(ecPlain(s.ffTxt))}</span>` : "") : "";
+    return `<tr data-sym="${esc(r.sym)}"><td class="l sym">${esc(r.sym)}</td><td>${rsBadge(r.rs)}</td><td class="l small">${esc(r.group || "")}<br><span class="dim">${esc(r.gState || "")}</span></td>
+      <td>${c ? `<span class="pill ${c.c}">${c.t}</span>` : "—"}</td><td>${ecsHTML(r)}</td><td>${x && isFinite(x.entry) ? f2(x.entry) : "—"}</td><td>${!x ? "—" : x.nh ? "NH" : isFinite(x.fr) ? f2(x.fr) : "—"}</td>
+      <td class="${s && s.ck[9].ok === false ? "neg" : ""}">${!s || s.er.n == null ? "?" : s.er.n}</td><td>${s ? `<b>${s.size.final[0]}</b>` : "—"}</td><td class="l small">${why}</td></tr>`; };
+  return `<div class="tscroll" style="max-height:none"><table class="mini s61t ecl"><thead><tr><th class="l">Ticker</th><th>RS</th><th class="l">Group</th><th>Entry Check</th><th class="l">Location</th><th title="Planned entry">Entry</th><th title="First resistance above the entry">1st res.</th><th title="Sessions to earnings">Earn.</th><th>Grade</th><th class="l">What's missing</th></tr></thead><tbody>${rows.map(tr).join("")}</tbody></table></div>`;
+}
+document.addEventListener("click", e => { const t = e.target.closest("table.ecl tr[data-sym]"); if (t && !e.target.closest("[data-wlpin]")) openDrawer(t.dataset.sym); });
+
+/* ---------------- group counts: in the buy zone / just under it = Entry Check locations (Themes, radar, group panel, sector table) ---------------- */
+// computeAll fills g.buy / g.weak from the old state; on screen they are the Entry Check L1 / L2 counts (null without the price history)
+function ecGroups(){ for (const g of S.groups || []) { if (!S.has.hist) { g.buy = g.weak = null; continue; } let b = 0, w = 0; for (const r of g.members) { const k = ecsOf(r); if (k === 1) b++; else if (k === 2) w++; } g.buy = b; g.weak = w; } }
+
+/* ---------------- Setups ---------------- */
+const _renderTabEO = renderTab;
+renderTab = function(t){
+  if (S.snap) try { ecGroups(); } catch (e) { console.warn("entry check group counts", e); }
+  _renderTabEO(t);
+  if (t !== "plan" || !S.snap) return;
+  const lede = $("planLede");
+  if (lede) lede.innerHTML = `<b>Entry Check</b> (rules v6.1) for every stock in the file. <b>Ready to trade</b> = in the buy zone, every check passes · <b>On deck</b> = just under the zone, or one thing missing. Click a name for its Entry Check and trade calculator.`;
+  $("planRnow") && $("planRnow").remove();
+  const bar = document.querySelector("#s61Box .s61bar");
+  if (bar && !bar.querySelector("[data-ecc]")) {
+    bar.insertAdjacentHTML("beforeend", `<span class="ecc"><label>NLV $ <input type="number" data-ecc="nlv" value="${CFG.nlv || ""}" placeholder="for share size" style="width:100px"></label>
+      <label>Base grade <select data-ecc="grade">${GRADES.map(g => `<option ${g[0] === CFG.grade ? "selected" : ""} value="${g[0]}">${g[0]} · ${g[1]}%</option>`).join("")}</select></label></span>`);
+    bar.querySelectorAll("[data-ecc]").forEach(i => i.addEventListener("change", () => { const k = i.dataset.ecc; CFG[k] = i.tagName === "SELECT" ? i.value : (i.value === "" ? 0 : +i.value); saveCfg(); s61Reset(); computeAll(); renderAll(); }));
+  }
+};
+
+/* ---------------- the logging chip (beside Frozen CSV / Live) ---------------- */
+function logChipPaint(){
+  const lb = document.querySelector(".livebox"); if (!lb || typeof jnSource !== "function") return;
+  let c = $("logChip");
+  if (!c) { lb.insertAdjacentHTML("afterend", `<span id="logChip" class="chip"></span>`); c = $("logChip"); c.onclick = () => { const b = document.querySelector('#tabs button[data-tab="journal"]'); if (b) b.click(); }; }
+  const rec = JN.loaded ? jnNowRec() : null, src = jnSource();
+  c.classList.toggle("on", !!rec);
+  c.innerHTML = `<span class="jn-dot"></span>${rec ? `Logging ${esc(jnDay(rec.p).replace(",", ""))}` : "Not logging"}`;
+  c.title = rec ? `The Board log is recording ${rec.n.length} names for ${jnDay(rec.p)} from ${src.file ? src.file.files.map(f => f.name).join(" + ") : "the file"}${src.live ? " (Live mode: from the file under the live prices — live prices are never logged)" : ""}. Open until 16:00 ET that day. Click for the log.`
+    : !S.snap ? "Load today's stock file and the Board log starts by itself. Click for the log." : "Nothing is being logged right now — click to see why.";
+}
+const _renderAllEO = renderAll;
+renderAll = function(){ _renderAllEO(); try { logChipPaint(); } catch (e) {} };
+const _jnSoonEO = jnSoon;
+jnSoon = function(){ _jnSoonEO(); JN.ready.then(() => setTimeout(() => { try { logChipPaint(); } catch (e) {} }, 50)); };
+const _renderJournalEO = renderJournal;
+renderJournal = function(){ _renderJournalEO(); try { logChipPaint(); } catch (e) {} };
+JN.ready.then(() => { try { logChipPaint(); } catch (e) {} });
+
+document.head.insertAdjacentHTML("beforeend", `<style>
+.dpn-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;margin:2px 0 6px}
+.s61bar .ecc{display:inline-flex;flex-wrap:wrap;gap:6px 12px;align-items:center;font-size:12px}
+.s61bar .ecc input,.s61bar .ecc select{font-size:12px}
+#drawer h3 .eccall{margin-left:6px;font-size:11.5px;vertical-align:middle}
+/* 22 Oct: every page reads Entry Check locations — the old buy-zone mode picker no longer changes anything you see */
+#zoneChip{display:none!important}
 </style>`);
 </script>
 <script id="mobile-js">
