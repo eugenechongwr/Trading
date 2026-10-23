@@ -8979,11 +8979,14 @@ async function bcMount(box, r, iv, w){
   cs.setData(P(M.bars));
   if (M.vol) { const vs = chart.addSeries(LW.HistogramSeries, P({priceScaleId: "vol", priceFormat: {type: "volume"}, lastValueVisible: false, priceLineVisible: false})); vs.setData(P(M.vol)); chart.priceScale("vol").applyOptions(P({scaleMargins: {top: 0.85, bottom: 0}})); }
   for (const m of M.ma) { const ls = chart.addSeries(LW.LineSeries, P({color: m.color, lineWidth: m.k === "s200" || m.k === "w40" ? 2 : 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false})); ls.setData(P(m.data)); }
-  for (const l of M.lines) cs.createPriceLine(P({price: l.price, color: l.color, lineWidth: 1, lineStyle: l.lineStyle, axisLabelVisible: true, title: l.title}));
+  // 23 Oct: levels as short labels right of the last bar + the shaded buy zone (bcLevels, "Chart labels" script); "Classic labels" = these full-width lines
+  const bcLv = typeof bcLevels === "function" && !sh.cl;
+  if (!bcLv) for (const l of M.lines) cs.createPriceLine(P({price: l.price, color: l.color, lineWidth: 1, lineStyle: l.lineStyle, axisLabelVisible: true, title: l.title}));
   if (M.markers.length) LW.createSeriesMarkers(cs, P(M.markers));
   if (M.rs && M.rs.length) { const rs = chart.addSeries(LW.LineSeries, P({color: BC_STYLE.rs, lineWidth: 1, priceLineVisible: false, lastValueVisible: true, title: "RS vs QQQ"}), 1); rs.setData(P(M.rs)); try { chart.panes()[1].setStretchFactor(0.22); chart.panes()[0].setStretchFactor(0.78); } catch (e) {} }
   const n = M.bars.length, span = M.iv === "W" ? 80 : M.iv === "D" ? 150 : M.iv === "30" ? 70 : 160;
   chart.timeScale().setVisibleLogicalRange(P({from: Math.max(0, n - span), to: n + 4}));
+  if (bcLv) bcLevels(chart, cs, M, w, own, span);
   // legend: OHLC + the lines at the crosshair (the last bar otherwise)
   const at = new Map(M.bars.map((b, k) => [b.time, k])), maAt = M.ma.map(m => new Map(m.data.map(p => [p.time, p.value])));
   const f = x => fin(x) ? (Math.abs(x) >= 1000 ? x.toFixed(1) : x.toFixed(2)) : "—";
@@ -11069,6 +11072,151 @@ bcModel = async function(r, iv){
   return M;
 };
 document.head.insertAdjacentHTML("beforeend", `<style>html.ws #drawer.invp{width:min(980px,96vw)} #drawer.invp #tvbox{height:min(58vh,560px)}</style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   Chart labels (23 Oct, Eugene: "the charts for the deep space board isnt visible because of the labels … make this
+   indicator feasible for the human eye while not covering any of the chart candles. buy zone low and planned entry are
+   the same. can u just merge them. use abbreviations for the labels. rethink how labels are used. pull inspiration for
+   the adr band buy zone from the intraday pivot.")
+   Board chart only (ticker panel, chart window, fund panel). DISPLAY ONLY: the levels are the same numbers as before
+   (bcModel's M.lines are untouched and BC.last.lines keeps the old titles); nothing the plan, lists, log or feed use changes.
+   - Levels: no full-width price lines with long titles any more. Each level is a short line from the last candle into a
+     gutter on the right (the chart opens with room for it) ending in a small pill "CODE price": ENT planned entry (ENT 9E
+     = yesterday's daily 9 EMA, just under) · BZ hi / BZ lo buy-zone top / bottom · MAX max entry (day low + 0.6 ADR) ·
+     R1 first resistance · STOP day low. Levels at the same price share one pill; planned entry = buy-zone bottom → "ENT"
+     alone (bcLabels). Pills keep price order and spread apart with a short leader to their price (bcPlace); a level off
+     the visible price range shows ↑ / ↓; a gutter too narrow for "CODE price" (scrolled / zoomed) → code-only pills.
+   - Buy zone: a shaded band like the Intraday Pivot's (daily 9/21 band top → +0.5 ADR; fill 90% transparent, edges
+     60%), drawn behind the candles. Daily = the band as it stood each day (max(9 EMA, 21 EMA) + 0.5 × ADR$, ADR$ =
+     mean((H − L) / C) over 20 bars × close — Entry Check's maths on the chart's bars), the last bar pinned to Entry
+     Check's zone, carried flat through the gutter. 30m / 5m = today's session + gutter. Weekly = gutter only.
+   - Candles keep clear of the volume bars (bottom margin of the price scale while Volume is on).
+   - Chart button "Classic labels" (key cl in adrb.bcShow, off by default) puts the old full-width price lines back.
+   Hooks: bcMount calls bcLevels(chart, cs, M, w, own, span) unless Classic; bcModel wrapped (M.lab, M.band); bcCaption
+   wrapped (the key). BC.lab[own] = what the last paint drew (pills, gutter start, last candle's right edge) for the test.
+   Storage: adrb.bcShow gains key "cl" (existing object, no new storage key).
+   ===================================================================== */
+BC_TOG.push(["cl", "Classic labels"]);
+BC.lab = {};
+// bcModel's titles → short code (array order = order inside a shared pill)
+const BCL_CODE = [[/^1st resistance/, "r1", "R1"], [/^max entry/, "max", "MAX"], [/^buy zone hi/, "zhi", "BZ hi"], [/^planned entry \(prior 9E\)/, "ent", "ENT 9E"],
+  [/^planned entry/, "ent", "ENT"], [/^buy zone lo/, "zlo", "BZ lo"], [/^LOD stop/, "stop", "STOP"]];
+const bcPx = p => p.toFixed(2);
+// one pill per price (to the cent), highest first
+function bcLabels(lines){
+  const by = new Map();
+  for (const l of lines || []) { if (!fin(l.price)) continue;
+    const j = BCL_CODE.findIndex(c => c[0].test(l.title)), key = Math.round(l.price * 100);
+    if (!by.has(key)) by.set(key, []);
+    by.get(key).push({k: j >= 0 ? BCL_CODE[j][1] : l.title, t: j >= 0 ? BCL_CODE[j][2] : l.title, o: j >= 0 ? j : 99, price: l.price, color: l.color, style: l.lineStyle}); }
+  const out = [];
+  for (const g of by.values()) {
+    let a = g.sort((x, y) => x.o - y.o);
+    if (a.some(x => x.k === "ent")) a = a.filter(x => x.k !== "zlo");        // Eugene: planned entry = buy-zone bottom → one label
+    out.push({text: a.map(x => x.t).join(" · "), keys: a.map(x => x.k), price: a[0].price, color: a[0].color, style: Math.min(...a.map(x => x.style))});
+  }
+  return out.sort((x, y) => y.price - x.price);
+}
+// the shaded buy zone: per bar [lo, hi] (null = none) + the zone carried through the gutter
+function bcBand(M){
+  const ln = t => M.lines.find(l => l.title === t), lo = ln("buy zone lo"), hi = ln("buy zone hi"), n = M.bars.length;
+  if (!lo || !hi || !fin(lo.price) || !fin(hi.price) || !n) return null;
+  const z = {lo: lo.price, hi: hi.price}, a = new Array(n).fill(null);
+  if (M.iv === "D") {
+    const c = Float64Array.from(M.bars, b => b.close), e9 = PZ.ema(c, 9), e21 = PZ.ema(c, 21);
+    const ad = PZ.sma(PZ.map(n, k => (M.bars[k].high - M.bars[k].low) / c[k] * 100), S61.adrN);
+    for (let k = 0; k < n - 1; k++) { const t = Math.max(e9[k], e21[k]), d = ad[k] / 100 * c[k]; if (fin(t) && fin(d)) a[k] = [t, t + S61.above * d]; }
+    a[n - 1] = [z.lo, z.hi];
+  } else if (M.intra && M.lodDay) M.bars.forEach((b, k) => { if (new Date(b.time * 1000).toISOString().slice(0, 10) === M.lodDay) a[k] = [z.lo, z.hi]; });
+  return {z, a};
+}
+// spread desired y's (sorted top → bottom) into slots of S px inside [y0, y1], keeping the order; returns the centres
+function bcPlace(ys, S, y0, y1){
+  let G = ys.map((y, i) => ({m: [i], c: y}));
+  const top = g => Math.max(y0, Math.min(y1 - g.m.length * S, g.c - g.m.length * S / 2));
+  for (let again = true; again;) { again = false;
+    for (let k = 0; k < G.length - 1; k++) { const a = G[k], b = G[k + 1];
+      if (top(a) + a.m.length * S > top(b) + 0.01) { const m = a.m.concat(b.m); G.splice(k, 2, {m, c: m.reduce((s, i) => s + ys[i], 0) / m.length}); again = true; break; } } }
+  const out = new Array(ys.length); for (const g of G) { const t = top(g); g.m.forEach((i, j) => { out[i] = t + j * S + S / 2; }); } return out;
+}
+const bcRGBA = (hex, a) => { const m = /^#?([0-9a-f]{6})$/i.exec(hex || ""); if (!m) return hex; const v = parseInt(m[1], 16); return `rgba(${v >> 16},${(v >> 8) & 255},${v & 255},${a})`; };
+const BCL_H = 16, BCL_FONT = () => `600 10.5px ${getComputedStyle(document.body).fontFamily || "sans-serif"}`;
+// the series primitive: zone band behind the candles + level pills on top, both only right of the last candle
+function bcOverlay(M, own, FONT){
+  let ch = null, se = null;
+  const n = M.bars.length;
+  const geo = W => { const ts = ch.timeScale(), xl = ts.logicalToCoordinate(n - 1), xn = ts.logicalToCoordinate(n); if (xl == null || xn == null) return null;
+    const sp = Math.max(1, xn - xl); return {ts, xl, sp, x0: Math.min(W, Math.max(0, xl + sp / 2 + 2))}; };
+  const yOf = p => { const v = se.priceToCoordinate(p); return v == null ? NaN : v; };
+  function band(ctx, W){
+    const B = M.band; if (!B) return; const g = geo(W); if (!g) return;
+    const vr = g.ts.getVisibleLogicalRange(), k0 = vr ? Math.max(0, Math.floor(vr.from) - 1) : 0, k1 = vr ? Math.min(n - 1, Math.ceil(vr.to) + 1) : n - 1;
+    const runs = []; let cur = null;
+    for (let k = k0; k <= k1; k++) { const v = B.a[k], x = v ? g.ts.logicalToCoordinate(k) : null; if (!v || x == null) { cur = null; continue; }
+      if (!cur) runs.push(cur = []); cur.push([x, yOf(v[0]), yOf(v[1])]); }
+    const zl = yOf(B.z.lo), zh = yOf(B.z.hi), tail = runs.length && cur && k1 === n - 1 && B.a[n - 1] ? cur : null;
+    if (tail) tail.push([W, zl, zh]); else if (g.x0 < W) runs.push([[g.x0, zl, zh], [W, zl, zh]]);
+    ctx.save(); ctx.lineWidth = 1;
+    for (const r of runs) { if (r.length < 2 || r.some(p => !fin(p[1]) || !fin(p[2]))) continue;
+      ctx.beginPath(); r.forEach((p, j) => j ? ctx.lineTo(p[0], p[2]) : ctx.moveTo(p[0], p[2])); for (let j = r.length - 1; j >= 0; j--) ctx.lineTo(r[j][0], r[j][1]);
+      ctx.closePath(); ctx.fillStyle = bcRGBA(BC_STYLE.zone, 0.10); ctx.fill();
+      ctx.strokeStyle = bcRGBA(BC_STYLE.zone, 0.40);
+      for (const e of [1, 2]) { ctx.beginPath(); r.forEach((p, j) => j ? ctx.lineTo(p[0], p[e]) : ctx.moveTo(p[0], p[e])); ctx.stroke(); } }
+    ctx.restore();
+  }
+  function pills(ctx, W, H){
+    const L = M.lab || []; BC.lab[own] = null; if (!L.length) return; const g = geo(W); if (!g) return;
+    ctx.save(); ctx.font = FONT; ctx.textBaseline = "middle";
+    const it = L.map(l => { const yt = yOf(l.price), off = !fin(yt) ? 0 : yt < 0 ? -1 : yt > H ? 1 : 0; return {l, yt, off, a: off < 0 ? "↑ " : off > 0 ? "↓ " : ""}; });
+    const wOf = ss => Math.max(...ss.map(s => ctx.measureText(s).width)) + 12;
+    const full = it.map(o => `${o.a}${o.l.text} ${bcPx(o.l.price)}`), wF = wOf(full), useFull = W - g.x0 - 2 >= wF + 10;
+    const tx = useFull ? full : it.map(o => o.a + o.l.text), pw = useFull ? wF : wOf(tx), px = W - pw - 2, S = BCL_H + 2;
+    const T0 = H > 160 ? 30 : 1;   // keep clear of the chart's buttons (top right) when there is room
+    const yp = bcPlace(it.map(o => Math.min(H - 1, Math.max(T0, fin(o.yt) ? o.yt : T0))), S, T0, H - 1), out = [];
+    it.forEach((o, i) => { const c = o.l.color, y = yp[i], xs = Math.max(g.x0, px - 10);
+      ctx.strokeStyle = c; ctx.lineWidth = 1;
+      if (!o.off && fin(o.yt) && g.x0 < px) {
+        ctx.setLineDash(o.l.style === 1 ? [2, 2] : o.l.style === 2 ? [5, 3] : []); ctx.beginPath(); ctx.moveTo(g.x0, o.yt); ctx.lineTo(xs, o.yt); ctx.stroke(); ctx.setLineDash([]);
+        ctx.beginPath(); ctx.moveTo(xs, o.yt); ctx.lineTo(px, y); ctx.stroke(); }
+      ctx.fillStyle = c; ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(px, y - BCL_H / 2, pw, BCL_H, 3); else ctx.rect(px, y - BCL_H / 2, pw, BCL_H); ctx.fill();
+      ctx.fillStyle = "#fff"; ctx.fillText(tx[i], px + 6, y + 0.5);
+      out.push({text: tx[i], keys: o.l.keys, price: o.l.price, x: px, y: y - BCL_H / 2, w: pw, h: BCL_H, yTrue: o.yt, off: o.off}); });
+    ctx.restore();
+    BC.lab[own] = {x0: g.x0, lastRight: g.xl + g.sp / 2, W, H, full: useFull, pills: out};
+  }
+  const view = (z, fn) => ({zOrder: () => z, renderer: () => ({draw: t => { if (!ch || !se) return; t.useMediaCoordinateSpace(s => { try { fn(s.context, s.mediaSize.width, s.mediaSize.height); } catch (e) { console.warn("chart labels", e); } }); }})});
+  const views = [view("bottom", band), view("top", pills)];
+  return {attached: p => { ch = p.chart; se = p.series; }, detached: () => { ch = se = null; }, updateAllViews(){}, paneViews: () => views};
+}
+// called by bcMount after the first range is set: room on the right for the pills, the overlay, candles clear of volume
+function bcLevels(chart, cs, M, w, own, span){
+  const P = o => w.JSON.parse(JSON.stringify(o)), n = M.bars.length, FONT = BCL_FONT();
+  BC.lab[own] = null;
+  if (M.vol) { try { cs.priceScale().applyOptions(P({scaleMargins: {top: 0.2, bottom: 0.18}})); } catch (e) {} }
+  if (!(M.lab && M.lab.length) && !M.band) return;
+  if (M.lab && M.lab.length) {
+    const mc = document.createElement("canvas").getContext("2d"); mc.font = FONT;
+    const G = Math.max(...M.lab.map(l => mc.measureText(`↑ ${l.text} ${bcPx(l.price)}`).width)) + 12 + 22;
+    const el = chart.chartElement && chart.chartElement(), Wp = (el && el.parentElement ? el.parentElement.clientWidth : 0) - 64;
+    const from = Math.max(0, n - span), m = n - 1 - from;
+    if (Wp > 200 && m > 0) { const Gc = Math.min(G, Wp * 0.4), g = Gc * m / (Wp - Gc); chart.timeScale().setVisibleLogicalRange(P({from, to: n - 1 + Math.max(4, g)})); }
+  }
+  cs.attachPrimitive(bcOverlay(M, own, FONT));
+}
+const _bcModelLAB = bcModel;
+bcModel = async function(r, iv){
+  const M = await _bcModelLAB(r, iv);
+  try { if (M && !M.err) { M.lab = bcLabels(M.lines); M.band = bcBand(M); } } catch (e) { console.warn("chart labels", e); }
+  return M;
+};
+const _bcCaptionLAB = bcCaption;
+bcCaption = function(){
+  _bcCaptionLAB();
+  const el = [...document.querySelectorAll("#drawer .small")].find(x => /^Board chart:/.test(x.textContent.trim())); if (!el) return;
+  el.textContent += " Labels right of the last candle: ENT planned entry (also the bottom of the shaded buy zone when they match; ENT 9E = yesterday's daily 9 EMA) · BZ hi / BZ lo top / bottom of the buy zone · MAX max entry (day low + 0.6 ADR) · R1 first resistance · STOP day low · ↑ / ↓ = off the visible price range. \"Classic labels\" brings back the full-width lines.";
+};
 </script>
 </body>
 </html>
