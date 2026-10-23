@@ -1574,7 +1574,8 @@ function ecsOf(r){
   return x.loc === "L1" ? 1 : x.loc === "L2" ? 2 : x.loc === "ABOVE" ? 3 : x.loc === "L3" ? 4 : x.close > x.e21 ? 6 : 5;
 }
 const ecsHTML = r => { if (r && r.etf) return estrHTML(r.estr); const k = ecsOf(r); return k ? `<span class="st" title="${esc(ECSK[k].d)}"><i style="background:${ECSK[k].c}"></i>${ECSK[k].name}</span>` : `<span class="dim" title="${ECS_NONE}">—</span>`; };
-const ecX = r => { if (!r || r.etf || !S.has.hist || typeof s61Of !== "function") return null; try { const s = s61Of(r); return s && s.x && s.x.loc ? s.x : null; } catch (e) { return null; } };
+// 23 Oct: routed through the buy-zone lens (zlX, last script) — display only; the band read is returned unchanged when the lens is off
+const ecX = r => { if (!r || r.etf || !S.has.hist || typeof s61Of !== "function") return null; try { const s = s61Of(r); return s && s.x && s.x.loc ? (typeof zlX === "function" ? zlX(s.x) : s.x) : null; } catch (e) { return null; } };
 const ecsName = r => { const k = ecsOf(r); return k ? ECSK[k].name : "—"; };
 const ecsIn = (r, ...ks) => ks.includes(ecsOf(r));
 </script>
@@ -3004,7 +3005,9 @@ const SYM_OK = /^[A-Z]{1,5}(\.[A-Z])?$/;
 const etParts = ms => { const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", {timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23"}).formatToParts(new Date(ms)).map(x => [x.type, x.value])); return {d: `${p.year}-${p.month}-${p.day}`, m: +p.hour * 60 + +p.minute, hm: `${p.hour}:${p.minute}`}; };
 const isWkday = d => { const w = new Date(d + "T12:00:00Z").getUTCDay(); return w > 0 && w < 6; };
 const prevWkday = d => { let x = d; while (!isWkday(x)) x = addDays(x, -1); return x; };
-const weekKey = d => { const w = new Date(d + "T12:00:00Z").getUTCDay(); return addDays(d, -((w + 6) % 7)); };
+// 23 Oct (speed): memoised — a pure function of the date string, called for every bar of every stock on each refresh
+const WK_MEMO = new Map();
+const weekKey = d => { let k = WK_MEMO.get(d); if (k === undefined) { const w = new Date(d + "T12:00:00Z").getUTCDay(); k = addDays(d, -((w + 6) % 7)); WK_MEMO.set(d, k); } return k; };
 // last session whose daily bars should be published (after 16:30 New York time)
 function lastDoneSession(){ const n = etParts(Date.now()); let d = n.d; if (!isWkday(d) || n.m < 16 * 60 + 30) d = addDays(d, -1); return prevWkday(d); }
 
@@ -8392,7 +8395,8 @@ const ecLocS = x => ecLoc(x).replace(/ \(could reclaim\)| — out/g, "");       
 const ecLocCode = c => !c ? "—" : c === "BELOW21" ? "Under the daily 21 EMA / trend broken — out" : EC_LOC[c] || c;   // a stored code, no close
 // ffTxt (data) read out in words for the screen: "3 Structure 21E" → "3 Trend daily 21 EMA"
 const ecPlain = t => String(t || "").replace(/\b21E\b/g, "daily 21 EMA").replace(/\b50S\b/g, "daily 50 SMA").replace(/\b10W\b/g, "weekly 10-week line").replace(/^3 Structure/, "3 Trend")
-  .replace(/Reclaim watch/, "just under buy zone").replace(/Above zone/, "too high above buy zone").replace(/Background/, "deep under buy zone").replace(/^5 Ext /, "5 Stretch ").replace(/^2 Break /, "2 Bad data ");
+  .replace(/Reclaim watch/, "just under buy zone").replace(/Above zone/, "too high above buy zone").replace(/Background/, "deep under buy zone").replace(/^5 Ext /, "5 Stretch ").replace(/^2 Break /, "2 Bad data ")
+  .replace(/^(\d+) (\S)/, (m, n, c) => `${n}. ${c.toUpperCase()}`);   // 23 Oct (Eugene): "6. Deep under buy zone" — a dot after the check number, screen only
 const REG_STEP = {Supportive: 0, Mixed: 1, Defensive: 2};
 
 // earnings in NYSE sessions: N = sessions after lastDone up to and including the event session.
@@ -10424,6 +10428,719 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 /* 22 Oct: every page reads Entry Check locations — the old buy-zone mode picker no longer changes anything you see */
 #zoneChip{display:none!important}
 </style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   SPEED (23 Oct; Eugene: "ok to proceed with the speed fix … only take the most ideal action"). Display / speed only —
+   every number is computed by the same code from the same inputs; nothing about zones, stops, states, RS, lists or
+   sizes changes (regression 0 diffs; tools/board-speed-test.js proves every Entry Check / screener value identical).
+   Why it lagged: each computeAll rebuilds S.rows, which bumped rowsGen() and so the dssKey — every setting change (Themes
+   group-by, gap threshold, Settings, the Live-mode logging swap) threw away the per-stock price-history work (~1.7 s on
+   600 names) even when no price had changed.
+   - dssOf: a second cache keyed on the CONTENT the history maths reads (stored history generation, live daily bars, the
+     today's-bar fields of every row, the split list) — not on the identity of S.rows. The last 3 contents are kept, so
+     Live mode's file-swap for logging and the swap back both hit. The original dssKey / DSF and the Entry Check cache
+     (S61C, still keyed on rowsGen because RS / group state can move with settings) are untouched.
+   - PZ.hl (highest / lowest): monotonic queue — the same max / min of the same finite values, O(n) instead of O(n·p).
+   - PZ._rec (EMA / RMA): the SMA seed is summed only where it's used, same order, same values.
+   - weekKey memoised (edited in place, block 2 — a const can't be wrapped).
+   Storage: none.
+   ===================================================================== */
+const SPD = {gen: 0, fpRows: null, fp: "", store: new Map()};
+const _histBuildSPD = histBuild;
+histBuild = function(...a){ SPD.gen++; return _histBuildSPD.apply(this, a); };
+// today's-bar inputs of every row (dssBars / todaySource read only these from S.rows)
+function spdRowsFp(){
+  if (SPD.fpRows === S.rows) return SPD.fp;
+  const f = v => v == null ? "" : String(v), out = [];
+  for (const r of S.rows || []) out.push(r.sym + ":" + f(r.last) + "," + f(r.hi1d) + "," + f(r.lo1d) + "," + f(r.vol) + "," + f(r.op1d) + "," + f(r.cfo1d));
+  SPD.fpRows = S.rows; SPD.fp = out.join(";"); return SPD.fp;
+}
+function spdKey(){
+  const ts = todaySource();
+  return [SPD.gen, HIST.nD, HIST.dates[HIST.nD - 1] || "", HIST.live ? HIST.live.date + "@" + HIST.live.at : "", ts ? ts.date + ts.src : "",
+    typeof SB !== "undefined" && SB.splits ? SB.splits.at : "", spdRowsFp()].join("|");
+}
+const _dssOfSPD = dssOf;
+dssOf = function(sym){
+  const k = dssKey();
+  if (DSF.key === k && DSF.map.has(sym)) return DSF.map.get(sym);
+  const ck = spdKey();
+  let m = SPD.store.get(ck);
+  if (m && m.map.has(sym)) {
+    if (DSF.key !== k) { DSF.key = k; DSF.map = new Map(); DSF.reg = m.reg; }
+    const d = m.map.get(sym); DSF.map.set(sym, d); return d;
+  }
+  const d = _dssOfSPD(sym);
+  if (!m) { m = {map: new Map(), reg: DSF.reg}; SPD.store.set(ck, m); while (SPD.store.size > 3) SPD.store.delete(SPD.store.keys().next().value); }
+  m.map.set(sym, d); return d;
+};
+PZ.hl = function(a, p, mx){
+  const n = a.length, o = new Float64Array(n).fill(NaN); if (!(p >= 1)) return o;
+  const q = new Int32Array(n); let h = 0, t = 0;
+  for (let k = 0; k < n; k++) {
+    const x = a[k];
+    if (isFinite(x)) { while (t > h && (mx ? a[q[t - 1]] <= x : a[q[t - 1]] >= x)) t--; q[t++] = k; }
+    while (t > h && q[h] <= k - p) h++;
+    if (k >= p - 1) o[k] = t > h ? a[q[h]] : NaN;
+  }
+  return o;
+};
+PZ._rec = function(a, p, al){
+  const n = a.length, o = new Float64Array(n).fill(NaN);
+  const seed = t => { if (t < p - 1) return NaN; let s = 0; for (let k = t - p + 1; k <= t; k++) { const x = a[k]; if (!isFinite(x)) return NaN; s += x; } return s / p; };
+  for (let t = 0; t < n; t++) { const pv = t ? o[t - 1] : NaN; o[t] = isFinite(pv) ? (isFinite(a[t]) ? al * a[t] + (1 - al) * pv : NaN) : seed(t); }
+  return o;
+};
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   NEW DISCOVERIES — TWO REFRESHES + CARRY OVER (23 Oct; Eugene: "do a and b, skip c" · "two refreshes in a row agree").
+   Tracking and display only — the frozen Daily Plan, the Entry Check lists, the Board log, the feed and every number are
+   unchanged.
+   - (b) A name becomes a New Discovery only when it is in the board's or MAP's lists (dpNames) on TWO refreshes in a row
+     of the same plan day's session: two Live (Massive) refreshes, or two regular-session files. A refresh = a new data
+     time (Live: snap.live.dataMs; file: the file names + time). Re-renders of the same data never count twice. "First
+     seen" = the first of the two; the confirmation time is kept too. Pending names live in the day's record as
+     rec.discP = {tok, syms, first} (new field; rec.disc keeps its shape).
+   - (a) After the session, the latest day's discoveries stay on Today's Daily Plan card and on the Watchlist ("New
+     Discovery · <day>"), with where each one is now, until the next plan day locks at 09:30 ET (then that day's own
+     discoveries take over). Nothing older than the last locked plan day is shown.
+   Storage: rec.discP inside the Board-log record (IndexedDB, travels with snapshots like rec.disc).
+   ===================================================================== */
+const ND2 = {};
+function nd2Tok(){
+  const sn = S.snap; if (!sn) return "";
+  if (sn.live) return "L" + (sn.live.dataMs || "");
+  return "F" + (sn.files || []).map(f => f.name).join("+") + "|" + (sn.asOf || "") + "|" + (sn.mtime || "");
+}
+dpDiscover = function(){
+  const n = jnET(), p = n.d, rec = JN.recs[p];
+  if (!rec || !rec.plan || !rec.plan.revs.length || dpOpen(p) || !jnOpenDay(p) || !S.snap) return false;
+  if (!(S.snap.live || (S.mode !== "pm" && S.snap.asOf === p))) return false;
+  const fz = rec.plan.revs[rec.plan.revs.length - 1], have = new Set(fz.names.map(o => o.s)), D = rec.disc || (rec.disc = {});
+  const cand = dpNames().filter(e => !have.has(e.s) && !D[e.s] && e.f && e.f.last != null);
+  const tok = nd2Tok(), P = rec.discP || (rec.discP = {tok: "", syms: [], first: {}});
+  let ch = false, added = false;
+  if (P.tok === tok) {                         // same data re-rendered (or a list edit): add to this refresh's set only
+    const seen = new Set(P.syms); for (const e of cand) if (!seen.has(e.s)) { P.syms.push(e.s); P.first[e.s] = P.first[e.s] || JN.now(); ch = true; }
+  } else {                                     // a new refresh: names here AND at the previous refresh are confirmed
+    const prev = new Set(P.syms), first = {};
+    for (const e of cand) {
+      if (prev.has(e.s)) { D[e.s] = {...e, at: P.first[e.s] || JN.now(), conf: JN.now(), src: S.snap.live ? "live" : "file"}; ch = added = true; }
+      else first[e.s] = JN.now();
+    }
+    rec.discP = {tok, syms: cand.filter(e => !D[e.s]).map(e => e.s), first}; ch = true;
+  }
+  if (ch) jnSave(); return added;
+};
+// (a) the latest day's discoveries, while the next plan day hasn't locked
+function ndCarry(){
+  if (!JN.loaded) return null;
+  const cur = dpCur(), today = jnET().d;
+  const days = Object.keys(JN.recs).filter(p => JN.recs[p] && JN.recs[p].disc && Object.keys(JN.recs[p].disc).length && p <= today).sort();
+  const q = days[days.length - 1]; if (!q || q === cur) return null;
+  const lockedAfter = Object.keys(JN.recs).some(p => p > q && JN.recs[p] && JN.recs[p].plan && JN.recs[p].plan.revs.length && !dpOpen(p));
+  if (lockedAfter) return null;
+  if (cur && cur > q && !dpOpen(cur)) return null;
+  return {p: q, list: Object.values(JN.recs[q].disc).sort((a, b) => a.at - b.at)};
+}
+function ndCarryHTML(){
+  const c = ndCarry(); if (!c) return "";
+  const rows = c.list.map(e => { const lv = dpLive(e);
+    return `<tr data-sym="${esc(e.s)}"><td class="l small">${esc(etParts(e.at).hm)} ET${e.conf ? `<div class="dim">held to ${esc(etParts(e.conf).hm)}</div>` : ""}</td><td class="l sym"><b>${esc(e.s)}</b></td><td class="l small"><b>${esc(DP_L[e.l] || e.l)}</b> · ${esc(e.why)}</td><td>${e.f && e.f.last != null ? f2(e.f.last) : "—"}</td><td>${lv.px != null ? f2(lv.px) : "—"}${lv.chg != null ? `<div class="small ${cls(lv.chg)}">${pc(lv.chg, 1)}</div>` : ""}</td><td class="l">${lv.flags.map(f => `<span class="pill ${f.c}">${esc(f.t)}</span>`).join(" ")}</td></tr>`; }).join("");
+  return `<div class="ndc"><h4 style="margin:12px 0 2px">New Discoveries from ${esc(jnDay(c.p))} <span class="small dim">kept until the next plan locks at 09:30 ET · where each one is now · never added to the plan</span></h4>
+    <div class="tscroll" style="max-height:none"><table class="mini dpt"><thead><tr><th class="l">First seen</th><th class="l">Ticker</th><th class="l">List · why</th><th>Then</th><th>Now</th><th class="l">Status now</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+}
+const _dpCardHTMLND = dpCardHTML;
+dpCardHTML = function(compact){
+  let h = _dpCardHTMLND(compact);
+  h = h.replace("after the lock · never added to the plan</span>", "after the lock · counted once a name holds its place for two refreshes in a row · never added to the plan</span>");
+  let c = ""; try { c = ndCarryHTML(); } catch (e) { console.warn("discoveries carry", e); }
+  if (!c) return h;
+  const i = h.lastIndexOf("</div>"); return i < 0 ? h + c : h.slice(0, i) + c + h.slice(i);
+};
+WL_SRC.ndc = "New Discovery (earlier day)";
+const _wlGroupsND = wlGroups;
+wlGroups = function(){
+  const G = _wlGroupsND(); let c = null; try { c = ndCarry(); } catch (e) {}
+  if (!c) return G;
+  WL_SRC.ndc = `New Discovery · ${jnDay(c.p)}`;
+  const g = G.find(x => x[0].startsWith("Ready to trade")), rowBy = S.rowBySym || new Map();
+  if (g) { const have = new Set(g[1].map(e => e.s)); for (const e of c.list) if (!have.has(e.s)) g[1].push({s: e.s, r: rowBy.get(e.s) || null, src: "ndc"}); }
+  return G;
+};
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   CHECK NUMBERS + LAST PRICE (23 Oct; Eugene: "reword it to '6. Deep under buy zone' … a dot after the number helps" ·
+   "for the setups/watchlists, display the last traded price … last price vs the planned entry price"). Display only.
+   - ecPlain (block 1, edited in place — a const) puts "N. " before the check name; "Blocked by 9 — …" in the Watchlist's
+     next action reads "Blocked by 9. Earnings — …". The feed's "Spec61 First Fail" (ffTxt) is untouched.
+   - Last price: every Entry Check list table (Setups lists, MAP lists card, held names — table.s61t) gets a "Last" column
+     before "Entry", with the gap to the planned entry in ADR under it; the Watchlist tables (table.wlt) get "Last" and
+     "Entry" after Status. Last = the price on screen (the file's, or Massive's in Live mode, 15 minutes delayed). Added
+     after each render by a MutationObserver (idempotent, data-lc on the table).
+   Storage: none.
+   ===================================================================== */
+const _nextActionLC = nextAction;
+nextAction = function(r, held){
+  const t = _nextActionLC(r, held), m = /^Blocked by (\d+) — /.exec(t || "");
+  if (!m) return t;
+  const s = r && !r.etf && S.has.hist ? s61Of(r) : null, ck = s && s.ck[+m[1]];
+  return t.replace(m[0], `Blocked by ${m[1]}. ${ck ? ck.l : "check " + m[1]} — `);
+};
+function lcCell(sym){
+  const r = S.rowBySym && S.rowBySym.get(sym); if (!r || r.last == null) return {last: "—", entry: "—"};
+  const s = !r.etf && S.has.hist ? s61Of(r) : null, x = s && s.x, live = !!(S.snap && S.snap.live);
+  const tip = live ? "Last price from Massive (15 minutes delayed)" : "Last price in the stock file";
+  let gap = "";
+  if (x && fin(x.entry) && fin(x.D) && x.D > 0) { const g = (r.last - x.entry) / x.D; gap = `<div class="small dim" title="Last minus the planned entry, in ADR">${g >= 0 ? "+" : "−"}${Math.abs(g).toFixed(2)} ADR vs entry</div>`; }
+  return {last: `<span title="${tip}">${f2(r.last)}</span>${gap}`, entry: x && fin(x.entry) ? f2(x.entry) : "—"};
+}
+function lcPaint(){
+  document.querySelectorAll("table.s61t:not([data-lc])").forEach(t => {
+    const hs = [...t.querySelectorAll("thead th")], i = hs.findIndex(h => h.getAttribute("title") === "Planned entry"); t.dataset.lc = 1; if (i < 0) return;
+    hs[i].insertAdjacentHTML("beforebegin", `<th title="Last price — the file's, or Massive's in Live mode (15 minutes delayed)">Last</th>`);
+    t.querySelectorAll("tbody tr[data-sym]").forEach(tr => { if (tr.children.length !== hs.length || tr.querySelector("td[colspan]")) return; tr.children[i].insertAdjacentHTML("beforebegin", `<td class="lc">${lcCell(tr.dataset.sym).last}</td>`); });
+  });
+  document.querySelectorAll("table.wlt:not([data-lc])").forEach(t => {
+    const hs = [...t.querySelectorAll("thead th")], i = hs.findIndex(h => h.textContent.trim() === "Status"); t.dataset.lc = 1; if (i < 0) return;
+    hs[i].insertAdjacentHTML("afterend", `<th title="Last price — the file's, or Massive's in Live mode (15 minutes delayed)">Last</th><th title="Entry Check's planned entry">Entry</th>`);
+    t.querySelectorAll("tbody tr[data-sym]").forEach(tr => {
+      const cs = tr.querySelector("td[colspan]"); if (cs) { cs.colSpan = cs.colSpan + 2; return; }
+      if (tr.children.length !== hs.length) return;
+      const c = lcCell(tr.dataset.sym); tr.children[i].insertAdjacentHTML("afterend", `<td class="lc">${c.last}</td><td>${c.entry}</td>`);
+    });
+  });
+}
+{ let tm = null; new MutationObserver(() => { clearTimeout(tm); tm = setTimeout(() => { try { lcPaint(); } catch (e) { console.warn("last price", e); } }, 30); }).observe(document.body, {childList: true, subtree: true}); }
+document.head.insertAdjacentHTML("beforeend", `<style>td.lc{white-space:nowrap}</style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   MY LISTS ON THE MAP (23 Oct; Eugene: "a button which can show my watchlist (focus a/b/on deck/new discoveries for the
+   day) on a similar mapping … skip the popup and panel on the right"). Display only — lists, locations and every number
+   come from the existing code (wlGroups, s61Of); nothing is ranked or changed.
+   - Leaders map: "My lists only" toggle in the controls. On: the plot shows only the Watchlist's names (MAP A / B / On
+     deck, Ready to trade first 5 + New Discoveries, favourites, held), coloured by list, every name labelled; the
+     location blocks and the cluster card read the same names. Same axes and buy-zone box as the map.
+   - Watchlist: a List / Map switch at the top. Map = the same plot with a line per list underneath; List = the tables.
+   - A name on several lists takes the colour of the first one in Watchlist order (A, B, On deck, Ready / discoveries,
+     favourites, held); its tooltip names them all. Names without an Entry Check location are listed under the plot.
+   Storage: localStorage adrb.mapMine (0/1), adrb.wlView ("list" | "map").
+   ===================================================================== */
+const ML_C = {A: "var(--st1)", B: "var(--st2)", S: "var(--st3)", q: "var(--serious)", nd: "var(--st4)", ndc: "var(--st4)", fav: "var(--st6)", H: "var(--ink)"};
+const ML_N = {A: "MAP Focus A", B: "MAP Focus B", S: "MAP On deck / Stalk", q: "Ready to trade (first 5)", nd: "New Discovery", ndc: "New Discovery (earlier day)", fav: "Favourite", H: "Held"};
+function mlNames(){
+  const G = wlGroups(), by = new Map();
+  G.forEach(([, L]) => L.forEach(e => { if (!e.r || e.r.etf) return; const o = by.get(e.s); if (o) { if (!o.srcs.includes(e.src)) o.srcs.push(e.src); } else by.set(e.s, {s: e.s, r: e.r, src: e.src, srcs: [e.src]}); }));
+  return [...by.values()];
+}
+function mlDraw(svg, legendEl, subEl){
+  const all = mlNames(), pts = all.filter(e => { const x = ecX(e.r); return x && isFinite(x.dB) && isFinite(x.ext); }), miss = all.filter(e => !pts.includes(e));
+  const cap = S61.ext, zh = S61.above, inBox = pts.filter(e => ecsOf(e.r) === 1).length;
+  scatter(svg, pts, {
+    x: e => ecX(e.r).dB, y: e => ecX(e.r).ext, id: e => e.s, color: e => ML_C[e.src] || "var(--ink-3)", auto: true, xr: [-5, 7], yr: [-4, 12], minX: -1.5, maxX: 3, minY: -1, maxY: 6,
+    zones: [{x0: -5, x1: 0, y0: -4, y1: 12, fill: "var(--down-soft)", op: .35, label: "Under the buy zone", lc: "var(--st5)"},
+            {x0: zh, x1: 7, y0: -4, y1: 12, fill: "var(--warn-soft)", op: .45, label: "Too high above the buy zone", lc: "var(--st3)"}],
+    box: {x0: 0, x1: zh, y0: 0, y1: cap, label: `Buy zone · ${inBox}`},
+    hlines: [{y: cap, c: "var(--down)", label: `${cap} ADR above the 50 SMA`}, {y: 0, c: "var(--ink-3)", label: "50 SMA"}],
+    xLabel: "← under · distance from the top of the daily 9/21 band (ADR) · over →", yLabel: "above the 50 SMA (ADR)",
+    rings: e => [e.r.inPlay ? "solid" : null].filter(Boolean), labelIds: pts.map(e => e.s)
+  });
+  const bySym = new Map(all.map(e => [e.s, e]));
+  attachTips(svg, id => S.rows.find(r => r.sym === id), r => { const e = bySym.get(r.sym); return (e ? `<div class="small"><b>${e.srcs.map(k => esc(ML_N[k] || k)).join(" · ")}</b></div>` : "") + rowTip(r); }, openDrawer);
+  const used = [...new Set(all.map(e => e.src))];
+  if (legendEl) legendEl.innerHTML = used.map(k => `<span><span class="sw" style="background:${ML_C[k]}"></span>${esc(ML_N[k] || k)}</span>`).join("") + `<span><span class="sw" style="background:transparent;border:1.5px solid var(--ink)"></span>in play</span><span class="small">· colour = list (first one if on several)</span>`;
+  if (subEl) subEl.textContent = !all.length ? "Your lists are empty — type MAP's lists or import today's MAP on the Watchlist." : `${pts.length} of your names shown · ${inBox} in the buy zone · ${pts.filter(e => ecsOf(e.r) === 2).length} just under${miss.length ? ` · no location yet: ${miss.map(e => e.s).join(", ")}` : ""}`;
+  return {all, pts, miss};
+}
+const mlMine = () => { try { return !!store.get("adrb.mapMine", 0); } catch (e) { return false; } };
+const _renderMapML = renderMap;
+renderMap = function(){
+  _renderMapML();
+  const ctl = $("mapCtl");
+  if (ctl && !$("mMine")) {
+    ctl.insertAdjacentHTML("afterbegin", `<label class="tog" title="Show only your Watchlist names (MAP lists, Ready to trade + New Discoveries, favourites, held), coloured by list"><input type="checkbox" id="mMine" ${mlMine() ? "checked" : ""}><b>My lists only</b></label>`);
+    $("mMine").addEventListener("change", e => { try { store.set("adrb.mapMine", e.target.checked ? 1 : 0); } catch (x) {} renderMap(); });
+  }
+  if (!mlMine() || !S.has.hist) return;
+  const {all} = mlDraw($("mapPlot"), $("mapLegend"), $("mapSub"));
+  $("stateList").innerHTML = ECS.map(st => { const m = all.filter(e => ecsOf(e.r) === st.k);
+    return `<div class="s" style="--c:${st.c}"><div class="t"><span>${st.name}</span><span>${m.length}</span></div><div class="d">${st.d}</div><div>${m.map(e => tkChip(e.r, e.r.rs ?? "")).join("") || "<span class='dim'>—</span>"}</div></div>`; }).join("");
+  const by = {}; all.forEach(e => (by[e.src] = by[e.src] || []).push(e));
+  $("stateClusters").innerHTML = Object.keys(by).length ? Object.entries(by).map(([k, L]) => `<div style="margin-bottom:9px"><b style="font-size:12px"><span class="sw" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${ML_C[k]};margin-right:5px"></span>${esc(ML_N[k] || k)}</b> <span class="small dim">${L.length}</span><div>${L.map(e => tkChip(e.r, ecsName(e.r))).join("")}</div></div>`).join("") : `<div class="empty">Your lists are empty.</div>`;
+  if ($("clSub")) $("clSub").textContent = "My lists only — your names by list, with each one's location";
+};
+const mlView = () => { try { return store.get("adrb.wlView", "list") === "map" ? "map" : "list"; } catch (e) { return "list"; } };
+const _renderWatchML = renderWatch;
+renderWatch = function(){
+  _renderWatchML();
+  const box = $("watchBody"); if (!box || !S.snap) return;
+  const v = mlView();
+  box.insertAdjacentHTML("afterbegin", `<div class="wlvw"><span class="lbl">View</span><span class="seg" data-wlv><button data-v="list" class="${v === "list" ? "on" : ""}">List</button><button data-v="map" class="${v === "map" ? "on" : ""}">Map</button></span><span class="small dim">Map = your names on the Leaders-map axes, coloured by list</span></div>`);
+  box.querySelector("[data-wlv]").onclick = e => { const b = e.target.closest("button"); if (!b) return; try { store.set("adrb.wlView", b.dataset.v); } catch (x) {} renderWatch(); };
+  if (v !== "map") return;
+  box.querySelectorAll(".wlg").forEach(c => c.classList.add("hidden"));
+  const hint = S.has.hist ? "" : `<div class="empty">${ECS_NONE}.</div>`;
+  box.querySelector(".wlvw").insertAdjacentHTML("afterend", `<div class="card g1" id="wlMapCard"><div class="hd"><h2>My lists on the map</h2><span class="sub" id="wlMapSub"></span></div>${hint}<div style="padding:0 8px 6px"><svg id="wlMapPlot" class="plot" height="460"></svg></div><div class="legend" id="wlMapLegend"></div><div class="bd" id="wlMapLists"></div></div>`);
+  if (!S.has.hist) return;
+  const {all} = mlDraw($("wlMapPlot"), $("wlMapLegend"), $("wlMapSub"));
+  const by = {}; all.forEach(e => (by[e.src] = by[e.src] || []).push(e));
+  $("wlMapLists").innerHTML = Object.entries(by).map(([k, L]) => `<div style="margin:3px 0"><b class="small"><span class="sw" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${ML_C[k]};margin-right:5px"></span>${esc(ML_N[k] || k)}</b> ${L.map(e => tkChip(e.r, ecsName(e.r))).join("")}</div>`).join("");
+};
+document.head.insertAdjacentHTML("beforeend", `<style>
+.wlvw{display:flex;align-items:center;gap:10px;margin:0 0 10px}
+.wlvw .lbl{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+</style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   SECTOR DRILL-IN (23 Oct; Eugene: "when i click on sector strength today … the Ranked universe sits way below … i
+   practically have to scroll a lot just to see each sector's ranked universe" → "ok follow your proposal"). Display only.
+   - Clicking a sector (or a group in "Groups moving together") on Stocks today still filters the Ranked universe as before,
+     and now also opens that sector's top names right under the sector / group cards: ticker, RS, today's move (ADR),
+     Entry Check location, last, planned entry, group — the same rows the table shows (filter bar applied), best RS first.
+   - "Show all N in the Ranked universe ↓" scrolls to the filtered table; "Clear" removes the filter; while a sector or
+     group is picked, a "↑ Back to sectors" pill sits at the bottom right of Stocks today.
+   Storage: none.
+   ===================================================================== */
+const SD_TOP = 15;
+function sdHTML(){
+  const F = T.today && T.today.F; if (!F || !(F.sector || F.group)) return "";
+  const key = F.sector ? "sector" : "group", name = F.sector || F.group;
+  const rows = (CFG.inclETF ? S.rows : S.stocks).filter(gOK).filter(r => r[key] === name).sort((a, b) => (b.rs ?? -1) - (a.rs ?? -1) || (a.sym < b.sym ? -1 : 1));
+  const tr = r => { const x = ecX(r);
+    return `<tr data-sym="${esc(r.sym)}"><td class="l sym">${esc(r.sym)}</td><td>${rsBadge(r.rs)}</td><td class="${cls(r.move)}">${r.move == null ? "—" : sg(r.move)}</td><td class="l">${ecsHTML(r)}</td><td>${f2(r.last)}</td><td>${x && fin(x.entry) ? f2(x.entry) : "—"}</td><td class="l small">${esc(key === "sector" ? (r.group || "") : (r.sector || ""))}</td></tr>`; };
+  return `<div class="hd"><h2>${esc(name)}</h2><span class="sub">${key === "sector" ? "sector" : "group"} · top ${Math.min(SD_TOP, rows.length)} of ${rows.length} by RS · filter bar applied</span><span class="spacer"></span>
+      <button class="btn sm" data-sdall>Show all ${rows.length} in the Ranked universe ↓</button><button class="btn sm" data-sdclr>Clear</button></div>
+    <div class="bd">${rows.length ? `<div class="tscroll" style="max-height:none"><table class="mini sdt"><thead><tr><th class="l">Ticker</th><th>RS</th><th title="Today's move in ADR">Today</th><th class="l">Location</th><th>Last</th><th title="Entry Check's planned entry">Entry</th><th class="l">${key === "sector" ? "Group" : "Sector"}</th></tr></thead><tbody>${rows.slice(0, SD_TOP).map(tr).join("")}</tbody></table></div>` : `<div class="empty">No names in view for it — check the filter bar.</div>`}</div>`;
+}
+const _renderTodaySD = renderToday;
+renderToday = function(){
+  _renderTodaySD();
+  const anchor = $("sectors") && $("sectors").closest(".g2e"); if (!anchor) return;
+  let c = $("secDrill"); if (!c) { anchor.insertAdjacentHTML("afterend", `<div class="card g1" id="secDrill"></div>`); c = $("secDrill"); }
+  const h = sdHTML(); c.innerHTML = h; c.classList.toggle("hidden", !h);
+  let pill = $("sdBack"); if (!pill) { document.body.insertAdjacentHTML("beforeend", `<button class="btn sm" id="sdBack">↑ Back to sectors</button>`); pill = $("sdBack"); pill.onclick = () => { const a = $("sectors"); if (a) a.closest(".card").scrollIntoView({behavior: "smooth", block: "start"}); }; }
+  pill.classList.toggle("on", !!h);
+};
+document.addEventListener("click", e => {
+  if (e.target.closest("[data-sdall]")) { const t = $("tblToday"); if (t) t.scrollIntoView({behavior: "smooth", block: "start"}); return; }
+  if (e.target.closest("[data-sdclr]")) { if (T.today) { T.today.F.sector = ""; T.today.F.group = ""; renderToday(); } return; }
+  const t = e.target.closest("#secDrill tr[data-sym]"); if (t && S.rowBySym && S.rowBySym.has(t.dataset.sym)) openDrawer(t.dataset.sym);
+});
+// the pill only on Stocks today
+const _renderTabSD = renderTab;
+renderTab = function(t){ _renderTabSD(t); const p = $("sdBack"); if (p) p.classList.toggle("tabon", t === "today"); };
+document.head.insertAdjacentHTML("beforeend", `<style>
+#sdBack{position:fixed;right:22px;bottom:22px;z-index:40;display:none;box-shadow:var(--shadow)}
+#sdBack.on.tabon{display:inline-block}
+.sdt td{vertical-align:middle}
+</style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   WEEKLY RS HIGH → PULLBACK SCREEN (23 Oct; Eugene: "a screener that can scan for RS NEW highs / rs new highs before
+   price on the weekly chart … within the last 8 weeks with price pulling back to the 9/21d ema or 8w ema. basically buying
+   RS on weakness but based on weekly charts" · "yes 52 week lookback"). Display only — a preset on Screens plus a flag; it
+   never changes a list, a rank, a state or the plan. Trading a name off it is an EXPERIMENT under Doctrine Lean v2.0 §6
+   (grade C until the log has evidence) — that's Eugene's rule, not enforced here.
+   Rule (written here, recomputed separately in tools/board-display-1023-test.js):
+   - Weekly bars from the stored daily bars (+ today's bar): week = Monday-keyed (weekKey); weekly close = the week's last
+     close, weekly high = its highest high. Weekly RS line = weekly close ÷ the benchmark's close on that same day
+     (benchmark = the board's RS-line benchmark, HIST.bSym).
+   - Weekly RS new high = the weekly RS line at its highest of the last 52 weeks (that week included; 52 weekly values
+     needed). Type RSNH when the weekly high is also at its 52-week high, else "before price" (BP).
+   - Signal = a weekly RS new high in any of the last 8 weeks (this week = 0 weeks ago).
+   - Pullback now = today's low within pbNear ADR of the daily 9 EMA, the daily 21 EMA or the weekly 8 EMA (an undercut is
+     allowed down to −pbUnder ADR on the last price — the same tolerance as the existing RS-high pullback screens), with
+     price above the daily 50 SMA (daily lines) or above the 30-week SMA (weekly line; 200-day when the file lacks it).
+     rsKeep (Settings) applies as on the daily screens: the weekly RS line within rsKeep % of its 52-week high.
+   Fields: r.wrs = {sig: {type, ago, date} | null, near: [...], lo9, lo21, loW8, last9, last21, lastW8}, r.pbW8 (boolean).
+   Storage: none.
+   ===================================================================== */
+const WRS = {LB: 52, WIN: 8};
+function wrsCalc(s, b, n){
+  const W = []; let cur = null;
+  for (let t = 0; t < n; t++) {
+    if (!isFinite(s.c[t])) continue; const wk = HIST.wkAll[t];
+    if (!cur || cur.wk !== wk) { cur = {wk, c: s.c[t], h: isFinite(s.h[t]) ? s.h[t] : s.c[t], bc: b.c[t], t}; W.push(cur); }
+    else { cur.c = s.c[t]; cur.bc = b.c[t]; cur.t = t; if (isFinite(s.h[t]) && s.h[t] > cur.h) cur.h = s.h[t]; }
+  }
+  const rs = W.map(w => w.c > 0 && w.bc > 0 ? w.c / w.bc : NaN), m = W.length;
+  const at = i => { if (i - WRS.LB + 1 < 0) return null; let mr = -Infinity, mh = -Infinity;
+    for (let k = i - WRS.LB + 1; k <= i; k++) { if (rs[k] > mr) mr = rs[k]; if (W[k].h > mh) mh = W[k].h; }
+    if (!isFinite(rs[i]) || !(mr > 0)) return null;
+    return {hi: rs[i] >= mr * (1 - 1e-9), px: W[i].h >= mh * (1 - 1e-9), mr}; };
+  let sig = null;
+  for (let i = m - 1; i >= Math.max(0, m - WRS.WIN); i--) { const d = at(i); if (d && d.hi) { sig = {type: d.px ? "RSNH" : "BP", ago: m - 1 - i, date: HIST.dates[W[i].t] || (HIST.today && HIST.today.date) || ""}; break; } }
+  const now = at(m - 1), rsOff = now && isFinite(rs[m - 1]) ? (rs[m - 1] / now.mr - 1) * 100 : null;
+  return {sig, rsOff, w8: emaOf(W.map(w => w.c), 8)};
+}
+const _applyHistWRS = applyHist;
+applyHist = function(){
+  _applyHistWRS();
+  S.rows.forEach(r => { r.wrs = null; r.pbW8 = false; });
+  if (!S.has.hist || !HIST.bSym) return;
+  const tb = HIST.today, bS = series(HIST.bSym, tb); if (!bS) return;
+  for (const r of S.rows) {
+    if (r.etf || r.sym === HIST.bSym || !r.rsl) continue;
+    const s = series(r.sym, tb); if (!s) continue;
+    const g = wrsCalc(s, bS, s.n);
+    const P = tb ? r.rsl.lastNow : r.last, lo = tb ? r.rsl.lowNow : (S.mode === "rth" && r.lo1d != null ? r.lo1d : r.rsl.lowNow);
+    const adrD = r.adr && P ? P * r.adr / 100 : null;
+    const L9 = r.e9 ?? emaOf(s.c, 9), L21 = r.e21 ?? r.rsl.e21h, LW = g.w8;
+    const d = (L) => adrD && L ? {lo: (lo - L) / adrD, last: (P - L) / adrD} : null;
+    const a9 = d(L9), a21 = d(L21), aW = d(LW);
+    const touched = a => !!a && a.lo <= CFG.pbNear && a.last >= -CFG.pbUnder;
+    const keep = !CFG.rsKeep || (g.rsOff != null && g.rsOff >= -CFG.rsKeep);
+    const aboveW30 = r.s30w != null ? P > r.s30w : r.a200;
+    const near = [touched(a9) && r.a50 !== false ? "daily 9 EMA" : null, touched(a21) && r.a50 !== false ? "daily 21 EMA" : null, touched(aW) && aboveW30 !== false ? "weekly 8 EMA" : null].filter(Boolean);
+    r.wrs = {sig: g.sig, rsOff: g.rsOff, near, lo9: a9 && a9.lo, lo21: a21 && a21.lo, loW8: aW && aW.lo, last9: a9 && a9.last, last21: a21 && a21.last, lastW8: aW && aW.last, w8: LW};
+    r.pbW8 = !!(g.sig && keep && near.length);
+  }
+};
+SCREENS.push({k: "wrspb", t: "Weekly RS high → pullback (8 weeks)", d: () => `The weekly RS line (weekly close ÷ ${esc(HIST.bSym || CFG.bench)}) made a 52-week high — with price, or before price — in the last 8 weeks, and today's low is within ${CFG.pbNear} ADR of the daily 9 EMA, the daily 21 EMA or the weekly 8 EMA (undercut allowed to −${CFG.pbUnder} ADR on the last price), above the daily 50 SMA (daily lines) or the 30-week SMA (weekly line)${CFG.rsKeep ? `, weekly RS line within ${CFG.rsKeep}% of its high` : ""}. Buying RS on weakness off the weekly chart — a watch screen; the Entry Check still decides.`, need: ["hist"], f: r => !!r.pbW8, note: () => histNote()});
+if (typeof SC_CAT !== "undefined") SC_CAT.wrspb = "Leadership";
+const _flagsWRS = flagsHTML;
+flagsHTML = function(r){ const w = r && r.wrs; return _flagsWRS(r) + (w && w.sig && r.pbW8 ? ` <span class="flag" title="Weekly RS line at a 52-week high ${w.sig.ago ? w.sig.ago + " week" + (w.sig.ago > 1 ? "s" : "") + " ago" : "this week"} (${w.sig.type === "RSNH" ? "with price" : "before price"}); pulling back to the ${esc(w.near.join(" / "))}">wRS ${w.sig.type === "BP" ? "BP " : ""}${w.sig.ago}w → ${esc(w.near.map(x => x.replace("daily ", "").replace("weekly 8 EMA", "8w")).join("/"))}</span>` : ""); };
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   TAPE READ HISTORY (23 Oct; Eugene: "add only whats worth borrowing, especially the cheap and easy ones that already use
+   existing data" · "add the tape read additions if they are simple"). Display only — the tape read's lines, bucket and
+   its use as the size fallback when MAP isn't set (s61Reg) are unchanged. The buffer band was NOT added: it would move
+   the bucket, which feeds sizing when MAP's call isn't set — that's a trading-logic change for Eugene to rule on.
+   - Each breadth file's read is stored once per breadth date: bucket, score and each line's colour.
+   - Under the tape read: "Day N in this read" (stored days in a row with the same bucket, and since when), what changed
+     since the last stored day (bucket and each line that changed colour), and a strip of the last 60 stored days.
+   - Forward only: the breadth file is a one-day TradingView snapshot, so nothing before the first stored day can be
+     rebuilt. Days without a breadth file are simply missing from the strip.
+   Storage: localStorage adrb.tapeHist = [{d, b, sc, l: {key: "g"|"a"|"r"|null}}], oldest first, last 400 kept.
+   ===================================================================== */
+const TH = {MAX: 400, SHOW: 60};
+const thGet = () => { try { const a = store.get("adrb.tapeHist", []); return Array.isArray(a) ? a : []; } catch (e) { return []; } };
+function thRecord(tp){
+  if (!tp || !tp.asOf) return;
+  const a = thGet(), o = {d: String(tp.asOf).slice(0, 10), b: tp.bucket, sc: tp.score, l: Object.fromEntries(tp.lines.map(x => [x.k, x.st || null]))};
+  if (!/^\d{4}-\d\d-\d\d$/.test(o.d)) return;
+  const i = a.findIndex(x => x.d === o.d);
+  if (i >= 0) { if (JSON.stringify(a[i]) === JSON.stringify(o)) return; a[i] = o; } else { a.push(o); a.sort((x, y) => x.d < y.d ? -1 : x.d > y.d ? 1 : 0); }
+  try { store.set("adrb.tapeHist", a.slice(-TH.MAX)); } catch (e) {}
+}
+// days in a row (stored) with today's bucket, the previous stored day and what changed
+function thSummary(tp){
+  const a = thGet().filter(x => x.d <= String(tp.asOf).slice(0, 10)); if (!a.length) return null;
+  const cur = a[a.length - 1]; let n = 0, since = cur.d;
+  for (let i = a.length - 1; i >= 0 && a[i].b === cur.b; i--) { n++; since = a[i].d; }
+  const prev = a.length > 1 ? a[a.length - 2] : null, W = {g: "healthy", a: "caution", r: "weak", null: "no data"};
+  const ch = !prev ? [] : [prev.b !== cur.b ? `Overall ${prev.b} → ${cur.b}` : null,
+    ...tp.lines.filter(x => (prev.l[x.k] ?? null) !== (cur.l[x.k] ?? null)).map(x => `${x.name}: ${W[prev.l[x.k] ?? null]} → ${W[cur.l[x.k] ?? null]}`)].filter(Boolean);
+  return {cur, n, since, prev, ch, strip: a.slice(-TH.SHOW)};
+}
+function thHTML(tp){
+  const m = thSummary(tp); if (!m) return "";
+  const C = {Supportive: "var(--good)", Mixed: "var(--warn)", Defensive: "var(--crit)"};
+  const cells = m.strip.map(x => `<i style="background:${C[x.b] || "var(--ink-3)"}" title="${esc(jnDay(x.d))}: ${esc(x.b)} (score ${x.sc > 0 ? "+" : ""}${x.sc})"></i>`).join("");
+  return `<div class="thx"><div><b>Day ${m.n} in ${esc(m.cur.b)}</b> <span class="small dim">stored days in a row, since ${esc(jnDay(m.since))}</span></div>
+    <div class="small">${!m.prev ? "First stored day — the history builds from here, one breadth file a day." : m.ch.length ? `Since ${esc(jnDay(m.prev.d))}: ${m.ch.map(esc).join(" · ")}` : `Nothing changed since ${esc(jnDay(m.prev.d))}.`}</div>
+    <div class="thstrip" title="One square per stored breadth file, oldest left · green Supportive · amber Mixed · red Defensive">${cells}</div></div>`;
+}
+const _computeTapeTH = computeTape;
+computeTape = function(){ const tp = _computeTapeTH(); try { thRecord(tp); } catch (e) {} return tp; };
+const _renderTapeTH = renderTape;
+renderTape = function(el, detail){
+  _renderTapeTH(el, detail);
+  if (!el || !S.tape) return;
+  const v = el.querySelector(".verdict"); if (!v || v.querySelector(".thx")) return;
+  let h = ""; try { h = thHTML(S.tape); } catch (e) { console.warn("tape history", e); }
+  if (h) v.insertAdjacentHTML("beforeend", h);
+};
+document.head.insertAdjacentHTML("beforeend", `<style>
+.thx{margin-top:8px;display:flex;flex-direction:column;gap:3px}
+.thstrip{display:flex;flex-wrap:wrap;gap:2px;margin-top:2px}
+.thstrip i{width:9px;height:9px;border-radius:2px;display:inline-block}
+</style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   BUY-ZONE LENS (23 Oct; Eugene: "use 0-0.5adr above 9ema and 21 ema respectively. then apply similar rules to when we
+   refer to the 9/21 band" → "ok display only"). DISPLAY ONLY — Spec 6.1 check 6 (band top = max of the daily 9 and 21 EMA)
+   is unchanged: the Entry Check lists, sizes, the Daily Plan, the Board log's lists and scoring, and MAP's feed all keep
+   reading the band. The lens changes where a name is SHOWN: location words on Discover pages, the Watchlist, the Leaders
+   map (across axis), the "vs line" column, the sector drill-in and screens that read the location.
+   Lens rules (Eugene's words; the trend / under-21 read is the same in every lens):
+   - 9/21 band (default): as Entry Check.
+   - 21 EMA: in buy zone = close 0 to +0.5 ADR over the daily 21 EMA; too high = more than +0.5 ADR over it. Under the 21 is
+     out, so there is no "just under" or "deep under". Planned entry shown = the 21 EMA.
+   - 9 EMA: in buy zone = close 0 to +0.5 ADR over the daily 9 EMA (and over the 21); too high = more than +0.5 over the 9;
+     just under = up to 0.25 ADR under the 9 (over the 21); deep under = further under the 9. Planned entry shown = the 9
+     EMA (just under: yesterday's 9 EMA, as Entry Check).
+   Evidence for the 60-session review: every name the Board log freezes also gets its location under the 21 EMA and the
+   9 EMA lens (f.s61.loc21 / f.s61.loc9; the log's CSV is unchanged).
+   Storage: localStorage adrb.zLens ("band" | "e21" | "e9").
+   ===================================================================== */
+const ZL = {modes: {band: "9/21 band", e21: "21 EMA", e9: "9 EMA"}, memo: new WeakMap()};
+const zlMode = () => { try { const v = store.get("adrb.zLens", "band"); return ZL.modes[v] ? v : "band"; } catch (e) { return "band"; } };
+// the location of one Entry Check read under a lens (x = s61Calc's object; never modified)
+function zlLoc(x, m){
+  if (m === "band" || !x || !x.loc) return {loc: x && x.loc, dB: x && x.dB, entry: x && x.entry};
+  if (x.loc === "BELOW21") return {loc: "BELOW21", dB: NaN, entry: NaN};
+  const L = m === "e21" ? x.e21 : x.e9, d = fin(x.D) && x.D > 0 ? (x.close - L) / x.D : NaN;
+  if (!fin(d)) return {loc: null, dB: NaN, entry: NaN};
+  const loc = d > S61.above ? "ABOVE" : d >= 0 ? "L1" : m === "e21" ? "L1" : d >= S61.l2 ? "L2" : "L3";   // e21: close > the 21 here, so d ≥ 0
+  return {loc, dB: d, entry: loc === "L2" ? x.e9p : L};
+}
+function zlX(x){
+  const m = zlMode(); if (m === "band") return x;
+  let c = ZL.memo.get(x); if (c && c.zlMode === m) return c;
+  c = Object.assign({}, x, zlLoc(x, m), {zlMode: m}); ZL.memo.set(x, c); return c;
+}
+const _ecsOfZL = ecsOf;
+ecsOf = function(r){
+  if (zlMode() === "band") return _ecsOfZL(r);
+  const x = ecX(r); if (!x || !x.loc) return null;
+  return x.loc === "L1" ? 1 : x.loc === "L2" ? 2 : x.loc === "ABOVE" ? 3 : x.loc === "L3" ? 4 : x.close > x.e21 ? 6 : 5;
+};
+// location names / descriptions carry the lens
+const ZL_ECS0 = ECS.map(s => ({name: s.name, d: s.d}));
+function zlNames(){
+  const m = zlMode(), tag = m === "band" ? "" : ` · ${ZL.modes[m]}`;
+  ECS.forEach((s, i) => { s.name = ZL_ECS0[i].name + (s.k <= 4 ? tag : ""); s.d = ZL_ECS0[i].d; });
+  if (m === "e21") { ECSK[1].d = "0 to +0.5 ADR over the daily 21 EMA (21 EMA lens). The Setups lists still use the 9/21 band."; ECSK[3].d = "More than 0.5 ADR over the daily 21 EMA (21 EMA lens)."; ECSK[2].d = ECSK[4].d = "Not used under the 21 EMA lens — under the 21 is out."; }
+  if (m === "e9") { ECSK[1].d = "0 to +0.5 ADR over the daily 9 EMA, above the 21 (9 EMA lens). The Setups lists still use the 9/21 band."; ECSK[3].d = "More than 0.5 ADR over the daily 9 EMA (9 EMA lens)."; ECSK[2].d = "Up to 0.25 ADR under the daily 9 EMA, above the 21 (9 EMA lens)."; ECSK[4].d = "More than 0.25 ADR under the daily 9 EMA (9 EMA lens)."; }
+}
+const _COLSZL = COLS;
+COLS = function(){ const C = _COLSZL(), m = zlMode(); if (m !== "band") { const z = C.find(c => c.k === "zx"); if (z) { z.l = `vs ${ZL.modes[m]}`; z.h = `ADR from the daily ${ZL.modes[m]} (buy-zone lens) · buy zone 0 to +0.5`; } } return C; };
+// words on the maps
+function zlText(){
+  const m = zlMode(); if (m === "band") return;
+  const to = `the daily ${ZL.modes[m]}`;
+  ["mapLede"].forEach(id => { const el = $(id); if (el && el.innerHTML.includes("the top of the daily 9/21 band")) el.innerHTML = el.innerHTML.replace(/the top of the daily 9\/21 band/g, to).replace("0 = on the band", "0 = on the line") + ` <b>Buy-zone lens: ${ZL.modes[m]}</b> — the Setups lists still use the 9/21 band.`; });
+  document.querySelectorAll("#mapPlot text, #wlMapPlot text").forEach(t => { if (t.textContent.includes("the top of the daily 9/21 band")) t.textContent = t.textContent.replace("the top of the daily 9/21 band", to); });
+}
+function zlChipPaint(){
+  const lb = document.querySelector(".livebox"); if (!lb) return;
+  let c = $("zlChip");
+  if (!c) {
+    lb.insertAdjacentHTML("beforebegin", `<label class="chip" id="zlChip" title="Display only: where names are SHOWN (Discover pages, Watchlist, maps). The Entry Check lists, sizes, the Board log and MAP's feed always use the 9/21 band (Spec 6.1).">Buy zone <select id="zlSel">${Object.entries(ZL.modes).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select></label>`);
+    c = $("zlChip"); $("zlSel").onchange = e => { try { store.set("adrb.zLens", e.target.value); } catch (x) {} zlNames(); renderAll(); };
+  }
+  $("zlSel").value = zlMode(); c.classList.toggle("warn", zlMode() !== "band");
+}
+const _renderAllZL = renderAll;
+renderAll = function(){ zlNames(); _renderAllZL(); try { zlChipPaint(); zlText(); zlPlanNote(); } catch (e) { console.warn("lens", e); } };
+const _renderTabZL = renderTab;
+renderTab = function(t){ _renderTabZL(t); try { zlText(); zlPlanNote(); } catch (e) {} };
+function zlPlanNote(){
+  const t = $("tab-plan"); if (!t) return; let n = $("zlNote"); const m = zlMode();
+  if (m === "band") { if (n) n.remove(); return; }
+  if (!n) { t.insertAdjacentHTML("afterbegin", `<div class="note small" id="zlNote"></div>`); n = $("zlNote"); }
+  n.innerHTML = `<b>Buy-zone lens: ${ZL.modes[m]}.</b> Locations on Discover pages, the Watchlist and the maps follow it. These Entry Check lists, sizes, the Board log and MAP's feed stay on the 9/21 band (Spec 6.1) — the lens is a view, not a rule.`;
+}
+// evidence: the frozen facts carry both lens locations
+const _jnF61ZL = jnF61;
+jnF61 = function(r){ const f = _jnF61ZL(r); if (!f) return f; let s = null; try { s = s61Of(r); } catch (e) {} if (s && s.x) { f.loc21 = zlLoc(s.x, "e21").loc || null; f.loc9 = zlLoc(s.x, "e9").loc || null; } return f; };
+document.head.insertAdjacentHTML("beforeend", `<style>#zlChip select{font-size:12px;margin-left:4px} #zlChip.warn{background:var(--warn-soft)}</style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   ABSOLUTE STRENGTH — AS (23 Oct; Eugene: "an absolute strength by index, similar to what we have with RS … as a toggle"
+   → "AS: agree a column/toggle and a count"). Display only — RS, the Entry Check, lists, sizes and the plan are unchanged;
+   AS is never a gate or a tie-break.
+   Why not a 1–99 rank: the board's RS already ranks each stock's OWN returns against the rest of the file, so a ranked AS
+   would sort exactly like RS. AS stays on an absolute scale instead:
+   - AS = the weighted mean of the stock's own % returns over the RS composite's timeframes (S.compHz) with the RS weights
+     (weightsNow; equal weights when none are set) — no ranking, no benchmark. 0 = flat. ETFs the same, in their own %.
+   - Column "AS" beside RS in the Ranked universe and every board table (sortable); "AS" beside RS on the Watchlist.
+   - Filter-bar criterion "AS above {p}%" (Strength) — the toggle: switch it on and every page, map and screen shows only
+     names that are actually rising.
+   - Today → Environment: "RS leaders actually rising: X of Y" = RS ≥ 75 (the Entry Check RS floor) with AS > 0.
+   Fields: r.as (number | null).   Storage: none (the criterion lives in the filter bar's saved settings like the others).
+   ===================================================================== */
+function asOf(r){
+  const w = weightsNow(), hz = S.compHz || [], useW = hz.some(h => (w[h.k] || 0) > 0);
+  let s = 0, ws = 0;
+  for (const h of hz) { const v = h.get(r), wt = useW ? (w[h.k] || 0) : 1; if (v == null || !isFinite(v) || !wt) continue; s += v * wt; ws += wt; }
+  return ws ? s / ws : null;
+}
+const _computeAllAS = computeAll;
+computeAll = function(...a){ const o = _computeAllAS.apply(this, a); try { (S.rows || []).forEach(r => { r.as = asOf(r); }); } catch (e) { console.warn("AS", e); } return o; };
+const asTxt = v => v == null || !isFinite(v) ? "—" : (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(1) + "%";
+const asHTML = v => `<span class="${v == null ? "dim" : v > 0 ? "pos" : "neg"}" title="Absolute strength: the stock's own return over your RS timeframes, weighted like RS — not ranked, no benchmark. Above 0 = actually rising.">${asTxt(v)}</span>`;
+const _COLSAS = COLS;
+COLS = function(){
+  const C = _COLSAS(), i = C.findIndex(c => c.k === "rs");
+  if (i >= 0 && !C.some(c => c.k === "as")) C.splice(i + 1, 0, {k: "as", l: "AS", h: "own return %, RS timeframes + weights", g: "id", v: r => r.as ?? null, f: r => asHTML(r.as)});
+  return C;
+};
+const _asCrit = {k: "asMin", cat: "Strength", l: "AS above {p}% (actually rising)", type: "num", p: 0, step: 1, t: (r, p) => r.as != null && r.as > p};
+CRIT.push(_asCrit); CRIT_BY[_asCrit.k] = _asCrit;
+// Today: how many RS leaders are actually going up
+function asCount(){ const L = S.stocks.filter(r => (r.rs ?? -1) >= S61.rsMin); return {n: L.length, up: L.filter(r => r.as != null && r.as > 0).length, top: L.filter(r => r.as != null && r.as > 0).sort((a, b) => b.as - a.as).slice(0, 8)}; }
+const _envHTMLAS = envHTML;
+envHTML = function(){
+  const h = _envHTMLAS(); if (!S.snap || !S.stocks.length) return h;
+  const c = asCount(), f = c.n ? c.up / c.n : 0;
+  const line = `<div class="ascount small" style="margin-top:6px"><b>RS leaders actually rising: ${c.up} of ${c.n}</b> <span class="dim">(RS ≥ ${S61.rsMin} with AS above 0)</span>${c.n ? ` · <span class="${f >= .6 ? "pos" : f < .35 ? "neg" : ""}">${Math.round(f * 100)}%</span>` : ""}${c.top.length ? ` · strongest: ${c.top.map(r => tkChip(r, asTxt(r.as))).join("")}` : ""}${c.n && f < .35 ? ` <span class="small">— most leaders are only falling slower; the long opportunity set is thin.</span>` : ""}</div>`;
+  const i = h.lastIndexOf("</div>"); return i < 0 ? h + line : h.slice(0, i) + line + h.slice(i);
+};
+// Watchlist: AS beside RS
+function asPaint(){
+  document.querySelectorAll("table.wlt:not([data-as])").forEach(t => {
+    const hs = [...t.querySelectorAll("thead th")], i = hs.findIndex(h => h.textContent.trim() === "RS"); t.dataset.as = 1; if (i < 0) return;
+    hs[i].insertAdjacentHTML("afterend", `<th title="Absolute strength — own return %, RS timeframes and weights">AS</th>`);
+    t.querySelectorAll("tbody tr[data-sym]").forEach(tr => { const cs = tr.querySelector("td[colspan]"); if (cs) { cs.colSpan += 1; return; } if (tr.children.length !== hs.length && tr.children.length !== hs.length + 2) return;
+      const r = S.rowBySym && S.rowBySym.get(tr.dataset.sym); tr.children[i].insertAdjacentHTML("afterend", `<td>${asHTML(r ? r.as : null)}</td>`); });
+  });
+}
+{ let tm = null; new MutationObserver(() => { clearTimeout(tm); tm = setTimeout(() => { try { asPaint(); } catch (e) { console.warn("AS", e); } }, 40); }).observe(document.body, {childList: true, subtree: true}); }
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   INVERSE ETFs THROUGH THE LONG ENTRY CHECK (23 Oct; Eugene: "shorts go with inverse etf. there must be somewhere where it
+   surfaces"). WATCH ONLY / EXPERIMENT — display only: nothing here enters the Entry Check lists, the Daily Plan, New
+   Discoveries, the Board log or MAP's feed. Trading one is an EXPERIMENT under Doctrine Lean v2.0 §6 (grade C, 0.10% NLV);
+   long inverse wrappers are allowed as instruments (§3) but "flagged, not yet ruled on" (§10) — Eugene's ruling, not the
+   board's. A backtest brief is in docs/board-changes-2026-10-23.md.
+   Universe: a core list of index / sector inverse funds (INV.core) + every short-direction fund on the Massive leveraged
+   list (LEV, when loaded), as long as the stored history has the fund. Fund not in your files → its last stored close.
+   The ETF version of the Entry Check (the stock checks that apply to a fund; same maths, same bars — s61Calc via dssOf):
+   - 1 Liquidity: 20-session mean $ volume ≥ $100M (no market cap or price floor — a fund has neither in the stock sense).
+   - 2 Data: no single-bar break > 40% in 50 bars (a reverse split the split list missed shows here).
+   - 3 Trend: above a rising daily 21 EMA, rising daily 50 SMA, rising weekly 10-week line.
+   - 5 Stretch: ≤ 4 ADR above the daily 50 SMA (or a gap reset).
+   - 6 Location: the 9/21 band, as Entry Check (the buy-zone lens changes only the words shown).
+   - Not applicable to a fund: 4 Stage (needs a row), 7 Group, 8 RS rank (inverse funds are left out of RS), 9 Earnings.
+   Call: all of 1, 2, 3, 5 pass + in the buy zone → "In buy zone — passes the ETF check"; just under → "Just under";
+   too high / deep under → "Not yet"; any fail → "Out — N. reason".
+   Surfaces: Setups card "Inverse ETFs — the long Entry Check on the short side" (right after the Entry Check lists) and a
+   line on Today → Environment ("Inverse ETFs in the buy zone: …").
+   Storage: none.
+   ===================================================================== */
+const INV = {core: ["SH", "PSQ", "DOG", "RWM", "SDS", "QID", "DXD", "TWM", "SPXU", "SPXS", "SQQQ", "SDOW", "TZA", "SRTY", "SOXS", "TECS", "FAZ", "SKF", "LABD", "DRV", "ERY", "DUG", "YANG", "FXP", "WEBS", "HIBS", "SPDN", "SARK", "REW", "SRS", "EFZ", "EUM"]};
+const invMoney = v => !fin(v) ? "—" : v >= 1e9 ? "$" + (v / 1e9).toFixed(1) + "B" : "$" + Math.round(v / 1e6) + "M";
+function invUniverse(){
+  const set = new Map();
+  INV.core.forEach(t => set.set(t, {t, src: "index / sector", lev: null}));
+  if (typeof LEV !== "undefined" && LEV.list && LEV.list.list) for (const [t, lev, sh, cands, idx] of LEV.list.list) if (sh && !set.has(t)) set.set(t, {t, src: idx ? "index / sector" : cands ? "single stock" : "other", lev});
+  return [...set.values()].filter(o => HIST.idx && HIST.idx.has(o.t));
+}
+function invCheck(o){
+  const d = dssOf(o.t), x = d && d.s61; if (!x) return null;
+  const ck = [
+    [1, "Liquidity", fin(x.dv20) && x.dv20 >= S61.liqDv, fin(x.dv20) ? `${invMoney(x.dv20)} a day (needs $100M)` : "no volume"],
+    [2, "Bad data", !x.brk, `biggest 1-day move ${fin(x.brkMax) ? x.brkMax.toFixed(0) : "?"}% (limit 40%)`],
+    [3, "Trend", !!x.structOk, `daily 21 EMA ${x.k3e21 ? "✓" : "✗"} · daily 50 SMA ${x.k3s50 ? "✓" : "✗"} · weekly 10-week ${x.k3wk ? "✓" : "✗"}`],
+    [5, "Stretch", !!x.extOk, fin(x.ext) ? `${sg(x.ext, 2)} ADR over the 50 SMA (limit 4)` : "—"]];
+  const fail = ck.find(c => !c[2]), lx = typeof zlX === "function" ? zlX(x) : x;
+  const call = fail ? {k: 5, t: `Out — ${fail[0]}. ${fail[1]}`, c: "bad"} : x.loc === "L1" ? {k: 1, t: "In buy zone — passes the ETF check", c: "go"} : x.loc === "L2" ? {k: 2, t: "Just under buy zone", c: "zone"} : {k: 3, t: "Not yet", c: "wait"};
+  const r = S.rowBySym && S.rowBySym.get(o.t), c = x.close;
+  return {o, x, lx, ck, fail, call, r, last: r && r.last != null ? r.last : c, asOfTxt: r ? "" : ` (close ${x.to})`, adrPct: fin(x.D) && c ? x.D / c * 100 : NaN};
+}
+function invRows(){ return invUniverse().map(invCheck).filter(Boolean).sort((a, b) => a.call.k - b.call.k || (b.x.dv20 || 0) - (a.x.dv20 || 0)); }
+function invCardHTML(){
+  if (!S.has.hist) return `<div class="hd"><h2>Inverse ETFs — the long Entry Check on the short side</h2></div><div class="bd"><div class="empty">Needs the stored price history.</div></div>`;
+  const R = invRows(), live = R.filter(v => v.call.k <= 2);
+  const tr = v => `<tr data-sym="${esc(v.o.t)}"><td class="l sym">${esc(v.o.t)}${v.o.lev ? ` <span class="small dim">${v.o.lev}x</span>` : ""}</td><td class="l small">${esc(v.o.src)}</td><td class="l"><span class="pill ${v.call.c}">${esc(v.call.t)}</span></td>
+    <td>${f2(v.last)}<span class="small dim">${esc(v.asOfTxt)}</span></td><td>${fin(v.x.entry) ? f2(v.x.entry) : "—"}</td><td>${fin(v.lx.dB) ? sg(v.lx.dB, 2) : "—"}</td><td>${fin(v.adrPct) ? v.adrPct.toFixed(1) + "%" : "—"}</td><td>${invMoney(v.x.dv20)}</td>
+    <td class="l small">${v.ck.map(c => `<span class="${c[2] ? "" : "neg"}" title="${esc(c[3])}">${c[0]}. ${esc(c[1])} ${c[2] ? "✓" : "✗"}</span>`).join(" · ")}</td></tr>`;
+  const shown = R.filter(v => v.call.k <= 3 || v.ck[0][2]);   // the ones worth a look, plus anything liquid
+  return `<div class="hd"><h2>Inverse ETFs — the long Entry Check on the short side</h2><span class="sub">experiment · watch only · not in the lists, the plan, the log or MAP's feed · ${live.length} in or just under the buy zone of ${R.length} funds with stored bars</span></div>
+    <div class="bd"><div class="small" style="margin-bottom:6px">A falling market shows up here as inverse funds in their own uptrend. Same checks as a stock where they apply to a fund — 1 liquidity (by $ volume), 2 data, 3 trend, 5 stretch, 6 location — and the same 30-min trigger on the chart. Stage, group, RS and earnings don't apply. <b>Trading one is an experiment: grade C (0.10% NLV) until the log has evidence</b> (Doctrine Lean v2.0 §6); leveraged funds are sized off their own stop (§3).</div>
+    ${shown.length ? `<div class="tscroll" style="max-height:460px"><table class="mini invt"><thead><tr><th class="l">Fund</th><th class="l">Kind</th><th class="l">ETF check</th><th>Last</th><th title="Planned entry (Entry Check)">Entry</th><th title="ADR from the buy-zone line">vs line</th><th>ADR</th><th title="20-session mean $ volume">$ vol</th><th class="l">Checks</th></tr></thead><tbody>${shown.map(tr).join("")}</tbody></table></div>` : `<div class="empty">None of the inverse funds in the stored history is liquid enough.</div>`}</div>`;
+}
+const _renderS61CardINV = renderS61Card;
+renderS61Card = function(){
+  _renderS61CardINV();
+  const a = $("s61Box"); if (!a) return;
+  let c = $("invBox"); if (!c) { a.insertAdjacentHTML("afterend", `<div class="card g1" id="invBox"></div>`); c = $("invBox"); }
+  if (a.nextElementSibling !== c) a.after(c);   // the Setups layout can move the Entry Check card — keep this one right under it
+  try { c.innerHTML = invCardHTML(); } catch (e) { console.warn("inverse ETFs", e); c.innerHTML = ""; }
+};
+document.addEventListener("click", e => { const t = e.target.closest("#invBox tr[data-sym]"); if (t && S.rowBySym && S.rowBySym.has(t.dataset.sym)) openDrawer(t.dataset.sym); });
+const _envHTMLINV = envHTML;
+envHTML = function(){
+  const h = _envHTMLINV(); if (!S.snap || !S.has.hist) return h;
+  let R = []; try { R = invRows().filter(v => v.call.k <= 2); } catch (e) {}
+  const line = `<div class="small" style="margin-top:4px"><b>Inverse ETFs in or just under the buy zone:</b> ${R.length ? R.map(v => `<span class="tk" data-sym="${esc(v.o.t)}" title="${esc(v.call.t)}">${esc(v.o.t)}</span>`).join("") : "<span class='dim'>none</span>"} <a data-goto="plan" style="cursor:pointer">Setups →</a> <span class="dim">(experiment, watch only)</span></div>`;
+  const i = h.lastIndexOf("</div>"); return i < 0 ? h + line : h.slice(0, i) + line + h.slice(i);
+};
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   SESSION DATE FROM NEW YORK TIME + CLOCK (23 Oct; Eugene: "the board always give me a plan day which is for the next
+   trading session although i give the map for today's date … it assumes im in the US time zone, whereas im based in
+   singapore … add a world clock or some kind of clock ability" and "once i paste import today's map … the Today tab
+   doesnt update and still keeps the previous day's map tickers"). Tracking / display — no trading rule changes.
+   Root cause: TradingView names an export with YOUR local date. Saved in Singapore at Fri 05:30 (= Thu 17:30 in New
+   York, after Thursday's close) it is named "…-10-23", so the board read it as Friday's session and built the plan for
+   Monday; Thursday's file had already built Friday's plan, which Today kept showing with the old MAP lists.
+   - The file's session date (snap.asOf) is now the New York date at the moment the file was saved, whenever the name's
+     date is just your local date at that moment (TradingView's stamp) and New York's date differs. Files whose name
+     carries another date (renamed, synthetic, older exports) keep the name's date. snap.nameDate keeps the original.
+     The breadth file is read the same way (its save time is now kept with the saved copy).
+   - Clock chip in the top bar: New York and your time side by side, and the board's plan day; its tooltip says how the
+     file's date was read. Updates every 30 s.
+   - After a MAP import the Daily Plan records straight away (not on the next file) and Today repaints.
+   Storage: snap.nameDate, S.breadth.raw.mtime (inside the saved files, as before).
+   ===================================================================== */
+const TZ = {local: (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "local"; } catch (e) { return "local"; } })()};
+// the US session date a file stands for: the NY date at save time when its name carries the local date of that moment
+function tzSessDate(nameDate, mtime){
+  if (!mtime || !nameDate) return null;
+  const local = fmtDate(new Date(mtime)), ny = etParts(mtime).d;
+  return nameDate === local && ny !== nameDate ? ny : null;
+}
+const _buildSnapTZ = buildSnap;
+buildSnap = function(list, base){
+  const s = _buildSnapTZ(list, base);
+  try {
+    const named = list.map(f => ({d: (String(f.name).match(/(\d{4}-\d{2}-\d{2})/) || [])[1], m: f.mtime})).filter(o => o.d);
+    const last = named[named.length - 1];
+    if (last && s.asOf === last.d) { const ny = tzSessDate(last.d, last.m); if (ny) { s.nameDate = last.d; s.asOf = ny; s.tzNote = `named ${last.d} (your date) · saved ${tzWhen(last.m)} → the ${jnDay(ny)} New York session`; } }
+  } catch (e) { console.warn("session date", e); }
+  return s;
+};
+const _setBreadthTZ = setBreadth;
+setBreadth = function(f){
+  _setBreadthTZ(f);
+  try { if (S.breadth && f.mtime) { if (S.breadth.raw) S.breadth.raw.mtime = f.mtime; const ny = tzSessDate(S.breadth.asOf, f.mtime); if (ny) { S.breadth.nameDate = S.breadth.asOf; S.breadth.asOf = ny; } } } catch (e) {}
+};
+function tzWhen(ms){
+  const ny = etParts(ms), loc = new Date(ms), dn = d => new Date(d + "T12:00:00Z").toLocaleDateString("en-GB", {weekday: "short", timeZone: "UTC"});
+  return `${dn(ny.d)} ${hhmm(ny.m)} New York = ${loc.toLocaleDateString("en-GB", {weekday: "short"})} ${String(loc.getHours()).padStart(2, "0")}:${String(loc.getMinutes()).padStart(2, "0")} your time`;
+}
+function tzChipPaint(){
+  const lb = document.querySelector(".livebox"); if (!lb) return;
+  let c = $("tzChip");
+  if (!c) { lb.insertAdjacentHTML("beforebegin", `<span class="chip" id="tzChip"></span>`); c = $("tzChip"); }
+  const now = JN.now(), ny = etParts(now), loc = new Date(now), p = curPlanDay();
+  const dn = d => new Date(d + "T12:00:00Z").toLocaleDateString("en-GB", {weekday: "short", timeZone: "UTC"});
+  const open = isSess(ny.d) && ny.m >= 570 && ny.m < 960, pre = isSess(ny.d) && ny.m < 570;
+  c.innerHTML = `NY <b>${dn(ny.d)} ${hhmm(ny.m)}</b> · you <b>${loc.toLocaleDateString("en-GB", {weekday: "short"})} ${String(loc.getHours()).padStart(2, "0")}:${String(loc.getMinutes()).padStart(2, "0")}</b> · plan day <b>${esc(jnDay(p))}</b>`;
+  c.title = `New York ${ny.d} ${hhmm(ny.m)} (${open ? "regular session open" : pre ? "before the open" : "market closed"}) · your clock (${TZ.local}) ${fmtDate(loc)}. The plan day is the US session the board is preparing for — MAP's block should carry that date.${S.snap && S.snap.tzNote ? ` Stock file: ${S.snap.tzNote}.` : S.snap ? ` Stock file dated ${S.snap.asOf} from its name.` : ""}`;
+  c.classList.toggle("on", open);
+}
+setInterval(() => { try { tzChipPaint(); } catch (e) {} }, 30000);
+const _renderAllTZ = renderAll;
+renderAll = function(){ _renderAllTZ(); try { tzChipPaint(); if (S.snap && S.snap.tzNote && $("fileInfo") && !$("fileInfo").textContent.includes("New York session")) $("fileInfo").textContent += ` (${S.snap.tzNote})`; } catch (e) { console.warn("clock", e); } };
+// a MAP import records the Daily Plan now and repaints Today
+const _mapApplyTZ = mapApply;
+mapApply = function(P){ const ok = _mapApplyTZ(P); if (ok) { try { jnSoon(); } catch (e) {} } return ok; };
 </script>
 <script id="mobile-js">
 "use strict";
