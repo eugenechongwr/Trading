@@ -10044,12 +10044,14 @@ function dpanelHTML(r){
   const when = closed ? "Market closed — plan only." : early ? "Before 10:00 ET — no entry yet (the earliest trigger is the close of the 10:00 30-min candle)." : "Enter only on the 30-min trigger — confirm it on the chart (Massive is 15 minutes delayed).";
   const fill = st.fill ?? (S.snap && S.snap.live && !pm ? r.last : x && fin(x.entry) ? +x.entry.toFixed(2) : null), stop = st.stop ?? (!pm && r.lo1d != null ? r.lo1d : null);
   const R1 = fill != null && stop != null && fill > stop ? fill - stop : null, adrU = R1 != null && D ? R1 / D : null;
-  const pct = s ? s.size.final[1] : null, sh = R1 && CFG.nlv && pct ? Math.floor(CFG.nlv * pct / 100 / R1) : null;
   const auto = x && fill != null ? x.resAbove(fill) : null, res = st.res ?? (auto && fin(auto.fr) ? +auto.fr.toFixed(2) : null), resFrom = st.res != null ? "yours" : auto ? (fin(auto.fr) ? "board estimate" : "nothing above (NH)") : null;
   const room = R1 && res != null ? (res - fill) / R1 : null;
+  // 23 Oct (Eugene: "i just size it smaller - C grade"; Unified Spec 6.1 amended 23 Oct): under 2R of room from the fill → grade C
+  const u2 = room != null && room < 2, gr = s ? (u2 ? GRADES.find(g => g[0] === "C") : s.size.final) : null;
+  const pct = gr ? gr[1] : null, sh = R1 && CFG.nlv && pct ? Math.floor(CFG.nlv * pct / 100 / R1) : null;
   const inp = (k, v, ph) => `<input type="number" step="0.01" data-dpn="${k}" data-s="${esc(r.sym)}" value="${v ?? ""}" placeholder="${ph}">`;
-  const risk = `${inp("fill", st.fill, fill != null ? f2(fill) : "fill")} fill − ${inp("stop", st.stop, stop != null ? f2(stop) : "LOD")} day-low stop = ${R1 != null ? `<b>$${f2(R1)}</b> / share · <b class="${adrU > cap + 1e-9 ? "neg" : ""}">${adrU != null ? adrU.toFixed(2) + " ADR" : "—"}</b>${adrU > cap + 1e-9 ? ` <span class="neg">over the 0.6 ADR cap — no entry</span>` : ""}${sh != null ? ` · ${sh.toLocaleString()} sh = <b>$${Math.round(sh * R1).toLocaleString()}</b> at risk (${s.size.final[0]} ${pct}% NLV)` : CFG.nlv ? "" : " · add NLV in Settings for shares"}` : `<span class="dim">type your planned fill and the low of day at the trigger</span>`}`;
-  const reward = `${inp("res", st.res, res != null ? f2(res) : "resistance")} first resistance${resFrom ? ` <span class="small dim">(${esc(resFrom)}${resFrom === "board estimate" ? " — check the chart" : ""})</span>` : ""} → ${room != null ? `room <b class="${room >= 2 ? "pos" : "neg"}">${room.toFixed(2)}R</b>${room < 2 ? ` <span class="dim">under 2R — information only</span>` : ""}` : `<span class="dim">needs fill, stop and resistance</span>`}`;
+  const risk = `${inp("fill", st.fill, fill != null ? f2(fill) : "fill")} fill − ${inp("stop", st.stop, stop != null ? f2(stop) : "LOD")} day-low stop = ${R1 != null ? `<b>$${f2(R1)}</b> / share · <b class="${adrU > cap + 1e-9 ? "neg" : ""}">${adrU != null ? adrU.toFixed(2) + " ADR" : "—"}</b>${adrU > cap + 1e-9 ? ` <span class="neg">over the 0.6 ADR cap — no entry</span>` : ""}${sh != null ? ` · ${sh.toLocaleString()} sh = <b>$${Math.round(sh * R1).toLocaleString()}</b> at risk (${gr[0]} ${pct}% NLV${u2 ? ` — under 2R of room, sized at C` : ""})` : CFG.nlv ? "" : " · add NLV in Settings for shares"}` : `<span class="dim">type your planned fill and the low of day at the trigger</span>`}`;
+  const reward = `${inp("res", st.res, res != null ? f2(res) : "resistance")} first resistance${resFrom ? ` <span class="small dim">(${esc(resFrom)}${resFrom === "board estimate" ? " — check the chart" : ""})</span>` : ""} → ${room != null ? `room <b class="${room >= 2 ? "pos" : "neg"}">${room.toFixed(2)}R</b>${room < 2 ? ` <span class="neg">under 2R — size at grade C (ruled 23 Oct)</span>` : ""}` : `<span class="dim">needs fill, stop and resistance</span>`}`;
   return `<div class="dpn"><div class="dpn-h"><b>Trade calculator</b><span class="small dim">your numbers, for planning — nothing here is logged</span>${inPlan ? `<span class="small">in today's Daily Plan: ${esc(DP_L[inPlan.l])} #${inPlan.k}</span>` : ""}</div>
     <div class="q"><b>When</b><div>${when}</div></div>
     <div class="q"><b>Risk</b><div>${risk}</div></div>
@@ -11102,8 +11104,12 @@ const TZ = {local: (() => { try { return Intl.DateTimeFormat().resolvedOptions()
 // the US session date a file stands for: the NY date at save time when its name carries the local date of that moment
 function tzSessDate(nameDate, mtime){
   if (!mtime || !nameDate) return null;
-  const local = fmtDate(new Date(mtime)), ny = etParts(mtime).d;
-  return nameDate === local && ny !== nameDate ? ny : null;
+  if (nameDate !== fmtDate(new Date(mtime))) return null;          // the name isn't the save-day stamp: keep it
+  const ny = etParts(mtime);
+  // 23 Oct (second fix, Eugene: "my files are saved basis singapore time"): the session the data covers = the last New
+  // York session that had OPENED when the file was saved — saved Fri 03:02 New York (15:02 Singapore) = Thursday's close
+  const sess = isSess(ny.d) && ny.m >= 570 ? ny.d : prevSess(ny.d);
+  return {sess, nyD: ny.d, nyM: ny.m};
 }
 const _buildSnapTZ = buildSnap;
 buildSnap = function(list, base){
@@ -11111,14 +11117,22 @@ buildSnap = function(list, base){
   try {
     const named = list.map(f => ({d: (String(f.name).match(/(\d{4}-\d{2}-\d{2})/) || [])[1], m: f.mtime})).filter(o => o.d);
     const last = named[named.length - 1];
-    if (last && s.asOf === last.d) { const ny = tzSessDate(last.d, last.m); if (ny) { s.nameDate = last.d; s.asOf = ny; s.tzNote = `named ${last.d} (your date) · saved ${tzWhen(last.m)} → the ${jnDay(ny)} New York session`; } }
+    if (last && s.asOf === last.d) { const t = tzSessDate(last.d, last.m); if (t) { s.nameDate = last.d; s.tzSave = t; if (t.sess !== s.asOf) s.asOf = t.sess; s.tzNote = `named ${last.d} (your date) · saved ${tzWhen(last.m)} → data to the ${jnDay(t.sess)} close`; } }
   } catch (e) { console.warn("session date", e); }
   return s;
 };
 const _setBreadthTZ = setBreadth;
 setBreadth = function(f){
   _setBreadthTZ(f);
-  try { if (S.breadth && f.mtime) { if (S.breadth.raw) S.breadth.raw.mtime = f.mtime; const ny = tzSessDate(S.breadth.asOf, f.mtime); if (ny) { S.breadth.nameDate = S.breadth.asOf; S.breadth.asOf = ny; } } } catch (e) {}
+  try { if (S.breadth && f.mtime) { if (S.breadth.raw) S.breadth.raw.mtime = f.mtime; const t = tzSessDate(S.breadth.asOf, f.mtime); if (t && t.sess !== S.breadth.asOf) { S.breadth.nameDate = S.breadth.asOf; S.breadth.asOf = t.sess; } } } catch (e) {}
+};
+// a premarket file saved before the open plans for that same New York day (its asOf is now the prior session's close)
+const _jnDaysTZ = jnDays;
+jnDays = function(){
+  const r = _jnDaysTZ(); const t = S.snap && S.snap.tzSave;
+  if (!r || !t || S.mode !== "pm") return r;
+  const p = isSess(t.nyD) && t.nyM < 570 ? t.nyD : nextSess(t.nyD);
+  return {p, d0: prevSess(p)};
 };
 function tzWhen(ms){
   const ny = etParts(ms), loc = new Date(ms), dn = d => new Date(d + "T12:00:00Z").toLocaleDateString("en-GB", {weekday: "short", timeZone: "UTC"});
@@ -11137,8 +11151,23 @@ function tzChipPaint(){
 }
 setInterval(() => { try { tzChipPaint(); } catch (e) {} }, 30000);
 const _renderAllTZ = renderAll;
-renderAll = function(){ _renderAllTZ(); try { tzChipPaint(); if (S.snap && S.snap.tzNote && $("fileInfo") && !$("fileInfo").textContent.includes("New York session")) $("fileInfo").textContent += ` (${S.snap.tzNote})`; } catch (e) { console.warn("clock", e); } };
+renderAll = function(){ _renderAllTZ(); try { tzChipPaint(); if (S.snap && S.snap.tzNote && $("fileInfo") && !$("fileInfo").textContent.includes("(your date)")) $("fileInfo").textContent += ` (${S.snap.tzNote})`; } catch (e) { console.warn("clock", e); } };
 // a MAP import records the Daily Plan now and repaints Today
+// Clean-up for lists made before this fix: a plan day p can't have a record before p's previous session OPENED (its
+// after-close or premarket file doesn't exist yet). Such records came from a Singapore-dated file read a session late
+// (e.g. a Mon 26 Oct list built on Fri 23 Oct from Thursday's close). They are removed once, kept in adrb.jnHealed.
+function nyMs(d, m){ for (const off of [4, 5]) { const t = Date.parse(`${d}T${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}:00Z`) + off * 3600e3, e = etParts(t); if (e.d === d && e.m === m) return t; } return NaN; }
+function jnHeal(){
+  const bad = Object.keys(JN.recs).filter(p => { const r = JN.recs[p]; if (!r || !r.at || !isSess(p)) return false; const o = nyMs(prevSess(p), 570); return isFinite(o) && r.at < o; });
+  if (!bad.length) return 0;
+  try { const kept = store.get("adrb.jnHealed", {}) || {}; bad.forEach(p => { kept[p] = JN.recs[p]; }); store.set("adrb.jnHealed", kept); } catch (e) {}
+  bad.forEach(p => { delete JN.recs[p]; }); jnSave();
+  toast(`Removed the list${bad.length > 1 ? "s" : ""} for ${bad.map(jnDay).join(", ")} — made from a Singapore-dated file a session too early (kept a copy)`);
+  return bad.length;
+}
+JN.ready.then(() => { try { if (jnHeal() && S.snap) renderAll(); } catch (e) { console.warn("log clean-up", e); } });
+const _jnMergeTZ = jnMerge;
+jnMerge = function(inc){ const n = _jnMergeTZ(inc); try { jnHeal(); } catch (e) {} return n; };
 const _mapApplyTZ = mapApply;
 mapApply = function(P){ const ok = _mapApplyTZ(P); if (ok) { try { jnSoon(); } catch (e) {} } return ok; };
 </script>
