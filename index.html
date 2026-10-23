@@ -10985,5 +10985,90 @@ jnMerge = function(inc){ const n = _jnMergeTZ(inc); try { jnHeal(); } catch (e) 
 const _mapApplyTZ = mapApply;
 mapApply = function(P){ const ok = _mapApplyTZ(P); if (ok) { try { jnSoon(); } catch (e) {} } return ok; };
 </script>
+<script>
+"use strict";
+/* =====================================================================
+   INVERSE ETF CHART PANEL (23 Oct; Eugene: "clicking on the inverse etf tickers in the setups tab, doesnt open any
+   embedded chart on the right. i need that to work"). DISPLAY ONLY — no rule, number, list, log or feed changes.
+   Root cause: the ticker panel is built from a row of your stock / ETF file, and most inverse funds on the Setups card
+   "Inverse ETFs — the long Entry Check on the short side" come from the stored price history only, so openDrawer found
+   no row and returned without opening anything.
+   Now: a fund with stored bars but no row opens a fund panel on the right — the chart (Board chart from the stored daily
+   bars, weekly from them, 30m / 5m from Massive; or the TradingView embed — same switch and intervals as the ticker
+   panel), Open in TradingView, Copy symbol, the ETF check call, the four checks with their numbers, and the card's
+   numbers (last, planned entry, vs line, ADR, $ volume). Board chart levels: buy zone lo / hi + planned entry, from the
+   same Entry Check read the card shows (invCheck). Works from the Setups card and the Today → Environment line.
+   Names that do have a row open the normal ticker panel, as before.
+   Storage: none new (reads adrb.chartEng like the ticker panel).
+   ===================================================================== */
+const INVP = {sym: null};
+// a stand-in row for the chart code only (never added to S.rows, so nothing is ranked, listed or logged)
+function invStub(v){ const e = S.etfs && S.etfs.find(x => x.sym === v.o.t); return {sym: v.o.t, desc: e ? e.desc : "", exch: e ? e.exch : "", etf: true, lev: true, adrD: v.x.D, _inv: v}; }
+function invPanel(sym, iv){
+  if (!S.has || !S.has.hist || typeof invUniverse !== "function") return false;
+  const o = invUniverse().find(u => u.t === sym); if (!o) return false;
+  const v = invCheck(o); if (!v) return false;
+  const r = invStub(v), x = v.x, dr = $("drawer"), cur = iv || CFG.tvInterval;
+  INVP.sym = sym; INVP.r = r; INVP.iv = cur;
+  if (typeof WSI !== "undefined") { WSI.hist = []; WSI.cur = null; }
+  if (typeof POP !== "undefined") POP.drSym = null;
+  dr.classList.remove("tp"); dr.classList.add("invp"); dr.dataset.inv = sym;
+  const kv = (k, val) => `<div><span>${k}</span><b>${val}</b></div>`;
+  dr.innerHTML = `<button class="btn x" id="dx">✕</button>
+    <h3>${esc(sym)} <span class="pill ${v.call.c}">${esc(v.call.t)}</span></h3>
+    <div class="small">Inverse fund · ${esc(o.src)}${o.lev ? ` · ${o.lev}x` : ""}${r.desc ? " · " + esc(r.desc) : ""} · not in your stock or ETF file — chart and checks from the stored price history${v.asOfTxt ? esc(v.asOfTxt) : ""}</div>
+    <div style="margin:8px 0;display:flex;gap:6px;flex-wrap:wrap;align-items:center"><a class="btn sm primary" href="${tvURL(r)}" target="_blank" rel="noopener" style="text-decoration:none">Open in TradingView ↗</a>
+      <button class="btn sm" id="dCopy">Copy symbol</button><span class="seg" id="tvInt">${["5", "30", "D", "W"].map(i => `<button data-i="${i}" class="${i === cur ? "on" : ""}">${i === "D" ? "Daily" : i === "W" ? "Weekly" : i + "m"}</button>`).join("")}</span>
+      <span class="seg" id="chEng" title="Board chart = Lightweight Charts with the buy zone and planned entry drawn on it (stored bars; 30m / 5m from Massive). TradingView = the embedded TradingView chart."><button data-ceng="board" class="${bcEng() === "board" ? "on" : ""}">Board chart</button><button data-ceng="tv" class="${bcEng() === "tv" ? "on" : ""}">TradingView</button></span></div>
+    <div id="tvbox">Loading chart…</div>
+    <div class="small">Embedded chart shows 9/21 EMA + 50/200 SMA but not your saved layout or indicators. The button above opens your account.</div>
+    <div class="kv">${kv("Last", f2(v.last) + `<span class="small dim">${esc(v.asOfTxt)}</span>`)}${kv("Planned entry", fin(x.entry) ? f2(x.entry) : "—")}${kv("vs buy-zone line", fin(v.lx.dB) ? sg(v.lx.dB, 2) + " ADR" : "—")}${kv("ADR", fin(v.adrPct) ? v.adrPct.toFixed(1) + "%" + (fin(x.D) ? " · $" + f2(x.D) : "") : "—")}${kv("$ volume (20 sessions)", invMoney(x.dv20))}${kv("Data to", esc(x.to || "—"))}</div>
+    <h4 style="margin:12px 0 2px;font-size:12px">ETF version of the Entry Check</h4>
+    ${v.ck.map(c => `<div class="chk"><span class="ic ${c[2] ? "ok" : "no"}">${c[2] ? "✓" : "✕"}</span><div>${c[0]}. ${esc(c[1])}<div class="d">${esc(c[3])}</div></div><div class="small"></div></div>`).join("")}
+    <div class="chk"><span class="ic na">·</span><div>6. Location<div class="d">${esc(typeof ecLoc === "function" ? ecLoc(v.lx) : x.loc || "—")}${fin(v.lx.dB) ? ` · ${sg(v.lx.dB, 2)} ADR from the buy-zone line` : ""} — same rule as Entry Check; the trigger is the same 30-min close on the chart</div></div><div class="small"></div></div>
+    <div class="note"><b>Experiment · watch only.</b> Not in the lists, the plan, the log or MAP's feed. Stage, group, RS and earnings don't apply to a fund. Trading one is an experiment: grade C (0.10% NLV) until the log has evidence; leveraged funds are sized off their own stop.</div>`;
+  dr.classList.add("open");
+  $("dx").onclick = closeDrawer;
+  $("dCopy").onclick = () => copyText(tvSym(r), "Copied " + tvSym(r));
+  $("tvInt").onclick = e => { const b = e.target.closest("button"); if (!b) return; $("tvInt").querySelectorAll("button").forEach(q => q.classList.toggle("on", q === b)); INVP.iv = b.dataset.i; mountTV(r, b.dataset.i); };
+  $("chEng").onclick = e => { const b = e.target.closest("[data-ceng]"); if (!b) return; store.set("adrb.chartEng", b.dataset.ceng); bcRemount(); };
+  bcCaption();
+  mountTV(r, cur);
+  return true;
+}
+const invpOpen = () => { const dr = $("drawer"); return dr.classList.contains("open") && !!dr.dataset.inv && INVP.sym === dr.dataset.inv; };
+// a fund with no file row → the fund panel; anything else → the ticker panel as before
+const _openDrawerINVP = openDrawer;
+openDrawer = function(sym){
+  if (!(S.rowBySym && S.rowBySym.has(sym))) { try { if (invPanel(sym)) return; } catch (e) { console.warn("inverse panel", e); } }
+  const dr = $("drawer"); dr.classList.remove("invp"); delete dr.dataset.inv;
+  return _openDrawerINVP(sym);
+};
+const _groupDrawerINVP = groupDrawer;
+groupDrawer = function(name){ const dr = $("drawer"); dr.classList.remove("invp"); delete dr.dataset.inv; return _groupDrawerINVP(name); };
+// the Setups card's own click handler only opens names with a row; this one covers the rest
+document.addEventListener("click", e => { const t = e.target.closest("#invBox tr[data-sym]"); if (t && !(S.rowBySym && S.rowBySym.has(t.dataset.sym))) openDrawer(t.dataset.sym); });
+// the chart switch (here or in Settings) redraws the fund's chart, not the last stock's
+const _bcRemountINVP = bcRemount;
+bcRemount = function(){
+  if (!invpOpen()) return _bcRemountINVP();
+  mountTV(INVP.r, INVP.iv);
+  document.querySelectorAll("[data-ceng]").forEach(q => q.classList.toggle("on", q.dataset.ceng === bcEng()));
+  bcCaption();
+};
+// Board chart levels for a fund: the buy zone and planned entry from the card's Entry Check read
+const _bcModelINVP = bcModel;
+bcModel = async function(r, iv){
+  const M = await _bcModelINVP(r, iv);
+  try {
+    const v = r && r._inv; if (!v || !M || M.err || !bcShow().l61) return M;
+    const x = v.x, D = x.D, L = (price, color, title, style) => { if (fin(price)) M.lines.push({price, color, title, lineStyle: style}); };
+    if (fin(x.bandTop) && fin(D)) { L(x.bandTop, BC_STYLE.zone, "buy zone lo", 1); L(x.bandTop + S61.above * D, BC_STYLE.zone, "buy zone hi", 1); }
+    if (fin(x.entry)) L(x.entry, BC_STYLE.entry, x.loc === "L2" ? "planned entry (prior 9E)" : "planned entry", 0);
+  } catch (e) {}
+  return M;
+};
+document.head.insertAdjacentHTML("beforeend", `<style>html.ws #drawer.invp{width:min(980px,96vw)} #drawer.invp #tvbox{height:min(58vh,560px)}</style>`);
+</script>
 </body>
 </html>
