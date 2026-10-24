@@ -11404,6 +11404,466 @@ bcCaption = function(){
   el.textContent += " Labels right of the last candle: ENT planned entry (also the bottom of the shaded buy zone when they match; ENT 9E = yesterday's daily 9 EMA) · BZ hi / BZ lo top / bottom of the buy zone · MAX max entry (day low + 0.6 ADR) · R1 first resistance · STOP day low · ↑ / ↓ = off the visible price range. \"Classic labels\" brings back the full-width lines.";
 };
 </script>
+<script>
+"use strict";
+/* =====================================================================
+   ETF SETUPS + ETF FEED (24 Oct). TRADING LOGIC — a new, separate list for ETFs; nothing in the stock rules moves.
+   Eugene (handover "Deep Space Board — ETF feed + ETF Setups panel", 24 Oct, and in chat): "ETF feed agree", "yes agree
+   with $20M", "code 7: ok, just make sure its no longer filtering out tickers to flow into the board. information is
+   fine", "we go with your pick" (= a separate ETF feed CSV for MAP, the stock feed untouched), and one fixed ETF list —
+   his MAP ETF watchlist + the 40 map funds it lacked — as the board's ETF file instead of a TradingView discovery screener.
+   Rules as written in Notion "Deep Space ETF Universe & ETF Setups Spec (v1.0, 24 Oct 2026)" §2–3, §5 (page edited
+   24 Oct 2026 06:32 UTC) and MAP v4.4 S5.4 (24 Oct 2026). Daily-close basis, the stored Massive bars (dssBars: split-
+   adjusted, today's bar from the file when it is newer — the same bars as Entry Check).
+   - Universe: the spec's 125-fund group map (ETFU, from deep_space_etf_universe.csv, 24 Oct) ∩ your ETF file. A fund in
+     the file but not on the map = "Unmapped": shown and flagged, never a candidate. A map fund missing from the file is
+     named. No ETF file loaded → the whole map from the stored bars, said on the card.
+   - ETF floor (separate from stocks; no ADR% filter): 20-session mean of close × volume ≥ $20M AND the lowest of those
+     20 days ≥ $5M AND close ≥ $10. Close × volume stands in for volume × VWAP (the stored bars carry no VWAP; Eugene: "vwap:
+     thats fine").
+   - ADR% = 20-session mean of (high / low − 1); ADR $ = ADR% × close. Distances below are in ADR $.
+   - RS5 / RS20 = the fund's % return over 5 / 20 of its sessions minus RSP's % return over the same dates (pp).
+   - Long: structure close > 50 SMA and 21 EMA > 50 SMA; RS5 > 0 or RS20 > 0.
+       Ready = close above the 9 and the 21 EMA, within 0.5 ADR of the nearer one, ≤ 4 ADR above the 50 SMA.
+       Reclaim watch = close at or under the 9 EMA by ≤ 0.25 ADR and above the 21 EMA (no stretch test — not in the spec).
+   - Short (mirror): structure close < 50 SMA and 21 EMA < 50 SMA; RS5 < 0 and RS20 < 0.
+       Ready = close under the 9 and the 21 EMA, within 0.5 ADR of the nearer one, ≤ 4 ADR below the 50 SMA.
+       Reclaim watch = close at or over the 9 EMA by ≤ 0.25 ADR and below the 21 EMA.
+   - Vehicle: long = the ETF (or a leveraged long wrapper from the map that passes $20M, or calls). Short = an inverse
+     wrapper from the map whose 20-session mean $ volume is ≥ $20M (the most traded one), else puts. Wrapper $ volume =
+     the Entry Check's own dv20, so the card and the ETF Entry Check agree. Puts are always available (Eugene: "short
+     vehicle, thats fine … i dont need that additional filter"), so no short drops out for want of a vehicle.
+   - One per group per side: Ready first, then the strongest RS20 (longs) / the weakest (shorts). Cap 3: best long, best
+     short, then the next by size of RS20 (Ready before Reclaim watch). Ranked on RS20, never RS5. Grade C, EXPERIMENT.
+   - Not done here (MAP's job): event flags (a top-10 holding reporting, EIA / CPI / FOMC), the 20-episode kill switch,
+     the live spread test (the row just says "Spread check at entry: ≤ 0.10% of price and ≤ 5% of 1R").
+   Also changes, by ruling:
+   - ETF Entry Check (inverse funds) check 1 Liquidity: $20M a day instead of the stock $100M (spec §2: "Leveraged /
+     inverse wrappers used as vehicles must also pass the $20M floor"; Eugene: "yes agree with $20M"). invCheck wrapped;
+     the inverse universe gains the map's inverse wrappers (invUniverse wrapped) so every short row's vehicle opens its
+     chart panel.
+   - MAP import reads E lines: "E1 TICKER long|short | why: … | vehicle: … | now: … | catalyst: …" (E1–E3, MAP v4.4 paste
+     block); JSON: "E": [{t, side, why, vehicle, now, catalyst}]. A / B / D / H lines parse exactly as before (mapParse
+     wrapped; E lines are taken out before the old parser runs). Stored inside the existing adrb.mapImp record as `E`.
+   - Codes 7 / 8: checked — nothing on the board filters a ticker on them (Entry Check's own fail codes stop at 6; the
+     legacy v4.1 "P1 Fail Code" stays an information column in the feed and the compare card, as Eugene allowed).
+   Surfaces: Watchlist → card "ETF setups — long and short" after Ready to trade (#esBox); Data check → card "ETF feed"
+   (#esFeedBox, button "Export ETF feed CSV" → deep-space-etf-feed-<session>.csv, headers ES_FEED_H — MAP's S5.4 input,
+   a NEW interface: add columns at the end only). Self-check: every mapped fund's status and the top 3 recomputed by a
+   separate short copy of the rules (esSelf), shown with the board's other checks.
+   Never changes: stock rows, states, RS ranks, Entry Check lists, sizes, the Daily Plan, the Board log, the Deep Space
+   feed CSV, the Decision-log CSV, settings keys. Storage: none new (the E lines ride in adrb.mapImp).
+   ===================================================================== */
+const ES = {avg: 20e6, worst: 5e6, px: 10, wrap: 20e6, near: 0.5, ext: 4, reclaim: 0.25, cap: 3, bench: "RSP", adrN: 20, liqN: 20, minBars: 60};
+// the spec's group map: Ticker,Group,Leveraged long,Inverse (wrappers split on "/")
+const ETFU_RAW = `
+SPY,Index - US large cap,SPXL/UPRO,SPXS/SPXU/SH
+QQQ,Index - US large cap,TQQQ,SQQQ/PSQ
+DIA,Index - US large cap,UDOW,SDOW/DOG
+RSP,Index - US large cap,,
+MAGS,Index - US large cap,,
+IWM,Index - US small/mid,TNA,TZA/RWM
+MDY,Index - US small/mid,,
+XLK,Sector - Technology,TECL,TECS
+XLF,Sector - Financials,FAS,FAZ
+XLE,Sector - Energy,ERX,ERY
+XLV,Sector - Health care,,
+XLI,Sector - Industrials,,
+XLY,Sector - Discretionary,,
+XLP,Sector - Staples,,
+XLU,Sector - Utilities,,
+XLB,Sector - Materials,,
+XLRE,Sector - Real estate,,
+XLC,Sector - Communication,,
+SMH,Semiconductors,SOXL/USD,SOXS
+SOXX,Semiconductors,SOXL,SOXS
+XSD,Semiconductors,,
+PSI,Semiconductors,,
+DRAM,Memory,RAM,
+IGV,Software,,
+WCLD,Software,,
+SKYY,Software,,
+CIBR,Cybersecurity,,
+BUG,Cybersecurity,,
+HACK,Cybersecurity,,
+FDN,Internet,,
+ARKK,Innovation / high beta,,
+AIQ,AI and data centres,,
+ARTY,AI and data centres,,
+CHAT,AI and data centres,,
+BOTZ,AI and data centres,,
+DTCR,AI and data centres,,
+AIPO,AI power,,
+LYTE,Photonics,,
+EUV,Photonics,,
+QTUM,Quantum,,
+XBI,Biotech,LABU,LABD
+IBB,Biotech,,
+ARKG,Genomics,,
+IHI,Medical devices,,
+IHF,Health care providers,,
+PPH,Pharma,,
+IHE,Pharma,,
+KRE,Banks,DPST,
+KBWB,Banks,,
+KBE,Banks,,
+IAT,Banks,,
+KIE,Insurance,,
+ITA,Aerospace and defence,,
+XAR,Aerospace and defence,,
+PPA,Aerospace and defence,,
+SHLD,Aerospace and defence,,
+NASA,Space,,
+GRID,Grid and infrastructure,,
+PAVE,Grid and infrastructure,,
+AIRR,Grid and infrastructure,,
+IFRA,Grid and infrastructure,,
+IYT,Transports,,
+JETS,Airlines,,
+XOP,Oil and gas producers,GUSH,DRIP
+IEO,Oil and gas producers,,
+OIH,Oil services,,
+CRAK,Refiners,,
+FCG,Natural gas equities,,
+AMLP,Midstream,,
+MLPX,Midstream,,
+URA,Uranium and nuclear,,
+URNM,Uranium and nuclear,,
+NLR,Uranium and nuclear,,
+TAN,Solar and clean energy,,
+ICLN,Solar and clean energy,,
+XME,Metals and mining,,
+PICK,Metals and mining,,
+COPX,Copper,,
+REMX,Rare earths,,
+GDX,Gold miners,NUGT,DUST
+GDXJ,Gold miners,JNUG,
+RING,Gold miners,,
+SIL,Silver miners,,
+SILJ,Silver miners,,
+XRT,Retail,,
+ITB,Homebuilders,NAIL,
+XHB,Homebuilders,NAIL,
+MSOS,Cannabis,,
+GLD,Commodity - Gold,UGL,GLL
+IAU,Commodity - Gold,,
+SLV,Commodity - Silver,AGQ,ZSL
+PPLT,Commodity - Platinum,,
+USO,Commodity - Crude oil,UCO,SCO
+BNO,Commodity - Crude oil,,
+UNG,Commodity - Natural gas,BOIL,KOLD
+DBA,Commodity - Agriculture,,
+DBC,Commodity - Broad,,
+BWET,Commodity - Tanker freight,,
+IBIT,Crypto - Bitcoin,BITX/BITU,SBIT/BITI
+ETHA,Crypto - Ether,ETHU,
+BSOL,Crypto - Solana,SOLT,
+WGMI,Crypto - Bitcoin miners,,
+EWY,Country - Korea,KORU,
+EWT,Country - Taiwan,,
+EWJ,Country - Japan,,
+INDA,Country - India,,
+FXI,Country - China,YINN,YANG
+MCHI,Country - China,,
+ASHR,Country - China,,
+KWEB,Country - China internet,,
+CQQQ,Country - China internet,,
+EWH,Country - Hong Kong,,
+EWS,Country - Singapore,,
+EWA,Country - Australia,,
+EWZ,Country - Brazil,,
+EWW,Country - Mexico,,
+ILF,Country - Latin America,,
+EWC,Country - Canada,,
+VGK,Country - Europe,,
+EZU,Country - Europe,,
+FEZ,Country - Europe,,
+EWG,Country - Germany,,
+EWU,Country - UK,,
+EEM,Country - Emerging markets,,
+EMXC,Country - Emerging markets,,
+`;
+const ETFU = new Map(ETFU_RAW.trim().split("\n").map(l => { const [t, g, lv, iv] = l.split(","); const sp = s => (s || "").split("/").map(x => x.trim()).filter(Boolean); return [t, {g, lev: sp(lv), inv: sp(iv)}]; }));
+const esMoney = v => !fin(v) ? "—" : v >= 1e9 ? "$" + (v / 1e9).toFixed(1) + "B" : "$" + (v >= 1e8 ? Math.round(v / 1e6) : (v / 1e6).toFixed(1)) + "M";
+const esPP = v => fin(v) ? (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(2) : "—";
+
+// RSP's closes by date (the RS benchmark), from the same bars
+function esBench(){ const b = dssBars(ES.bench); if (!b) return null; const m = new Map(); for (let k = 0; k < b.n; k++) m.set(b.dates[k], b.c[k]); return m; }
+// one fund's numbers on its last bar
+function esCalc(sym, bm){
+  const b = dssBars(sym); if (!b || b.n < ES.minBars) return {sym, err: b ? `only ${b.n} stored bars (needs ${ES.minBars})` : "no stored bars"};
+  const n = b.n, t = n - 1, c = b.c, close = c[t];
+  const e9 = PZ.ema(c, 9)[t], e21 = PZ.ema(c, 21)[t], s50 = PZ.sma(c, 50)[t];
+  let sa = 0, ka = 0, sd = 0, kd = 0, worst = Infinity;
+  for (let k = t - ES.adrN + 1; k <= t; k++) { const x = b.h[k] / b.l[k] - 1; if (fin(x)) { sa += x; ka++; } }
+  for (let k = t - ES.liqN + 1; k <= t; k++) { const x = c[k] * b.v[k]; if (fin(x)) { sd += x; kd++; worst = Math.min(worst, x); } }
+  const adr = ka === ES.adrN ? sa / ka : NaN, D = adr * close;
+  const avg = kd === ES.liqN ? sd / kd : NaN; if (kd !== ES.liqN) worst = NaN;
+  const rs = m => { if (!bm || t - m < 0) return NaN; const r0 = bm.get(b.dates[t - m]), r1 = bm.get(b.dates[t]); if (!(r0 > 0) || !fin(r1) || !(c[t - m] > 0)) return NaN; return (close / c[t - m] - 1) * 100 - (r1 / r0 - 1) * 100; };
+  return {sym, to: b.dates[t], bars: n, close, e9, e21, s50, adr, D, d9: (close - e9) / D, d21: (close - e21) / D, ext: (close - s50) / D, avg, worst, rs5: rs(5), rs20: rs(20)};
+}
+// side, status and the reasons — the written rules, nothing else
+function esJudge(o){
+  if (o.err) return {side: null, status: "Out", ready: false, fails: [o.err]};
+  const fails = [], nums = [o.close, o.e9, o.e21, o.s50, o.D, o.rs5, o.rs20];
+  if (!nums.every(fin) || !(o.D > 0)) return {side: null, status: "Out", ready: false, fails: [fin(o.rs20) ? "numbers missing in the stored bars" : "RSP missing for that date"]};
+  if (!(o.avg >= ES.avg)) fails.push(`liquidity: ${esMoney(o.avg)} a day on average (needs $20M)`);
+  if (!(o.worst >= ES.worst)) fails.push(`thin day: worst of 20 ${esMoney(o.worst)} (needs $5M)`);
+  if (!(o.close >= ES.px)) fails.push(`price $${f2(o.close)} (needs $10)`);
+  const L = o.close > o.s50 && o.e21 > o.s50, Sh = o.close < o.s50 && o.e21 < o.s50, side = L ? "long" : Sh ? "short" : null;
+  let loc = null;
+  if (!side) fails.push(`no trend structure: close ${o.close > o.s50 ? "over" : "under"} the 50 SMA but the 21 EMA ${o.e21 > o.s50 ? "over" : "under"} it`);
+  else if (side === "long") {
+    if (o.d9 > 0 && o.d21 > 0) { const nr = Math.min(o.d9, o.d21); if (nr <= ES.near) { loc = "Ready"; if (o.ext > ES.ext) fails.push(`stretched: ${o.ext.toFixed(2)} ADR over the 50 SMA (limit 4)`); } else fails.push(`too high: +${nr.toFixed(2)} ADR over the ${o.d9 <= o.d21 ? 9 : 21} EMA (Ready ≤ 0.5)`); }
+    else if (o.d9 <= 0 && o.d21 > 0) { if (o.d9 >= -ES.reclaim) loc = "Reclaim watch"; else fails.push(`${Math.abs(o.d9).toFixed(2)} ADR under the 9 EMA (Reclaim watch ≤ 0.25)`); }
+    else fails.push("under the 21 EMA");
+    if (!(o.rs5 > 0 || o.rs20 > 0)) fails.push(`RS: lags RSP on both (5S ${esPP(o.rs5)} / 20S ${esPP(o.rs20)} pp) — needs one above 0`);
+  } else {
+    if (o.d9 < 0 && o.d21 < 0) { const nr = Math.max(o.d9, o.d21); if (nr >= -ES.near) { loc = "Ready"; if (o.ext < -ES.ext) fails.push(`stretched: ${Math.abs(o.ext).toFixed(2)} ADR under the 50 SMA (limit 4)`); } else fails.push(`too low: ${Math.abs(nr).toFixed(2)} ADR under the ${o.d9 >= o.d21 ? 9 : 21} EMA (Ready ≤ 0.5)`); }
+    else if (o.d9 >= 0 && o.d21 < 0) { if (o.d9 <= ES.reclaim) loc = "Reclaim watch"; else fails.push(`${o.d9.toFixed(2)} ADR over the 9 EMA (Reclaim watch ≤ 0.25)`); }
+    else fails.push("over the 21 EMA");
+    if (!(o.rs5 < 0 && o.rs20 < 0)) fails.push(`RS: not weaker than RSP on both (5S ${esPP(o.rs5)} / 20S ${esPP(o.rs20)} pp) — needs both below 0`);
+  }
+  const ok = !fails.length && !!loc;
+  return {side, status: ok ? loc : "Out", ready: ok && loc === "Ready", loc, fails};
+}
+// distance to the nearer EMA in ADR (signed: + over, − under) and which one
+function esNear(o, j){
+  if (!j || !j.loc) return {v: NaN, e: null, t: ""};
+  if (j.loc === "Reclaim watch") return {v: o.d9, e: 9, t: `${Math.abs(o.d9).toFixed(2)} ADR ${o.d9 < 0 ? "under" : o.d9 > 0 ? "over" : "at"} the 9 EMA`};
+  const e = j.side === "long" ? (o.d9 <= o.d21 ? 9 : 21) : (o.d9 >= o.d21 ? 9 : 21), v = e === 9 ? o.d9 : o.d21;
+  return {v, e, t: `${v > 0 ? "+" : "−"}${Math.abs(v).toFixed(2)} ADR ${v > 0 ? "over" : "under"} the ${e} EMA`};
+}
+// a wrapper's $ volume = the Entry Check's own 20-session mean (so the card and the ETF Entry Check agree)
+function esWrapDv(w){ const d = dssOf(w), x = d && d.s61; return x && fin(x.dv20) ? x.dv20 : NaN; }
+function esVehicle(sym, side){
+  const m = ETFU.get(sym) || {lev: [], inv: []};
+  if (side === "long") { const lv = m.lev.filter(w => esWrapDv(w) >= ES.wrap); return {open: sym, kind: "etf", t: `${sym}${lv.length ? ` · or ${lv.join(" / ")} (leveraged)` : ""} · or calls`, wraps: lv}; }
+  const ok = m.inv.map(w => [w, esWrapDv(w)]).filter(([, v]) => v >= ES.wrap).sort((a, b) => b[1] - a[1]).map(([w]) => w), thin = m.inv.filter(w => !ok.includes(w));
+  if (ok.length) return {open: ok[0], kind: "inverse", t: `${ok[0]} (inverse)${ok.length > 1 ? ` · or ${ok.slice(1).join(" / ")}` : ""} · or puts`, wraps: ok};
+  return {open: sym, kind: "puts", t: `puts on ${sym} — check the option spread${thin.length ? ` (${thin.join(" / ")} under $20M)` : ""}`, wraps: []};
+}
+// one per group per side, then the cap — pure: [{sym, g, side, ready, rs20}] → {picks, best: Map group|side → sym, cut: Map sym → winner}
+function esPick(C){
+  const rk = side => (a, b) => (b.ready - a.ready) || (side === "long" ? b.rs20 - a.rs20 : a.rs20 - b.rs20) || (a.sym < b.sym ? -1 : 1);
+  const win = {long: [], short: []}, cut = new Map();
+  for (const side of ["long", "short"]) {
+    const seen = new Map();
+    C.filter(c => c.side === side).sort(rk(side)).forEach(c => { const k = c.g; if (seen.has(k)) cut.set(c.sym, seen.get(k)); else { seen.set(k, c.sym); win[side].push(c); } });
+  }
+  const picks = []; if (win.long[0]) picks.push(win.long[0]); if (win.short[0]) picks.push(win.short[0]);
+  const rest = [...win.long.slice(1), ...win.short.slice(1)].sort((a, b) => (b.ready - a.ready) || Math.abs(b.rs20) - Math.abs(a.rs20) || (a.sym < b.sym ? -1 : 1));
+  while (picks.length < ES.cap && rest.length) picks.push(rest.shift());
+  return {picks, win, cut};
+}
+// the whole read, memoised on the bars and the files
+const ESC = {key: "", v: null};
+function esKey(){ const f = S.etfSnap ? S.etfSnap.files.map(x => x.name).join("+") + ":" + S.etfSnap.map.size : "none"; return (typeof dssKey === "function" ? dssKey() : "") + "|" + f; }
+function esRun(){
+  if (!S.snap || !S.has || !S.has.hist || !HIST.nD) return null;
+  const k = esKey(); if (ESC.key === k && ESC.v) return ESC.v;
+  const fileSet = S.etfSnap ? new Set(S.rows.filter(r => r.fromEtfFile).map(r => r.sym)) : null;
+  const bm = esBench(), rows = [];
+  for (const [sym, m] of ETFU) {
+    if (fileSet && !fileSet.has(sym)) continue;
+    const o = esCalc(sym, bm), j = esJudge(o);
+    rows.push({sym, g: m.g, o, j, near: esNear(o, j), veh: j.status !== "Out" ? esVehicle(sym, j.side) : null});
+  }
+  const C = rows.filter(r => r.j.status !== "Out").map(r => ({sym: r.sym, g: r.g, side: r.j.side, ready: r.j.ready, rs20: r.o.rs20, row: r}));
+  const P = esPick(C), rank = new Map(P.picks.map((c, i) => [c.sym, i + 1]));
+  rows.forEach(r => { r.rank = rank.get(r.sym) || null; r.cutBy = P.cut.get(r.sym) || null; });
+  const missing = fileSet ? [...ETFU.keys()].filter(t => !fileSet.has(t)) : [];
+  const unmapped = fileSet ? S.rows.filter(r => r.fromEtfFile && !ETFU.has(r.sym)).map(r => r.sym) : [];
+  const dates = rows.map(r => r.o.to).filter(Boolean).sort();
+  ESC.key = k; ESC.v = {rows, picks: P.picks.map(c => c.row), win: P.win, missing, unmapped, noFile: !fileSet, bench: !!bm, to: dates[dates.length - 1] || HIST.dates[HIST.nD - 1], at: Date.now()};
+  return ESC.v;
+}
+const esWhy = r => r.j.status === "Out" ? r.j.fails.join(" · ") : r.rank ? "" : r.cutBy ? `one per group: ${r.cutBy} is the ${r.g} ${r.j.side}` : "qualifies — outside the top 3";
+
+/* ---------------- Watchlist card ---------------- */
+function esMapE(){ const m = mapImp(); if (!m || !m.E || !m.E.length) return null; const p = curPlanDay(); return m.session && m.session !== p && m.session !== prevSess(p) ? null : m.E; }
+function esCardHTML(){
+  const hd = sub => `<div class="hd"><h2>ETF setups — long and short</h2><span class="sub">${sub}</span><span class="spacer"></span><button class="btn sm" data-esfeed>Export ETF feed CSV</button></div>`;
+  if (!S.has || !S.has.hist) return hd("grade C experiment · up to 3") + `<div class="bd"><div class="empty">Needs the stored price history. <button class="btn sm" data-hist="full">Load price history</button></div></div>`;
+  const R = esRun(); if (!R) return hd("") + `<div class="bd"><div class="empty">Load your files first.</div></div>`;
+  const pill = r => r.j.status === "Ready" ? `<span class="pill go">Ready</span>` : r.j.status === "Reclaim watch" ? `<span class="pill zone">Reclaim watch</span>` : `<span class="pill bad">Out</span>`;
+  const side = r => r.j.side ? `<b class="${r.j.side === "long" ? "pos" : "neg"}">${r.j.side === "long" ? "Long" : "Short"}</b>` : "—";
+  const rsx = r => `<span class="${r.o.rs5 > 0 ? "pos" : "neg"}">${esPP(r.o.rs5)}</span> / <b class="${r.o.rs20 > 0 ? "pos" : "neg"}">${esPP(r.o.rs20)}</b>`;
+  const need = r => r.j.status === "Reclaim watch" ? (r.j.side === "long" ? " · needs a close back over the 9 EMA, then the 30-min trigger" : " · needs a close back under the 9 EMA") : "";
+  const E = esMapE(), eBy = new Map((E || []).map(e => [e.t, e]));
+  const pickRow = r => `<tr data-esopen="${esc(r.veh.open)}" title="${esc(r.veh.kind === "inverse" ? `Opens ${r.veh.open}'s own chart and the ETF Entry Check — the trigger is judged there` : `Opens ${r.sym}`)}"><td>${r.rank}</td>
+    <td class="l sym"><span class="tk" data-sym="${esc(r.sym)}">${esc(r.sym)}</span>${eBy.has(r.sym) ? ` <span class="pill go" title="MAP lists it too: ${esc(eBy.get(r.sym).side || "")}">MAP</span>` : ""}</td><td class="l">${side(r)}</td><td class="l small">${esc(r.g)}</td><td class="l">${pill(r)}</td>
+    <td class="l small">${esc(r.near.t)}${need(r)}</td><td class="small">${rsx(r)}</td><td class="l small">${esc(r.veh.t)}</td>
+    <td class="l small">Spread check at entry: ≤ 0.10% of price and ≤ 5% of 1R</td><td class="l small"><span class="pill wait">C · experiment</span></td></tr>`;
+  const head = `<thead><tr><th>#</th><th class="l">Ticker</th><th class="l">Side</th><th class="l">Group</th><th class="l">Ready / Reclaim</th><th class="l">To the nearer EMA</th><th title="% return minus RSP's over 5 / 20 sessions, pp">RS 5S / 20S</th><th class="l">Vehicle</th><th class="l">Spread</th><th class="l">Grade</th></tr></thead>`;
+  const Q = R.rows.filter(r => r.j.status !== "Out").sort((a, b) => (a.rank || 9) - (b.rank || 9) || (b.j.ready - a.j.ready) || Math.abs(b.o.rs20) - Math.abs(a.o.rs20));
+  const nL = Q.filter(r => r.j.side === "long").length, nS = Q.length - nL, nW = R.win.long.length + R.win.short.length;
+  const allRow = r => `<tr data-sym="${esc(r.sym)}"><td class="l sym">${esc(r.sym)}</td><td class="l small">${esc(r.g)}</td><td class="l">${side(r)}</td><td class="l">${pill(r)}${r.rank ? ` <b>#${r.rank}</b>` : ""}</td>
+    <td>${fin(r.o.close) ? f2(r.o.close) : "—"}</td><td>${fin(r.o.d9) ? sg(r.o.d9, 2) : "—"}</td><td>${fin(r.o.d21) ? sg(r.o.d21, 2) : "—"}</td><td>${fin(r.o.ext) ? sg(r.o.ext, 2) : "—"}</td>
+    <td class="small">${fin(r.o.rs5) ? rsx(r) : "—"}</td><td>${fin(r.o.adr) ? (r.o.adr * 100).toFixed(2) + "%" : "—"}</td><td>${esMoney(r.o.avg)}</td><td>${esMoney(r.o.worst)}</td><td class="l small">${esc(esWhy(r) || "in the top 3")}</td></tr>`;
+  const allHead = `<thead><tr><th class="l">Fund</th><th class="l">Group</th><th class="l">Side</th><th class="l">Status</th><th>Close</th><th title="(close − 9 EMA) ÷ ADR $">vs 9 EMA</th><th title="(close − 21 EMA) ÷ ADR $">vs 21 EMA</th><th title="(close − 50 SMA) ÷ ADR $">vs 50 SMA</th><th>RS 5S / 20S</th><th>ADR</th><th>Avg $ 20D</th><th>Worst day</th><th class="l">Why in / out</th></tr></thead>`;
+  const sortAll = [...R.rows].sort((a, b) => (a.rank || 9) - (b.rank || 9) || ((a.j.status === "Out") - (b.j.status === "Out")) || (a.g < b.g ? -1 : a.g > b.g ? 1 : a.sym < b.sym ? -1 : 1));
+  const eLine = E ? `<div class="small" style="margin:8px 0 2px"><b>MAP's ETF setups</b> (paste block E lines): ${E.map(e => { const r = R.rows.find(x => x.sym === e.t); const b = r ? (r.rank ? `board #${r.rank} ✓` : r.j.status !== "Out" ? `board: ${r.j.status}, not in the top 3` : `board: Out — ${r.j.fails[0] || ""}`) : ETFU.has(e.t) ? "not in your ETF file" : "not on the ETF map";
+    return `<span class="tk" data-sym="${esc(e.t)}">E${e.k} ${esc(e.t)}</span> ${esc(e.side || "")}${e.vehicle ? ` · vehicle ${esc(e.vehicle)}` : ""}${e.why ? ` · ${esc(e.why)}` : ""} <span class="dim">(${esc(b)})</span>`; }).join("<br>")}</div>` : "";
+  const notes = [R.noFile ? `<b>No ETF file loaded</b> — reading the whole map (${ETFU.size} funds) from the stored bars.` : `${R.rows.length} of the map's ${ETFU.size} funds are in your ETF file.`,
+    R.missing.length ? `Not in today's ETF file: ${R.missing.map(esc).join(" ")}.` : "",
+    R.unmapped.length ? `<span title="${esc(R.unmapped.join(" "))}">${R.unmapped.length} fund${R.unmapped.length > 1 ? "s" : ""} in the file aren't on the map — <b>Unmapped</b>, never a candidate</span> (${R.unmapped.slice(0, 30).map(esc).join(" ")}${R.unmapped.length > 30 ? " …" : ""}).` : "",
+    R.bench ? "" : `<span class="neg">RSP has no stored bars — RS can't be read, nothing qualifies.</span>`].filter(Boolean).join(" ");
+  return hd(`grade C experiment · up to ${ES.cap} · one per group per side · daily close ${esc(R.to || "—")} · never a Focus slot`) + `<div class="bd">
+    ${R.picks.length ? `<div class="tscroll" style="max-height:none"><table class="mini est">${head}<tbody>${R.picks.map(pickRow).join("")}</tbody></table></div>` : `<div class="empty" style="padding:4px 0"><b>None</b> — no ETF on the map is Ready or on Reclaim watch with the RS it needs today (${R.rows.length} checked).</div>`}
+    <div class="small" style="margin-top:6px">${nL} long · ${nS} short qualify before the one-per-group cut, ${nW} after it. A short is bought as the inverse fund (its row opens that fund's own chart and the ETF Entry Check: 30-min close over its 30-min 21 EMA from 10:00 ET, stop at its low of day, entry ≤ 0.6 ADR over it) or as puts. Events (a top-10 holding reporting, EIA / CPI / FOMC) aren't checked here — MAP flags them.</div>
+    ${eLine}
+    <div class="small dim" style="margin-top:4px">${notes}</div>
+    <details class="tp-fold"><summary>Every fund on the map — why each one is in or out (${R.rows.length})</summary><div class="tscroll" style="max-height:520px"><table class="mini esall">${allHead}<tbody>${sortAll.map(allRow).join("")}</tbody></table></div>
+    <div class="small dim" style="padding:4px 0">Rules (ETF Setups Spec v1.0, 24 Oct): ETF floor $20M a day on average, no day under $5M, price $10 or more, no ADR% filter. ADR = 20-day mean of (high ÷ low − 1). RS = return minus RSP's return over 5 and 20 sessions. Long Ready: over the 9 and 21 EMA, within 0.5 ADR of the nearer, ≤ 4 ADR over the 50 SMA, close and 21 EMA over the 50 SMA, RS 5S or 20S above 0. Reclaim watch: up to 0.25 ADR under the 9 EMA, still over the 21. Shorts mirror it with RS 5S and 20S both below 0. Ranked on RS 20S.</div></details></div>`;
+}
+function renderESCard(){
+  const box = $("watchBody"); if (!box) return;
+  let c = $("esBox");
+  if (!c) { box.insertAdjacentHTML("afterbegin", `<div class="card g1" id="esBox"></div>`); c = $("esBox"); }
+  // after the stock setups: right under "Ready to trade (first 5) and New Discoveries"
+  const at = [...box.querySelectorAll(".wlg")].find(x => /^Ready to trade/.test((x.querySelector("h2") || {}).textContent || ""));
+  if (at && at.nextElementSibling !== c) at.after(c);
+  try { c.innerHTML = esCardHTML(); } catch (e) { console.warn("ETF setups", e); c.innerHTML = ""; }
+}
+const _renderWatchES = renderWatch;
+renderWatch = function(){ _renderWatchES(); if (S.snap) renderESCard(); };
+document.addEventListener("click", e => {
+  if (e.target.closest("[data-esfeed]")) { esFeedExport(); return; }
+  const tk = e.target.closest("#esBox .tk[data-sym]"); if (tk) { e.stopPropagation(); openDrawer(tk.dataset.sym); return; }
+  const t = e.target.closest("#esBox tr[data-esopen], #esBox tr[data-sym]"); if (t && !e.target.closest("button, a, summary")) { e.stopPropagation(); openDrawer(t.dataset.esopen || t.dataset.sym); }
+}, true);
+
+/* ---------------- ETF feed CSV (MAP S5.4's input — a new interface: add columns at the end only) ---------------- */
+const ES_FEED_H = ["Session", "Rank", "Symbol", "Side", "Group", "Status", "Location", "Dist ADR", "Nearer EMA", "RS5", "RS20", "Vehicle", "Grade", "Why not", "Close", "ADR%", "ADR $", "EMA9", "EMA21", "SMA50", "Ext ADR", "Avg $Vol 20D $M", "Worst day 20D $M", "In ETF file"];
+function esFeedCSV(){
+  const R = esRun(); const q = v => { const s = String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const L = [ES_FEED_H.join(",")]; if (!R) return L.join("\n");
+  const n = (v, d) => fin(v) ? +v.toFixed(d) : "";
+  const order = [...R.rows].sort((a, b) => (a.rank || 9) - (b.rank || 9) || ((a.j.status === "Out") - (b.j.status === "Out")) || (!!a.cutBy - !!b.cutBy) || (a.g < b.g ? -1 : a.g > b.g ? 1 : a.sym < b.sym ? -1 : 1));
+  for (const r of order) { const o = r.o;
+    L.push([o.to || R.to, r.rank || "", r.sym, r.j.side || "", r.g, r.j.status, r.near.t, n(r.near.v, 3), r.near.e || "", n(o.rs5, 3), n(o.rs20, 3), r.veh ? r.veh.t : "", r.j.status === "Out" ? "" : "C (experiment)", esWhy(r),
+      n(o.close, 4), n(o.adr * 100, 3), n(o.D, 4), n(o.e9, 4), n(o.e21, 4), n(o.s50, 4), n(o.ext, 3), n(o.avg / 1e6, 2), n(o.worst / 1e6, 2), R.noFile ? "no file" : "yes"].map(q).join(",")); }
+  for (const s of R.unmapped) L.push([R.to, "", s, "", "Unmapped", "Unmapped", "", "", "", "", "", "", "", "not on the ETF map — never a candidate", ...Array(9).fill(""), "yes"].map(q).join(","));
+  for (const s of R.missing) L.push([R.to, "", s, "", ETFU.get(s).g, "Not in the ETF file", "", "", "", "", "", "", "", "add it to the ETF list", ...Array(9).fill(""), "no"].map(q).join(","));
+  return L.join("\n");
+}
+const esFeedName = () => { const R = esRun(); return `deep-space-etf-feed-${(R && R.to) || fmtDate(new Date())}.csv`; };
+function esFeedExport(){
+  if (!S.snap) { toast("Load your files first"); return; }
+  if (!S.has.hist) { toast("The ETF feed needs the price history — load it first (Data check)"); return; }
+  const st = typeof feedStale === "function" ? feedStale() : null;
+  if (st && !confirm(`The stored price history ends ${st.last}, but the bars should run to ${st.want}. Export the ETF feed anyway?`)) return;
+  download(esFeedName(), esFeedCSV(), "text/csv"); toast(`ETF feed saved: ${esFeedName()}`);
+}
+function esFeedHTML(){
+  const R = S.has && S.has.hist ? esRun() : null;
+  return `<div class="hd"><h2>ETF feed</h2><span class="sub">MAP's ETF setups input (separate from the Deep Space feed): every fund on the ETF map with its side, status, location, RS 5S / 20S vs RSP, vehicle and the top 3</span><span class="spacer"></span>
+    <button class="btn sm primary" data-esfeed ${S.has && S.has.hist ? "" : "disabled"}>Export ETF feed CSV</button></div><div class="bd small">${R ? `${R.rows.length} map funds read to the ${esc(R.to || "—")} close · top 3: ${R.picks.length ? R.picks.map(r => `<span class="tk" data-sym="${esc(r.sym)}">${esc(r.sym)}</span> ${r.j.side} ${esc(r.j.status)}`).join(" · ") : "none"}${R.noFile ? " · no ETF file loaded (whole map)" : ""}${R.missing.length ? ` · ${R.missing.length} map funds not in the file` : ""}${R.unmapped.length ? ` · ${R.unmapped.length} unmapped` : ""}` : "Needs the stored price history."}</div>`;
+}
+const _renderFeedCardES = renderFeedCard;
+renderFeedCard = function(){
+  _renderFeedCardES();
+  const f = $("feedBox"); if (!f || !S.snap) { const x = $("esFeedBox"); if (x) x.remove(); return; }
+  let c = $("esFeedBox"); if (!c) { f.insertAdjacentHTML("afterend", `<div class="card g1" id="esFeedBox"></div>`); c = $("esFeedBox"); }
+  try { c.innerHTML = esFeedHTML(); } catch (e) { console.warn("ETF feed card", e); }
+};
+
+/* ---------------- MAP import: E lines ---------------- */
+const ES_ELINE = /^E\s*(\d+)?[.):]?\s+([A-Za-z0-9.:\-]+)\s*(long|short)?\s*(?:\|(.*))?$/i;
+const esSym = s => String(s || "").toUpperCase().replace(/^.*:/, "").replace(/[^A-Z0-9.\-]/g, "");
+const _mapParseES = mapParse;
+mapParse = function(text){
+  const t = String(text || "").trim(), E = [], warn = [];
+  const add = (k, sym, side, f) => { sym = esSym(sym); if (!sym) return; if (E.some(e => e.t === sym)) { warn.push(`${sym} is on two E lines — kept the first`); return; }
+    side = String(side || "").toLowerCase(); if (side !== "long" && side !== "short") warn.push(`E line for ${sym} has no long / short`);
+    E.push({k: k || E.length + 1, t: sym, side: side === "long" || side === "short" ? side : "", why: f.why || "", vehicle: f.vehicle || "", now: f.now || "", catalyst: f.catalyst || ""}); };
+  let rest = t;
+  if (t[0] === "{") { try { const j = JSON.parse(t); (j.E || []).forEach((x, i) => typeof x === "string" ? add(i + 1, x, "", {}) : add(x.k || i + 1, x.t || x.ticker, x.side, x)); } catch (e) {} }
+  else {
+    const keep = [];
+    for (const raw of t.split(/\r?\n/)) { const m = raw.trim().match(ES_ELINE); if (!m) { keep.push(raw); continue; }
+      const f = {}; (m[4] || "").split("|").forEach(kv => { const x = kv.match(/^\s*([a-z ]+?)\s*:\s*(.*)$/i); if (!x) return; const key = {why: "why", note: "why", vehicle: "vehicle", vehicles: "vehicle", now: "now", catalyst: "catalyst", cat: "catalyst"}[x[1].toLowerCase().trim()]; if (key) f[key] = x[2].trim(); });
+      add(m[1] ? +m[1] : 0, m[2], m[3], f); }
+    rest = keep.join("\n");
+  }
+  const P = _mapParseES(rest);
+  P.E = E; P.warn.push(...warn);
+  if (E.length) P.errs = P.errs.filter(x => !/^No ticker lines|^Nothing pasted/.test(x));
+  return P;
+};
+const _mapApplyES = mapApply;
+mapApply = function(P){
+  const ok = _mapApplyES(P);
+  if (ok && P.E) { try { const m = mapImp(); if (m) { m.E = P.E; m.n = {...m.n, E: P.E.length}; store.set(MAPI_K, m); }
+    if (P.E.length) toast(`MAP imported: ${P.A.length} A · ${P.B.length} B · ${P.S.length} on deck${P.H.length ? " · " + P.H.length + " held" : ""} · ${P.E.length} ETF`);
+    if (S.ui.tab === "watch") renderWatch(); } catch (e) { console.warn("MAP E lines", e); } }
+  return ok;
+};
+const _mapImpHTMLES = mapImpHTML;
+mapImpHTML = function(){
+  const h = _mapImpHTMLES(), m = mapImp(), n = m && m.E ? m.E.length : 0;
+  const note = `<div class="small dim" style="margin-top:4px">ETF setups (MAP v4.4): <code>E1 XLE long | why: … | vehicle: … | now: … | catalyst: …</code> — up to three E lines; they show on the ETF setups card, never on the A / B lists.${n ? ` Last import: ${n} ETF line${n > 1 ? "s" : ""} (${m.E.map(e => esc(e.t + " " + e.side)).join(", ")}).` : ""}</div>`;
+  const i = h.lastIndexOf("</div>"); return i < 0 ? h + note : h.slice(0, i) + note + h.slice(i);
+};
+
+/* ---------------- ETF Entry Check: $20M floor for vehicles, the map's inverse wrappers in its universe ---------------- */
+const _invUniverseES = invUniverse;
+invUniverse = function(){
+  const L = _invUniverseES(), have = new Set(L.map(o => o.t));
+  for (const [t, m] of ETFU) for (const w of m.inv) if (!have.has(w) && HIST.idx && HIST.idx.has(w)) { have.add(w); L.push({t: w, src: `inverse of ${t} (ETF setups)`, lev: null}); }
+  return L;
+};
+const _invCheckES = invCheck;
+invCheck = function(o){
+  const v = _invCheckES(o); if (!v) return v;
+  const x = v.x, ok = fin(x.dv20) && x.dv20 >= ES.wrap;
+  v.ck[0] = [1, "Liquidity", ok, fin(x.dv20) ? `${invMoney(x.dv20)} a day (needs $20M)` : "no volume"];
+  v.fail = v.ck.find(c => !c[2]);
+  v.call = v.fail ? {k: 5, t: `Out — ${v.fail[0]}. ${v.fail[1]}`, c: "bad"} : x.loc === "L1" ? {k: 1, t: "In buy zone — passes the ETF check", c: "go"} : x.loc === "L2" ? {k: 2, t: "Just under buy zone", c: "zone"} : {k: 3, t: "Not yet", c: "wait"};
+  return v;
+};
+
+/* ---------------- self-check: a separate short copy of the rules ---------------- */
+function esSelf(R){
+  const out = [], F = (ok, sym, what, board, mine) => out.push({ok, sym, what, board, mine});
+  const bm = new Map(); { const b = dssBars(ES.bench); if (b) for (let k = 0; k < b.n; k++) bm.set(b.dates[k], b.c[k]); }
+  const ema = (a, p) => { const al = 2 / (p + 1); let e = NaN, s = 0, k = 0; const o = []; for (const x of a) { if (!isFinite(e)) { s += x; k++; e = k === p ? s / p : NaN; } else e = al * x + (1 - al) * e; o.push(e); } return o[o.length - 1]; };
+  const mine = [];
+  for (const r of R.rows) {
+    const b = dssBars(r.sym); let st = "Out", side = "", rs20 = NaN;
+    if (b && b.n >= ES.minBars && b.c.every(isFinite)) {
+      const t = b.n - 1, c = [...b.c], cl = c[t], e9 = ema(c, 9), e21 = ema(c, 21), s50 = c.slice(t - 49).reduce((s, x) => s + x, 0) / 50;
+      const hl = []; for (let k = t - 19; k <= t; k++) hl.push(b.h[k] / b.l[k] - 1); const D = hl.reduce((s, x) => s + x, 0) / 20 * cl;
+      const dv = []; for (let k = t - 19; k <= t; k++) dv.push(c[k] * b.v[k]);
+      const ret = m => { const r0 = bm.get(b.dates[t - m]), r1 = bm.get(b.dates[t]); return (cl / c[t - m] - 1) * 100 - (r1 / r0 - 1) * 100; };
+      const r5 = ret(5); rs20 = ret(20);
+      const liq = dv.every(isFinite) && dv.reduce((s, x) => s + x, 0) / 20 >= ES.avg && Math.min(...dv) >= ES.worst && cl >= ES.px;
+      const a9 = (cl - e9) / D, a21 = (cl - e21) / D, x50 = (cl - s50) / D;
+      if (liq && cl > s50 && e21 > s50 && (r5 > 0 || rs20 > 0)) { side = "long"; if (a9 > 0 && a21 > 0 && Math.min(a9, a21) <= ES.near && x50 <= ES.ext) st = "Ready"; else if (a9 <= 0 && a9 >= -ES.reclaim && a21 > 0) st = "Reclaim watch"; }
+      if (liq && cl < s50 && e21 < s50 && r5 < 0 && rs20 < 0) { side = "short"; if (a9 < 0 && a21 < 0 && Math.max(a9, a21) >= -ES.near && x50 >= -ES.ext) st = "Ready"; else if (a9 >= 0 && a9 <= ES.reclaim && a21 < 0) st = "Reclaim watch"; }
+    }
+    F(st === r.j.status && (st === "Out" || side === r.j.side), r.sym, "ETF setup status", `${r.j.side || "—"} ${r.j.status}`, `${side || "—"} ${st}`);
+    if (st !== "Out") mine.push({sym: r.sym, g: r.g, side, ready: st === "Ready", rs20});
+  }
+  // the cap, by hand: one per group per side (Ready first, then RS20), best long, best short, then |RS20|
+  const best = {}; for (const c of mine) { const k = c.side + "|" + c.g, o = best[k]; const better = !o || c.ready > o.ready || (c.ready === o.ready && (c.side === "long" ? c.rs20 > o.rs20 : c.rs20 < o.rs20)) || (c.ready === o.ready && c.rs20 === o.rs20 && c.sym < o.sym); if (better) best[k] = c; }
+  const W = Object.values(best), top = s => W.filter(c => c.side === s).sort((a, b) => (b.ready - a.ready) || (s === "long" ? b.rs20 - a.rs20 : a.rs20 - b.rs20) || (a.sym < b.sym ? -1 : 1))[0];
+  const want = [top("long"), top("short")].filter(Boolean);
+  W.filter(c => !want.includes(c)).sort((a, b) => (b.ready - a.ready) || Math.abs(b.rs20) - Math.abs(a.rs20) || (a.sym < b.sym ? -1 : 1)).forEach(c => { if (want.length < ES.cap) want.push(c); });
+  F(want.map(c => c.sym).join(" ") === R.picks.map(r => r.sym).join(" "), "—", "ETF setups top 3", R.picks.map(r => r.sym).join(" ") || "none", want.map(c => c.sym).join(" ") || "none");
+  for (const r of R.picks) if (r.j.side === "short" && r.veh && r.veh.kind === "inverse") F(esWrapDv(r.veh.open) >= ES.wrap, r.sym, "ETF short vehicle passes $20M", esMoney(esWrapDv(r.veh.open)), "≥ $20M");
+  return out;
+}
+const _selfCheckES = selfCheck;
+selfCheck = function(){
+  const R = _selfCheckES();
+  try { const E = S.snap && S.has && S.has.hist ? esRun() : null; if (E) for (const c of esSelf(E)) { R.n++; if (!c.ok) R.fails.push({sym: c.sym, what: c.what, board: c.board, mine: c.mine}); } } catch (e) { console.warn("ETF self-check", e); }
+  return R;
+};
+document.head.insertAdjacentHTML("beforeend", `<style>#esBox table.est td{vertical-align:top} #esBox tr[data-esopen], #esBox tr[data-sym]{cursor:pointer} #esBox .tk{cursor:pointer}</style>`);
+</script>
+
 <script id="mobile-js">
 "use strict";
 /* =====================================================================
