@@ -11697,6 +11697,9 @@ document.head.insertAdjacentHTML("beforeend", `<style>#esBox table.est td{vertic
      its last stored close (lcCell wrapped).
    A held stock is untouched; a held name with no row and no stored bars still says "not in current data".
    Storage: none.
+   24 Oct, later (Eugene: "build option 2", after a held IYF showed "not in current data"): the full row is no longer
+   limited to known funds — ANY held ticker with no file row but with stored bars (an ETF off the map, a stock missing from
+   today's file) gets it. hfIsFund now only picks the words (group "fund" / "not in your files", status "Held fund" / "Held").
    ===================================================================== */
 function hfIsFund(sym){
   if (typeof ETFU !== "undefined" && (ETFU.has(sym) || [...ETFU.values()].some(m => m.lev.includes(sym) || m.inv.includes(sym)))) return true;
@@ -11716,16 +11719,16 @@ nextAction = function(r, held){
   if (held && r && r.etf) { try { const h = hfRead(r.sym); if (h) return hfLine(h); } catch (e) { console.warn("held ETF", e); } }
   return _nextActionHF(r, held);
 };
-function hfStored(sym){ if (S.rowBySym && S.rowBySym.has(sym)) return null; if (!hfIsFund(sym)) return null; try { return hfRead(sym); } catch (e) { return null; } }
+function hfStored(sym){ if (S.rowBySym && S.rowBySym.has(sym)) return null; try { return hfRead(sym); } catch (e) { return null; } }
 const hfNote = h => `last close ${f2(h.close)} (${h.to}) — from the stored bars, not your file`;
-const hfGroup = sym => { const m = typeof ETFU !== "undefined" && ETFU.get(sym); if (m) return m.g; const p = typeof ETFU !== "undefined" ? [...ETFU].find(([, v]) => v.inv.includes(sym) || v.lev.includes(sym)) : null; return p ? (p[1].inv.includes(sym) ? `inverse of ${p[0]}` : `leveraged ${p[0]}`) : "fund"; };
+const hfGroup = sym => { const m = typeof ETFU !== "undefined" && ETFU.get(sym); if (m) return m.g; const p = typeof ETFU !== "undefined" ? [...ETFU].find(([, v]) => v.inv.includes(sym) || v.lev.includes(sym)) : null; return p ? (p[1].inv.includes(sym) ? `inverse of ${p[0]}` : `leveraged ${p[0]}`) : hfIsFund(sym) ? "fund" : "not in your files"; };
 const _wlRowHTMLHF = wlRowHTML;
 wlRowHTML = function(e, all){
   if (e.r || e.src !== "H") return _wlRowHTMLHF(e, all);
   const h = hfStored(e.s); if (!h) return _wlRowHTMLHF(e, all);
   const also = Object.keys(WL_SRC).filter(k => k !== e.src && all[k] && all[k].has(e.s));
   return `<tr data-sym="${esc(e.s)}" class="hfund"><td>${wlPin(e.s)}</td><td class="l sym"><b>${esc(e.s)}</b></td><td class="l small">${esc(WL_SRC[e.src])}${also.length ? `<div class="dim">also ${also.map(k => esc(WL_SRC[k])).join(", ")}</div>` : ""}</td>
-    <td class="l small">${esc(hfGroup(e.s))}</td><td>—</td><td class="l"><span class="pill ${h.x.loc ? LOC61[h.x.loc].c : ""}">${esc(ecLoc(h.x))}</span></td><td class="l small">Held fund</td><td>—</td><td class="l small">—</td>
+    <td class="l small">${esc(hfGroup(e.s))}</td><td>—</td><td class="l"><span class="pill ${h.x.loc ? LOC61[h.x.loc].c : ""}">${esc(ecLoc(h.x))}</span></td><td class="l small">${hfIsFund(e.s) ? "Held fund" : "Held"}</td><td>—</td><td class="l small">—</td>
     <td class="l small">${esc(hfLine(h))}<div class="dim">${esc(hfNote(h))}</div></td></tr>`;
 };
 const _heldHTMLHF = heldHTML;
