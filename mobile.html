@@ -11864,6 +11864,77 @@ selfCheck = function(){
 document.head.insertAdjacentHTML("beforeend", `<style>#esBox table.est td{vertical-align:top} #esBox tr[data-esopen], #esBox tr[data-sym]{cursor:pointer} #esBox .tk{cursor:pointer}</style>`);
 </script>
 
+<script>
+"use strict";
+/* =====================================================================
+   HELD ETFs — THE RUNNER LINE (24 Oct; Eugene: "fix the held etfs line" / "go, build the held ETF fix"). DISPLAY ONLY —
+   no rule, number, list, size, log or feed changes.
+   Before: a held ETF's next action read "Hold — check the daily 9 EMA (load the price history)" even with the history in
+   (nextAction skips ETFs: s61Of is stocks only), and a held fund that isn't in any file (an inverse wrapper like TZA) showed
+   "not in current data" although the stored bars have it.
+   Now, the same runner rule and wording a held stock gets (Unified Spec 6.1 live exits: runner out on a daily close under
+   the 9 EMA), read from the fund's own stored bars (dssOf(sym).s61 — the same bars and 9 EMA the ETF Entry Check uses):
+   - a held ETF in your file → "Hold — runner out on a daily close under the 9 EMA (x)" or "Closed under the daily 9 EMA x —
+     the runner's exit rule" (nextAction wrapped);
+   - a held fund in no file but with stored bars (on the ETF map, one of its wrappers, the inverse list or the Massive
+     leveraged list) → a full row on the Watchlist Held table and on Today's Held card: last stored close, its date, the
+     day's change, location and the same line, marked "from the stored bars, not your file" (wlRowHTML / heldHTML wrapped).
+     Clicking it opens the fund panel (chart + ETF Entry Check) when it is an inverse fund. The Watchlist's Last column shows
+     its last stored close (lcCell wrapped).
+   A held stock is untouched; a held name with no row and no stored bars still says "not in current data".
+   Storage: none.
+   ===================================================================== */
+function hfIsFund(sym){
+  if (typeof ETFU !== "undefined" && (ETFU.has(sym) || [...ETFU.values()].some(m => m.lev.includes(sym) || m.inv.includes(sym)))) return true;
+  if (typeof INV !== "undefined" && INV.core.includes(sym)) return true;
+  return !!(typeof LEV !== "undefined" && LEV.list && LEV.list.list && LEV.list.list.some(e => e[0] === sym));
+}
+// the fund's own daily read: close, 9 EMA, the session it is from, the change on the day
+function hfRead(sym){
+  if (!S.has || !S.has.hist) return null;
+  const d = dssOf(sym), x = d && d.s61; if (!x || !fin(x.e9) || !fin(x.close)) return null;
+  const b = dssBars(sym), n = b ? b.n : 0, chg = n >= 2 && b.c[n - 2] > 0 ? (b.c[n - 1] / b.c[n - 2] - 1) * 100 : null;
+  return {x, close: x.close, e9: x.e9, to: x.to, chg};
+}
+const hfLine = h => h.close < h.e9 ? `Closed under the daily 9 EMA ${f2(h.e9)} — the runner's exit rule` : `Hold — runner out on a daily close under the 9 EMA (${f2(h.e9)})`;
+const _nextActionHF = nextAction;
+nextAction = function(r, held){
+  if (held && r && r.etf) { try { const h = hfRead(r.sym); if (h) return hfLine(h); } catch (e) { console.warn("held ETF", e); } }
+  return _nextActionHF(r, held);
+};
+function hfStored(sym){ if (S.rowBySym && S.rowBySym.has(sym)) return null; if (!hfIsFund(sym)) return null; try { return hfRead(sym); } catch (e) { return null; } }
+const hfNote = h => `last close ${f2(h.close)} (${h.to}) — from the stored bars, not your file`;
+const hfGroup = sym => { const m = typeof ETFU !== "undefined" && ETFU.get(sym); if (m) return m.g; const p = typeof ETFU !== "undefined" ? [...ETFU].find(([, v]) => v.inv.includes(sym) || v.lev.includes(sym)) : null; return p ? (p[1].inv.includes(sym) ? `inverse of ${p[0]}` : `leveraged ${p[0]}`) : "fund"; };
+const _wlRowHTMLHF = wlRowHTML;
+wlRowHTML = function(e, all){
+  if (e.r || e.src !== "H") return _wlRowHTMLHF(e, all);
+  const h = hfStored(e.s); if (!h) return _wlRowHTMLHF(e, all);
+  const also = Object.keys(WL_SRC).filter(k => k !== e.src && all[k] && all[k].has(e.s));
+  return `<tr data-sym="${esc(e.s)}" class="hfund"><td>${wlPin(e.s)}</td><td class="l sym"><b>${esc(e.s)}</b></td><td class="l small">${esc(WL_SRC[e.src])}${also.length ? `<div class="dim">also ${also.map(k => esc(WL_SRC[k])).join(", ")}</div>` : ""}</td>
+    <td class="l small">${esc(hfGroup(e.s))}</td><td>—</td><td class="l"><span class="pill ${h.x.loc ? LOC61[h.x.loc].c : ""}">${esc(ecLoc(h.x))}</span></td><td class="l small">Held fund</td><td>—</td><td class="l small">—</td>
+    <td class="l small">${esc(hfLine(h))}<div class="dim">${esc(hfNote(h))}</div></td></tr>`;
+};
+const _heldHTMLHF = heldHTML;
+heldHTML = function(){
+  let html = _heldHTMLHF();
+  for (const sym of LISTS.held) {
+    const h = hfStored(sym); if (!h) continue;
+    const gone = `<tr class="gone"><td>${wlPin(sym)}</td><td class="l sym"><b>${esc(sym)}</b></td><td colspan="4" class="l neg small">not in current data</td></tr>`;
+    const row = `<tr data-sym="${esc(sym)}" class="hfund"><td>${wlPin(sym)}</td><td class="l sym"><b>${esc(sym)}</b></td><td>${f2(h.close)}</td><td class="${cls(h.chg)}">${h.chg == null ? "—" : pc(h.chg, 1)}</td><td class="l"><span class="pill ${h.x.loc ? LOC61[h.x.loc].c : ""}">${esc(ecLoc(h.x))}</span></td><td class="l small">${esc(hfLine(h))}<div class="dim">${esc(hfNote(h))}</div></td></tr>`;
+    html = html.replace(gone, row);
+  }
+  return html;
+};
+// the Watchlist's Last column (lcCell): a held fund with no file row shows its last stored close
+const _lcCellHF = lcCell;
+lcCell = function(sym){
+  const c = _lcCellHF(sym); if (c.last !== "—" || !LISTS.held.has(sym)) return c;
+  const h = hfStored(sym); return h ? {last: `<span title="Last stored close (${esc(h.to)}) — not in your file">${f2(h.close)}</span>`, entry: "—"} : c;
+};
+// a held fund row with no file row: open its fund panel when it has one (inverse funds)
+document.addEventListener("click", e => { const t = e.target.closest("tr.hfund[data-sym]"); if (!t || e.target.closest("button, a")) return; openDrawer(t.dataset.sym); });
+</script>
+
 <script id="mobile-js">
 "use strict";
 /* =====================================================================
