@@ -1561,7 +1561,7 @@ const ECS = [
   {k: 1, code: "L1", name: "In buy zone", short: "zone", c: "var(--st1)", d: "0 to +0.5 ADR over the daily 9/21 band with the trend intact (Entry Check L1). The Setups lists add every other check."},
   {k: 2, code: "L2", name: "Just under buy zone", short: "just under", c: "var(--st2)", d: "Up to 0.25 ADR under the daily 9 EMA (L2) — could reclaim; the planned entry is a move back over yesterday's 9 EMA."},
   {k: 3, code: "ABOVE", name: "Too high above buy zone", short: "too high", c: "var(--st3)", d: "More than 0.5 ADR over the daily 9/21 band — wait for a pullback into the zone."},
-  {k: 4, code: "L3", name: "Deep under buy zone", short: "deep under", c: "var(--st5)", d: "More than 0.25 ADR under the daily 9 EMA (L3) — not a setup until it's back near the zone."},
+  {k: 4, code: "L3", name: "Deep under buy zone", short: "deep under", c: "var(--st5)", d: "More than 0.25 ADR under the daily 9 EMA but above the 21 (L3 deep reclaim) — On deck as a reclaim watch if nothing else is missing; trades only after a move back over yesterday's 9 EMA."},
   {k: 5, code: "U21", name: "Under the daily 21 EMA", short: "under 21", c: "var(--st6)", d: "Closed under the daily 21 EMA — out."},
   {k: 6, code: "BRK", name: "Trend broken", short: "broken", c: "var(--st7)", d: "Above the 21 EMA, but the daily 21 EMA, daily 50 SMA or weekly 10-week line isn't rising — out."}
 ];
@@ -7408,7 +7408,7 @@ function jnRecord(){
   };
   if (sp61) {
     // needs the stored bars — until they load, only MAP's lists are logged and the card says so
-    if (S.has.hist) { const L6 = s61Lists(true); L6["A-eligible"].forEach(x => add(x.r, "a61")); [...L6["OnDeck-L2"], ...L6["OnDeck-1blocker"]].forEach(x => add(x.r, "d61", x.ffTxt)); }
+    if (S.has.hist) { const L6 = s61Lists(true); L6["A-eligible"].forEach(x => add(x.r, "a61")); [...L6["OnDeck-L2"], ...L6["OnDeck-1blocker"], ...L6["OnDeck-L3"]].forEach(x => add(x.r, "d61", x.ffTxt)); }   // 25 Oct: L3 Deep reclaim → On deck (Spec 6.1 check 6 / §2, amended 24 Oct) — see the L3 section at the end
   } else {
     for (const r of pl.plan) add(r, r.state === 1 ? "zone" : "wait");
     for (const d of pl.deck) add(d.r, "deck", d.why);
@@ -8361,7 +8361,8 @@ renderTab = function(t){ _renderTabF(t); if (t === "data") { try { renderFeedCar
                    · B: the highest high of the last 5 bars (too recent to confirm as a pivot) is a level too.
      11 LOD (live) entry ≤ 0.6 ADR above today's low; 1R = entry − LOD. Never part of the pass.
    Lists (Eugene, 19 Oct): hard = 1 2 3 5 7 8 (any fail → Out) · soft = L2, 4, 9 (10 = room, information only).
-     L1 + no soft blocker = A-eligible · L1 + one = OnDeck-1blocker · L2 + none = OnDeck-L2 · L3 / Above zone = Background
+     L1 + no soft blocker = A-eligible · L1 + one = OnDeck-1blocker · L2 + none = OnDeck-L2 · L3 + none = OnDeck-L3 (25 Oct:
+     Spec 6.1 amended 24 Oct, "L3 Deep reclaim" listable on On deck) · Above zone = Background
      (Out with 2+ soft blockers) · anything with two blockers = Out. Spec61 Pass = checks 1–9 all pass (L1 only).
    Size: base grade (Settings) − 1 below the 200 SMA − regime step (MAP says: Supportive 0 · Mixed 1 · Defensive 2)
      − personal steps (urge ≥ 4, three straight losses: 1 each), never below C. Shares = NLV × % ÷ (entry − LOD); before
@@ -8383,13 +8384,13 @@ const prevSess = d => { let x = addDays(d, -1); while (!isSess(x)) x = addDays(x
 const s61Live = () => true;
 const s61Me = () => store.get("adrb.s61Me", {}) || {};
 const s61Cat = () => new Set(store.get("adrb.s61Cat", []) || []);
-const LOC61 = {L1: {n: "Continuation — in zone", c: "go", code: 1}, L2: {n: "Reclaim watch", c: "zone", code: 2}, L3: {n: "Background", c: "", code: 3},
+const LOC61 = {L1: {n: "Continuation — in zone", c: "go", code: 1}, L2: {n: "Reclaim watch", c: "zone", code: 2}, L3: {n: "Deep reclaim", c: "zone", code: 3},   /* 25 Oct: L3 Deep reclaim → On deck (Spec 6.1 check 6 / §2, amended 24 Oct) — see the L3 section at the end */
   ABOVE: {n: "Above zone", c: "wait", code: 4}, BELOW21: {n: "Below 21 — out", c: "bad", code: 0}};
 // C (Eugene, 19 Oct): code BELOW21 also covers a failed check 3 with the close above the 21 EMA — name it for what it is
 const loc61Name = x => !x || !x.loc ? "—" : x.loc === "BELOW21" && x.close > x.e21 ? "Structure fail — out" : LOC61[x.loc].n;
 const res61Txt = at => !at ? "" : at.recent ? `high ${at.d}, last 5 sessions — not yet a confirmed swing` : `swing ${at.hi ? "high" : "low"} ${at.d}`;
 // list names on screen (21 Oct, Entry Check): plain words. The codes (s.list, the feed's "Spec61 List") are unchanged.
-const LIST61 = {"A-eligible": {n: "Ready to trade", c: "go"}, "OnDeck-L2": {n: "On deck · just under", c: "zone"}, "OnDeck-1blocker": {n: "On deck · one thing missing", c: "zone"}, Background: {n: "Not yet", c: ""}, Out: {n: "Out", c: "bad"}};
+const LIST61 = {"A-eligible": {n: "Ready to trade", c: "go"}, "OnDeck-L2": {n: "On deck · just under", c: "zone"}, "OnDeck-1blocker": {n: "On deck · one thing missing", c: "zone"}, "OnDeck-L3": {n: "On deck · deep under", c: "zone"}, Background: {n: "Not yet", c: ""}, Out: {n: "Out", c: "bad"}};
 // Entry Check (21 Oct): the Intraday Pivot indicator's location words, for display. LOC61 / loc61Name above keep their text
 // (it reaches the feed's "Spec61 First Fail" through ffTxt and the Decision log's frozen facts).
 const EC_LOC = {L1: "In buy zone", L2: "Just under buy zone (could reclaim)", L3: "Deep under buy zone", ABOVE: "Too high above buy zone"};
@@ -8398,7 +8399,7 @@ const ecLocS = x => ecLoc(x).replace(/ \(could reclaim\)| — out/g, "");       
 const ecLocCode = c => !c ? "—" : c === "BELOW21" ? "Under the daily 21 EMA / trend broken — out" : EC_LOC[c] || c;   // a stored code, no close
 // ffTxt (data) read out in words for the screen: "3 Structure 21E" → "3 Trend daily 21 EMA"
 const ecPlain = t => String(t || "").replace(/\b21E\b/g, "daily 21 EMA").replace(/\b50S\b/g, "daily 50 SMA").replace(/\b10W\b/g, "weekly 10-week line").replace(/^3 Structure/, "3 Trend")
-  .replace(/Reclaim watch/, "just under buy zone").replace(/Above zone/, "too high above buy zone").replace(/Background/, "deep under buy zone").replace(/^5 Ext /, "5 Stretch ").replace(/^2 Break /, "2 Bad data ")
+  .replace(/Reclaim watch/, "just under buy zone").replace(/Above zone/, "too high above buy zone").replace(/Background|Deep reclaim/, "deep under buy zone").replace(/^5 Ext /, "5 Stretch ").replace(/^2 Break /, "2 Bad data ")
   .replace(/^(\d+) (\S)/, (m, n, c) => `${n}. ${c.toUpperCase()}`);   // 23 Oct (Eugene): "6. Deep under buy zone" — a dot after the check number, screen only
 const REG_STEP = {Supportive: 0, Mixed: 1, Defensive: 2};
 
@@ -8515,7 +8516,7 @@ function s61Build(r){
   const main = stg ? WS_MAIN[stg.lab] : null;
   add(4, "Stage", main !== "3" && main !== "1", stg ? `Stage ${stg.lab}` : "no stage", "not Stage 1 or 3 (flag)", "soft");
   add(5, "Stretch (extension)", x.extOk, fin(x.ext) ? `${sg(x.ext, 2)} ADR${x.xr ? " · reset by a gap" : ""}` : "—", "≤ 4 ADR above the daily 50 SMA", "hard");
-  add(6, "Zone (location)", x.loc == null ? null : x.loc === "L1", x.loc ? `${ecLocS(x)} · band ${sg(x.dB, 2)} · 9 EMA ${sg(x.d9, 2)} ADR` : "—", "buy zone: 0 to +0.5 ADR above the daily 9/21 band", x.loc === "L2" ? "soft" : "loc");
+  add(6, "Zone (location)", x.loc == null ? null : x.loc === "L1", x.loc ? `${ecLocS(x)} · band ${sg(x.dB, 2)} · 9 EMA ${sg(x.d9, 2)} ADR` : "—", "buy zone: 0 to +0.5 ADR above the daily 9/21 band", x.loc === "L2" || x.loc === "L3" ? "soft" : "loc");   // 25 Oct: L3 Deep reclaim → On deck (Spec 6.1 check 6 / §2, amended 24 Oct) — see the L3 section at the end
   const gs = r.gState && r.gState !== "—" ? r.gState : null;
   add(7, "Group", gs == null ? null : gs !== "Lagging", gs || "no group state", "not Lagging", "hard");
   add(8, "RS", r.rs == null ? null : r.rs >= C.rsMin, `RS ${r.rs ?? "—"}`, `≥ ${C.rsMin}`, "hard");
@@ -8532,8 +8533,8 @@ function s61Build(r){
   const hardFail = [1, 2, 3, 5, 7, 8].filter(n => ck[n].ok !== true), soft = [4, 9].filter(n => ck[n].ok !== true);
   let list;
   if (hardFail.length || x.loc == null || x.loc === "BELOW21") list = "Out";
-  else if (x.loc === "L3" || x.loc === "ABOVE") list = soft.length >= 2 ? "Out" : "Background";
-  else if (x.loc === "L2") list = soft.length ? "Out" : "OnDeck-L2";
+  else if (x.loc === "ABOVE") list = soft.length >= 2 ? "Out" : "Background";
+  else if (x.loc === "L2" || x.loc === "L3") list = soft.length ? "Out" : x.loc === "L3" ? "OnDeck-L3" : "OnDeck-L2";   // 25 Oct: L3 Deep reclaim → On deck (Spec 6.1 check 6 / §2, amended 24 Oct) — see the L3 section at the end
   else list = soft.length === 0 ? "A-eligible" : soft.length === 1 ? "OnDeck-1blocker" : "Out";
   const pass = [1, 2, 3, 4, 5, 6, 7, 8, 9].every(n => ck[n].ok === true);
   const ff = [1, 2, 3, 4, 5, 6, 7, 8, 9].find(n => ck[n].ok !== true);
@@ -8541,7 +8542,7 @@ function s61Build(r){
     : ff === 2 ? `2 Break ${x.brkMax.toFixed(0)}%>40%` : ff === 3 ? `3 Structure ${!x.k3e21 ? "21E" : !x.k3s50 ? "50S" : "10W"}` : ff === 4 ? `4 Stage ${stg ? stg.lab : "?"}`
     : ff === 5 ? `5 Ext ${fin(x.ext) ? x.ext.toFixed(2) : "?"}>4` : ff === 6 ? `6 ${x.loc ? loc61Name(x).replace(" — out", "") : "no ADR"}` : ff === 7 ? `7 Group ${gs || "unknown"}`
     : ff === 8 ? `8 RS ${r.rs ?? "?"}<${C.rsMin}` : ff === 9 ? `9 Earnings ${er.n == null ? "unknown" : er.n + "<" + C.erMin}` : !fin(x.entry) ? "10 Room no entry" : `10 Room ${x.room.toFixed(2)}R<${C.room}R`;
-  const blockers = [...(x.loc === "L2" ? [6] : []), ...soft];
+  const blockers = [...(x.loc === "L2" || x.loc === "L3" ? [6] : []), ...soft];   // 25 Oct: L3 Deep reclaim → On deck (Spec 6.1 check 6 / §2, amended 24 Oct) — see the L3 section at the end
   // size
   // MAP's call → the board's tape read when MAP isn't set (Eugene, 19 Oct) → the Defensive step (−2) when neither exists
   const RG = s61Reg(), mr = RG.v, regSet = RG.src === "map", regStep = RG.src ? REG_STEP[mr] : REG_STEP.Defensive, me = s61Me(), meStep = (me.urge ? 1 : 0) + (me.loss ? 1 : 0);
@@ -8563,7 +8564,7 @@ function s61Build(r){
 const s61Rej = s => s && s.x.rej ? `${s.x.rej.type} ${s.x.rej.age}` : "none";
 // whole-file lists, ranked (RS; on Defensive days exceptional names first) — filters change visibility only
 function s61Lists(all){
-  const L = {"A-eligible": [], "OnDeck-L2": [], "OnDeck-1blocker": [], Background: [], Out: []}, def = s61Reg().v === "Defensive";
+  const L = {"A-eligible": [], "OnDeck-L2": [], "OnDeck-1blocker": [], "OnDeck-L3": [], Background: [], Out: []}, def = s61Reg().v === "Defensive";
   for (const r of S.stocks) { if (!all && !gOK(r)) continue; const s = s61Of(r); if (s) L[s.list].push(s); }
   for (const k in L) L[k].sort(s61By(def));
   return L;
@@ -8734,20 +8735,20 @@ function renderS61Card(){
       <td><b>${z.final[0]}</b>${z.shares != null ? `<br><span class="small">${z.shares.toLocaleString()} sh</span>` : ""}</td><td>${s.sq}</td>
       <td class="l small">${s.blockers.length ? (why || `<span class="neg">${esc(ecPlain(s.ffTxt))}</span> `) : ""}${def && s.exceptional ? `<span class="flag good">exceptional</span>` : ""}${s.compressed ? `<span class="flag">compressed</span>` : ""}${x.rej ? `<span class="flag">rejected 9 (${x.rej.type}) ${x.rej.age}d</span>` : ""}${x.prov ? `<span class="flag">${x.bars} bars</span>` : ""}</td></tr>`; };
   const tbl = (rows, cap, empty) => rows.length ? `<div class="tscroll" style="max-height:420px"><table class="mini s61t"><thead><tr><th class="l">Ticker</th><th>RS</th><th class="l">Group</th><th>Loc</th><th title="Distance from the daily 9 EMA, in ADR (Dist 9EMA ADR)">9 ADR</th><th title="Planned entry">Entry</th><th title="First resistance: the nearest level above the entry still in play — a 5/5 swing high price hasn't traded above since, a swing low it broke below and hasn't reclaimed, or the highest high of the last 5 sessions">1st res.</th><th title="(first res − entry) / 0.6 ADR">Room</th><th title="NYSE sessions to the earnings session">Earn.</th><th title="Final grade after the SMA, regime and personal steps">Grade</th><th title="Setup Quality 0–5">SQ</th><th class="l">Notes</th></tr></thead><tbody>${rows.map((s, i) => tr(s, i, cap, rows)).join("")}</tbody></table></div>` : `<div class="empty" style="padding:4px 0">${empty}</div>`;
-  const deck = [...L["OnDeck-L2"], ...L["OnDeck-1blocker"]].sort(s61By(def));
-  const n = k => all[k].length, shown = L["A-eligible"].length + deck.length, tot = n("A-eligible") + n("OnDeck-L2") + n("OnDeck-1blocker"), fl = shown < tot ? ` <span class="small">(filters on: ${shown} shown of ${tot})</span>` : "";
+  const deck = [...L["OnDeck-L2"], ...L["OnDeck-1blocker"], ...L["OnDeck-L3"]].sort(s61By(def));   // 25 Oct: L3 Deep reclaim → On deck (Spec 6.1 check 6 / §2, amended 24 Oct) — see the L3 section at the end
+  const n = k => all[k].length, shown = L["A-eligible"].length + deck.length, tot = n("A-eligible") + n("OnDeck-L2") + n("OnDeck-1blocker") + n("OnDeck-L3"), fl = shown < tot ? ` <span class="small">(filters on: ${shown} shown of ${tot})</span>` : "";
   box.innerHTML = hd + `<div class="bd">
     <div class="s61bar"><span>MAP says ${s61MapSel({regSet: RG.src === "map", reg: mr})} → regime step <b>${RG.src ? (REG_STEP[RG.v] ? "−" + REG_STEP[RG.v] : "0") : "−" + REG_STEP.Defensive}</b>${RG.src === "tape" ? ` <span class="small">(MAP not set — the board's tape read says ${esc(RG.v)})</span>` : !RG.src ? ` <span class="neg">(MAP not set and no breadth file — sized as Defensive)</span>` : ""}</span>
       <label class="tog"><input type="checkbox" data-s61me="urge" ${me.urge ? "checked" : ""}>urge ≥ 4 (−1)</label><label class="tog"><input type="checkbox" data-s61me="loss" ${me.loss ? "checked" : ""}>3 straight losses (−1)</label>
       <span class="small">base grade ${esc(CFG.grade)} unless set per ticker · grade never below C · ranked RS → RS Accel20 → Setup Quality → RMV → DCR%${def ? " · Defensive: exceptional names first" : ""}</span></div>
     <div class="kpis" style="margin:8px 0"><div class="kpi card"><div class="k">Ready to trade</div><div class="v">${n("A-eligible")}</div><div class="n">in the buy zone, every check passes · MAP picks Focus A 0–5</div></div>
-      <div class="kpi card"><div class="k">On deck</div><div class="v">${n("OnDeck-L2") + n("OnDeck-1blocker")}</div><div class="n">${n("OnDeck-L2")} just under the zone · ${n("OnDeck-1blocker")} one thing missing · list 0–6</div></div>
-      <div class="kpi card"><div class="k">Not yet</div><div class="v">${n("Background")}</div><div class="n">deep under or too high above the buy zone</div></div>
+      <div class="kpi card"><div class="k">On deck</div><div class="v">${n("OnDeck-L2") + n("OnDeck-1blocker") + n("OnDeck-L3")}</div><div class="n">${n("OnDeck-L2")} just under the zone · ${n("OnDeck-L3")} deep under · ${n("OnDeck-1blocker")} one thing missing · list 0–6</div></div>
+      <div class="kpi card"><div class="k">Not yet</div><div class="v">${n("Background")}</div><div class="n">too high above the buy zone</div></div>
       <div class="kpi card"><div class="k">Out</div><div class="v">${n("Out")}</div><div class="n" title="What stops them (the first hard check that fails)">${Object.entries(ffc).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => `${EC_CK[k] || "#" + k}: ${v}`).join(" · ")}</div></div></div>
     <h4 style="margin:8px 0 2px">Ready to trade${fl}</h4>${tbl(L["A-eligible"], 5, "No name passes every check today.")}
     <h4 style="margin:12px 0 2px">On deck</h4>${tbl(deck, 6, "Nothing on deck.")}
     <details class="tp-fold" style="margin-top:8px"><summary>Not yet (${L.Background.length})</summary><div style="padding:6px 0">${L.Background.slice(0, 80).map(s => tkChip(s.r, s.x.loc === "ABOVE" ? "too high" : "deep under")).join("") || `<span class="dim small">none</span>`}</div></details>
-    <details class="tp-fold"><summary>How the lists work</summary><div class="small" style="padding:6px 0">Same rules as Deep Space Screener v5.0 (rules v6.1), on the stored daily bars. <b>Ready to trade</b> = in the buy zone (L1) and checks 1–9 pass · <b>On deck · just under</b> = just under the buy zone (L2), nothing else missing · <b>On deck · one thing missing</b> = in the buy zone with one soft blocker · <b>Not yet</b> = deep under (L3) or too high above the buy zone · <b>Out</b> = a hard check fails, or two soft blockers. <b>Hard</b> (any fail = out): 1 Stock: liquidity ($1B cap, $100M/day 20-day, &gt; $10) · 2 Stock: no single-bar break &gt; 40% in 50 bars · 3 Trend: above a rising daily 21 EMA, a rising daily 50 SMA and a rising weekly 10-week line · 5 Stretch: ≤ 4 ADR above the daily 50 SMA (or a gap reset) · 7 group not Lagging · 8 RS ≥ 75. <b>Soft</b> (one = on deck, two = out): just under the buy zone · 4 Stage 1 or 3 · 9 earnings inside 5 sessions (or no date). <b>Information only</b> (shown, never blocks — Eugene, 19 Oct): 10 room to the first resistance, ≥ 2R as a guide (1R = 0.6 ADR): the lowest of the 5/5 swing highs price hasn't traded above since, the swing lows it has broken below and not reclaimed, and the highest high of the last 5 sessions. "Trend broken — out" = check 3 failed with the close above the daily 21 EMA (screener code BELOW21, also "Structure fail"). Deep under and too high sit in Not yet. The first 5 Ready to trade and first 6 on deck are full-strength; the rest are greyed. The earnings date in the CSV has no before/after-the-open timing, so every report is treated as after the close: a before-the-open reporter's real exit is one session earlier than shown.</div></details>
+    <details class="tp-fold"><summary>How the lists work</summary><div class="small" style="padding:6px 0">Same rules as Deep Space Screener v5.0 (rules v6.1), on the stored daily bars. <b>Ready to trade</b> = in the buy zone (L1) and checks 1–9 pass · <b>On deck · just under</b> = just under the buy zone (L2), nothing else missing · <b>On deck · deep under</b> = deeper under the daily 9 EMA but still above the daily 21 EMA (L3 deep reclaim, since 25 Oct), nothing else missing · <b>On deck · one thing missing</b> = in the buy zone with one soft blocker · <b>Not yet</b> = too high above the buy zone · <b>Out</b> = a hard check fails, or two soft blockers. <b>Hard</b> (any fail = out): 1 Stock: liquidity ($1B cap, $100M/day 20-day, &gt; $10) · 2 Stock: no single-bar break &gt; 40% in 50 bars · 3 Trend: above a rising daily 21 EMA, a rising daily 50 SMA and a rising weekly 10-week line · 5 Stretch: ≤ 4 ADR above the daily 50 SMA (or a gap reset) · 7 group not Lagging · 8 RS ≥ 75. <b>Soft</b> (one = on deck, two = out): just under the buy zone · 4 Stage 1 or 3 · 9 earnings inside 5 sessions (or no date). <b>Information only</b> (shown, never blocks — Eugene, 19 Oct): 10 room to the first resistance, ≥ 2R as a guide (1R = 0.6 ADR): the lowest of the 5/5 swing highs price hasn't traded above since, the swing lows it has broken below and not reclaimed, and the highest high of the last 5 sessions. "Trend broken — out" = check 3 failed with the close above the daily 21 EMA (screener code BELOW21, also "Structure fail"). Too high sits in Not yet. Just under and deep under move up to Ready only on a move back over yesterday's daily 9 EMA plus the 30-min trigger. The first 5 Ready to trade and first 6 on deck are full-strength; the rest are greyed. The earnings date in the CSV has no before/after-the-open timing, so every report is treated as after the close: a before-the-open reporter's real exit is one session earlier than shown.</div></details>
   </div>`;
   s61Wire(box, null);
   box.querySelectorAll("tbody").forEach(tb => tb.addEventListener("click", e => { if (e.target.closest("[data-sym]:not(tr)")) return; const t = e.target.closest("tr[data-sym]"); if (t) openDrawer(t.dataset.sym); }));
@@ -8812,7 +8813,7 @@ selfCheck = function(){
         else { let j = q.k + 1; if (!q.hi) { while (j <= t && !(Lw[j] < q.p)) j++; j++; } ok = j <= t + 1; for (; ok && j <= t; j++) if (H[j] > q.p) ok = false; }
         F(ok && (!(hi5 > x.entry) || x.fr <= hi5), r.sym, "Entry Check first resistance not yet traded through (A) and ≤ the 5-session high (B)", `${x.fr} ${q.recent ? "recent" : q.hi ? "high" : "low"} ${q.d}`, `5-session high ${hi5}`); } }
     const hard = [1, 2, 3, 5, 7, 8].some(n => s.ck[n].ok !== true), soft = [4, 9].filter(n => s.ck[n].ok !== true).length;   // 10 room = information only
-    const lw = hard || !x.loc || x.loc === "BELOW21" ? "Out" : x.loc === "L3" || x.loc === "ABOVE" ? (soft >= 2 ? "Out" : "Background") : x.loc === "L2" ? (soft ? "Out" : "OnDeck-L2") : soft === 0 ? "A-eligible" : soft === 1 ? "OnDeck-1blocker" : "Out";
+    const lw = hard || !x.loc || x.loc === "BELOW21" ? "Out" : x.loc === "ABOVE" ? (soft >= 2 ? "Out" : "Background") : x.loc === "L2" || x.loc === "L3" ? (soft ? "Out" : x.loc === "L3" ? "OnDeck-L3" : "OnDeck-L2") : soft === 0 ? "A-eligible" : soft === 1 ? "OnDeck-1blocker" : "Out";
     F(lw === s.list, r.sym, "Entry Check list", s.list, lw);
     F(s.pass === (s.list === "A-eligible"), r.sym, "Entry Check pass = A-eligible", s.pass, s.list);
     F(GRADES.indexOf(s.size.final) >= GRADES.indexOf(s.size.base) && s.size.final !== undefined, r.sym, "Entry Check size never above the base grade", s.size.final && s.size.final[0], s.size.base[0]);
@@ -9469,7 +9470,7 @@ function s61Clear(s){
   if (ck[5].ok === false) add(5, `${sgA(x.ext)} ADR over the 50 SMA`, "≤ 4 ADR", `price rests or the 50 SMA rises — ≤ ${money$(x.s50 + 4 * D)} today`);
   if (x.loc === "L2") add(6, `close ${sgA(x.d9)} ADR from the 9 EMA (L2)`, "L1 = 0 to +0.5 ADR over the band", `a close back over the prior day's 9 EMA ${money$(x.e9p)}, then the 30-min trigger`);
   if (x.loc === "ABOVE") add(6, `${sgA(x.dB)} ADR over the 9/21 band`, "≤ +0.5 ADR", `a pullback to ≤ ${money$(x.bandTop + 0.5 * D)}`);
-  if (x.loc === "L3") add(6, `${sgA(x.d9)} ADR under the 9 EMA`, "≥ −0.25 ADR for L2", `back within 0.25 ADR of the 9 EMA (≥ ${money$(x.e9 - 0.25 * D)})`);
+  if (x.loc === "L3") add(6, `close ${sgA(x.d9)} ADR from the 9 EMA (L3)`, "L1 = 0 to +0.5 ADR over the band", `a close back over the prior day's 9 EMA ${money$(x.e9p)}, then the 30-min trigger`);   // 25 Oct: L3 Deep reclaim → On deck (Spec 6.1 check 6 / §2, amended 24 Oct) — see the L3 section at the end
   if (ck[7].ok === false) add(7, `group ${r.gState}`, "not Lagging", "the group's state improves");
   if (ck[8].ok === false) add(8, `RS ${r.rs} of ${S.stocks.length}`, "≥ 75", "RS back to 75+");
   if (ck[9].ok === false) add(9, s.er.n == null ? "no earnings date" : `earnings in ${s.er.n} session${s.er.n === 1 ? "" : "s"}`, "≥ 6 sessions away", s.er.n == null ? "confirm the date (a missing date is a blocker, never a pass)" : `after the report (exit by ${s.er.exitBy})`);
@@ -9529,7 +9530,7 @@ function dpNames(){
   for (const [l, set] of MAPS) { let k = 0; for (const sym of set) { k++; const r = rowBy.get(sym); if (r && !r.etf) add(r, l, k); else if (!seen.has(sym)) { const e = {s: sym, l, k, why: "not in the current files", now: "", f: {}}; seen.set(sym, e); out.push(e); } } }
   if (s61Live()) {
     if (S.has.hist) { const L = s61Lists(true), def = s61Reg().v === "Defensive"; L["A-eligible"].slice(0, DP_TOP.q).forEach((x, i) => add(x.r, "q", i + 1));
-      [...L["OnDeck-L2"], ...L["OnDeck-1blocker"]].sort(s61By(def)).slice(0, DP_TOP.d).forEach((x, i) => add(x.r, "d", i + 1)); }
+      [...L["OnDeck-L2"], ...L["OnDeck-1blocker"], ...L["OnDeck-L3"]].sort(s61By(def)).slice(0, DP_TOP.d).forEach((x, i) => add(x.r, "d", i + 1)); }
   } else {
     const pl = jnSurface(); if (pl) { pl.plan.forEach((r, i) => add(r, r.state === 1 ? "zone" : "wait", i + 1)); pl.deck.slice(0, DP_TOP.deck).forEach((d, i) => add(d.r, "deck", i + 1)); }
   }
@@ -9584,7 +9585,7 @@ function dpLive(e){
     const x = s.x;
     if (x.loc === "BELOW21") flags.push({t: x.close > x.e21 ? "trend broken" : "under the daily 21 EMA — invalid", c: "bad"});
     else if (x.loc === "ABOVE" && f.loc !== "ABOVE") flags.push({t: `too high: ${sgA(x.dB)} ADR over the band`, c: "wait"});
-    else if (f.loc === "L2" && x.loc === "L1") flags.push({t: "reclaimed the daily 9 — in the buy zone now", c: "go"});
+    else if ((f.loc === "L2" || f.loc === "L3") && x.loc === "L1") flags.push({t: "reclaimed the daily 9 — in the buy zone now", c: "go"});
     else if (x.loc === "L1") flags.push({t: "in the buy zone", c: "go"});
     else if (x.loc) flags.push({t: ecLoc(x), c: LOC61[x.loc].c});
     if (s.ck[9].ok === false && s.er.n != null) flags.push({t: `earnings in ${s.er.n}`, c: "bad"});
@@ -9929,8 +9930,8 @@ function nextAction(r, held){
   if (s.list === "A-eligible") return early ? "Wait for 10:00 ET, then a 30-min close over the 30-min 21 EMA" : "On the chart: 30-min close over the 30-min 21 EMA; stop = the day low (≤ 0.6 ADR)";
   if (s.list === "OnDeck-L2") return `Just under the buy zone — needs a move over yesterday's daily 9 EMA ${f2(x.e9p)}, then the 30-min trigger`;
   if (s.list === "OnDeck-1blocker") { const c = s61Clear(s).find(c => s.blockers.includes(c.n)); return c ? `Blocked by ${c.n} — clears: ${c.clear}` : "One blocker — see the checks"; }
+  if (s.list === "OnDeck-L3") return `Deep under the buy zone — needs a move over yesterday's daily 9 EMA ${f2(x.e9p)}, then the 30-min trigger`;   // 25 Oct: L3 Deep reclaim → On deck (Spec 6.1 check 6 / §2, amended 24 Oct) — see the L3 section at the end
   if (x.loc === "ABOVE") return `Too high above the buy zone — wait for a pullback to ≤ ${f2(x.bandTop + 0.5 * D)}`;
-  if (x.loc === "L3") return "Not yet — deep under the buy zone (more than 0.25 ADR under the daily 9 EMA)";
   return `Out — ${s.ffTxt ? ecPlain(s.ffTxt) : ecLoc(x)}`;
 }
 
@@ -10164,7 +10165,7 @@ jnSoon = function(){ if (JNL.busy) return; _jnSoonL(); };
 // EC_LOC / ecLoc / ecLocS / ecLocCode / ecPlain sit next to LOC61 in the Spec 6.1 script; the Detailed view's pieces
 // (s61RowHTML, s61ChipsHTML, s61LiveHTML, s61SizeHTML, ecTagHTML, ecNotLive) sit with s61PanelHTML there.
 const EC = {sym: null};
-const EC_CALL = {"A-eligible": {t: "READY TO TRADE", c: "go"}, "OnDeck-L2": {t: "ON DECK · JUST UNDER", c: "zone"}, "OnDeck-1blocker": {t: "ON DECK · ONE THING MISSING", c: "zone"},
+const EC_CALL = {"A-eligible": {t: "READY TO TRADE", c: "go"}, "OnDeck-L2": {t: "ON DECK · JUST UNDER", c: "zone"}, "OnDeck-1blocker": {t: "ON DECK · ONE THING MISSING", c: "zone"}, "OnDeck-L3": {t: "ON DECK · DEEP UNDER", c: "zone"},
   Background: {t: "NOT YET", c: ""}, Out: {t: "OUT", c: "bad"}};
 // short names for the check numbers (Setups card "Out" tally, two-blocker sentence)
 const EC_CK = {1: "Stock size", 2: "Bad data", 3: "Trend", 4: "Stage", 5: "Stretch", 6: "Zone", 7: "Group", 8: "RS", 9: "Earnings", 10: "Room", 11: "Day low"};
@@ -10185,7 +10186,7 @@ function ecWhy(s){
   const zHi = x.bandTop + 0.5 * D;
   if (x.loc == null) W[6] = "No ADR yet — too little history to place it.";
   else if (x.loc === "L2") W[6] = `Just under the buy zone (${f2(x.bandTop)} – ${f2(zHi)}). A move back above ${f2(x.e9p)} (yesterday's daily 9 EMA) puts it in play — that's the planned entry.`;
-  else if (x.loc === "L3") W[6] = `Deep under the buy zone — ${Math.abs(x.d9).toFixed(2)} ADR under the daily 9 EMA. Needs to get back within 0.25 ADR of it (${f2(x.e9 - 0.25 * D)} or higher).`;
+  else if (x.loc === "L3") W[6] = `Deep under the buy zone — ${Math.abs(x.d9).toFixed(2)} ADR under the daily 9 EMA, still above the daily 21 EMA (a deep reclaim watch). A move back above ${f2(x.e9p)} (yesterday's daily 9 EMA), then the 30-min trigger, puts it in play.`;   // 25 Oct: L3 Deep reclaim → On deck (Spec 6.1 check 6 / §2, amended 24 Oct) — see the L3 section at the end
   else if (x.loc === "ABOVE") W[6] = `Too high above the buy zone (${x.dB.toFixed(2)} ADR over the top of the daily 9/21 band; limit 0.5) — wait for a pullback to ${f2(zHi)} or lower.`;
   if (ck[7].ok == null) W[7] = "Group strength unknown — no group for it in the file.";
   else if (ck[7].ok === false) W[7] = `Its group${r.group ? " (" + r.group + ")" : ""} is Lagging — wait for the group to improve.`;
@@ -10198,7 +10199,7 @@ function ecWhy(s){
 // the header sentence and the check it came from (that one isn't repeated under the strip)
 function ecSay(s, W){
   if (s.list === "A-eligible") return {n: null, t: ecReady};
-  if (s.list === "OnDeck-L2" || s.list === "Background") return {n: 6, t: W[6]};
+  if (s.list === "OnDeck-L2" || s.list === "OnDeck-L3" || s.list === "Background") return {n: 6, t: W[6]};
   if (s.list === "OnDeck-1blocker") { const n = s.blockers[0]; return {n, t: W[n]}; }
   const hard = [1, 2, 3, 5, 7, 8].find(n => s.ck[n].ok !== true);
   if (hard != null) return {n: hard, t: W[hard]};
@@ -11985,6 +11986,49 @@ feedCSV = function(){
     L[i + 1] += "," + (x ? [fv(x.ext, 3), x.a21, x.a50, x.a200] : ["", "", "", ""]).join(","); }
   return L.join("\n");
 };
+</script>
+
+<script>
+"use strict";
+/* =====================================================================
+   L3 DEEP RECLAIM → ON DECK (25 Oct 2026). TRADING LOGIC (lists only).
+   Ruling: Eugene, 20 Oct 2026, confirmed and written 24 Oct 2026 ("push authorised") — Unified Spec 6.1 amendment callout
+   (24 Oct) and check 6 / §2; Command Reference "RULING — 9 EMA" (24 Oct): "A daily close below the 9 EMA is not a hard
+   veto for MAP lists. A name stays listable as long as it closes above the daily 21 EMA … 'L3 Background' renamed L3 Deep
+   reclaim and listable on On deck as a reclaim watch alongside L2; promotion to Focus A on the prior day's 9 EMA reclaim +
+   the 30-min trigger + check 11 live; Focus A stays L1; L3 episodes scored as their own test arm … the Deep Space Board's
+   L3 = Background handling is now out of line and needs a code update." Spec §2: "On deck … (a) L2 Reclaim or L3 Deep
+   reclaim watch passing every other gate"; "Background now means Above zone only". Eugene in chat, 25 Oct: "Yes, build both".
+   What changes (in place, each line marked "25 Oct: L3 Deep reclaim"):
+     · s61Build: L3 + no soft blocker → list "OnDeck-L3" (new code); L3 + any soft blocker → Out (same as L2); check 6 is a
+       soft blocker for L3 as for L2. Was: L3 + 0–1 soft → Background, 2 → Out. Above zone is unchanged (Background).
+     · LOC61.L3.n "Background" → "Deep reclaim" (the Spec's name). It reaches the feed's "Spec61 First Fail" text
+       ("6 Deep reclaim", as an L2 name reads "6 Reclaim watch"); ecPlain reads both old and new words.
+     · The self-check's separate list copy, the Entry Check card (On deck = L2 + one thing missing + L3), the Board log's
+       On deck capture (d61), the Daily Plan's On deck slice, the On deck call / sentence / clearing condition / to-do line.
+   New feed value: "Spec61 List" = "OnDeck-L3" (a value added, no header renamed; MAP already tags L3 by "Loc Label" = 3).
+   L2's code "OnDeck-L2" keeps meaning L2 only, so H1's L2 arm stays clean (§8: L3 is its own arm).
+   Never changes: the location maths (Loc Label, Dist 9 / band), Spec61 Pass (L1 only), the screener tier and fail code,
+   check results, planned entry (L3 keeps the band top — open question for Eugene), size, RS, ranking order, filters.
+   Storage: none. Tests: tools/board-spec61-test.js (separate re-port of the list rule), board-entrycheck-test.js (call per
+   list, feed + log identical to the old board except the L3 rows).
+   ===================================================================== */
+</script>
+
+<script>
+"use strict";
+/* =====================================================================
+   FILTER PRESET "Entry Check view (rules v6.1)" (25 Oct 2026). DISPLAY ONLY.
+   Eugene, 25 Oct: he reads the Board through "Tight longs … but with RS reduced to 75+ as per map", and chose "Add a
+   rules-matching preset" once he saw that Tight longs also keeps only board states 1–2 (hides just-under / deep-under
+   reclaim names from On deck), caps the stretch at 3 ADR and hides earnings inside 7 calendar days — all stricter than
+   Unified Spec 6.1 (4 ADR, 5 sessions, L2/L3 on deck).
+   The preset only sets what the filter bar can express of Spec 6.1 check 1 (≥ $100M a day, market cap ≥ $1B, price ≥ $10)
+   and check 8 (RS ≥ 75); every other check stays with Entry Check, so the lists show what MAP may list.
+   Filters change visibility only (never a list, rank, state, size or the feed). Built-in presets are not stored;
+   "Tight longs" and the user's own presets (adrb.gfPresets) are untouched. Storage: none.
+   ===================================================================== */
+GF_PRESETS["Entry Check view (rules v6.1)"] = {gates: {dvMin: 100, mcapMin: 1, pxMin: 10}, crit: {rs: {on: 1, p: 75}}};
 </script>
 
 <script id="mobile-js">
