@@ -11845,5 +11845,224 @@ feedCSV = function(){
 GF_PRESETS["Entry Check view (rules v6.1)"] = {gates: {dvMin: 100, mcapMin: 1, pxMin: 10}, crit: {rs: {on: 1, p: 75}}};
 </script>
 
+<script>
+"use strict";
+/* =====================================================================
+   ETF SETUPS FLOW + MAP IMPORT FIXES (26 Oct 2026). DISPLAY / TRACKING ONLY — no ETF rule, status, top 3 or feed moves.
+   Eugene, 26 Oct: "there is an issue updating the etf setup section. firstly no manual amendment to the section is
+   available" · on ETFs → "Pullbacks in an uptrend", Watchlist → "ETF setups — long and short" and Setups (only the
+   inverse ETFs card): "this is a bit disjointed, can we make it flow so that it makes sense to a user" · on the plan:
+   "Keep on both tabs. proceed with everything else."
+   What changes:
+   - MAP import status: the "Last import" line counts the ETF lines ("· 3 ETF") and the box is redrawn after the E lines
+     are saved (before, it was drawn first, and not at all while the click's focus sat inside it — so an update looked
+     as if it hadn't landed). A "MAP UPDATE … 02:15 ET" header is named as an update with its time.
+   - MAP import reads OUT and WATCH lines as notes: "OUT XP | Lula won runoff …" → "MAP dropped XP — …", "WATCH EWZ | …"
+     → "MAP watching EWZ — …". They add nothing to any list (the update's A / D / E lines already are the lists). JSON:
+     "OUT": [{t, note}] / "WATCH": [...] (or plain tickers). These two line types are not in MAP's paste-block format on
+     Notion yet (MAP v4.4 page, 20 Oct callout) — proposed to Eugene, not edited. A / B / D / H / E / OVER-B parse exactly
+     as before; only lines that used to be "Skipped a line" are now read.
+   - The regime score drops a trailing note in brackets: "regime Mixed -1 (unchanged)" → MAP's call Mixed, score "-1".
+   - New box "ETF setups" in "Today's MAP lists and held names" (Watchlist), next to A / B / On deck / Held: MAP's E list
+     as "PPH long, PPA short, IYT short". An import fills it; typing overwrites it (a ticker kept with the same side keeps
+     MAP's why / vehicle / now / catalyst). "Clear all" and the stale-lists buttons treat it like the other boxes.
+   - The ETF setups card leads with MAP's E list (MAP is the authority on the lists): per line MAP's side, vehicle and
+     notes, and the board's own read of the same fund (status, side, rank) with agree / differs. The board's top 3 stays
+     underneath, labelled as the cross-check. MAP's dropped / watched ETFs (OUT / WATCH) are named under it. The old
+     one-line footnote is replaced by this.
+   - The card shows on BOTH tabs: Watchlist (now right after MAP's On deck list, with MAP's other lists) and Setups (right
+     after Entry Check lists, before the inverse ETFs card where a short's inverse fund gets its trigger). Same HTML.
+   - ETFs → "Pullbacks in an uptrend": each fund carries its ETF-setup status tag (and a MAP tag when it is on MAP's E
+     list), plus a line saying how this card differs from the setup rules (pullback = at or under the 9/21; setup Ready =
+     just over them).
+   Never changes: esJudge / esPick / esRun (statuses, top 3), the ETF feed CSV, the Deep Space feed, the Decision-log /
+   Board log, Entry Check lists, the A / B / D / H parse, the "MAP says" values, sizes, settings keys.
+   Storage: NEW localStorage adrb.etfList = {day, src: "MAP" | "typed", at, upd, E: [{k, t, side, why, vehicle, now,
+   catalyst, typed}]} (also carried in the snapshot as etfList). Old stored imports without it still read adrb.mapImp.E.
+   adrb.mapImp gains `notes` [{kind: "out" | "watch", t, note}] and `upd` (the update time) — fields added, none renamed.
+   Test: tools/board-etf-flow-test.js.
+   ===================================================================== */
+const EL_K = "adrb.etfList";
+const elGet = () => { const o = store.get(EL_K, null); return o && Array.isArray(o.E) ? o : null; };
+// the list when it is for the board's plan day (or the session before it), like MAP's notes
+function elCur(){ const o = elGet(); if (!o) return null; const p = curPlanDay(); return !o.day || o.day === p || o.day === prevSess(p) ? o : null; }
+const elText = E => (E || []).map(e => e.t + (e.side ? " " + e.side : "")).join(", ");
+// "PPH long, PPA short IYT" → [{t, side}] — a long / short word belongs to the ticker before it
+function elParse(txt){
+  const out = [];
+  for (const w of String(txt || "").split(/[\s,;|]+/).filter(Boolean)) {
+    if (/^(long|short)$/i.test(w)) { const last = out[out.length - 1]; if (last && !last.side) last.side = w.toLowerCase(); continue; }
+    const t = esSym(w); if (t && !out.some(e => e.t === t)) out.push({t, side: ""});
+  }
+  return out;
+}
+function elSave(E, src, day, upd){ store.set(EL_K, {day: day || curPlanDay(), src, at: Date.now(), upd: upd || "", E}); }
+const _esMapEFL = esMapE;
+esMapE = function(){ const o = elGet(); if (o) { const c = elCur(); return c && c.E.length ? c.E : null; } return _esMapEFL(); };
+
+/* ---------------- MAP import: OUT / WATCH notes, update header, score note ---------------- */
+const EL_NOTE = /^(OUT|WATCH)\s*\d*[.):]?\s+([A-Za-z0-9.:\-]+)\s*(?:[|:\-–—]\s*(.*))?$/i;
+const _mapParseFL = mapParse;
+mapParse = function(text){
+  const t = String(text || "").trim(), notes = [];
+  let rest = t;
+  if (t[0] === "{") { try { const j = JSON.parse(t); for (const [k, kind] of [["OUT", "out"], ["WATCH", "watch"]]) (j[k] || []).forEach(x => { const s = esSym(typeof x === "string" ? x : x.t || x.ticker); if (s) notes.push({kind, t: s, note: typeof x === "string" ? "" : String(x.note || x.why || "")}); }); } catch (e) {} }
+  else rest = t.split(/\r?\n/).filter(raw => { const m = raw.trim().match(EL_NOTE); if (!m) return true; const s = esSym(m[2]); if (s) notes.push({kind: m[1].toLowerCase(), t: s, note: (m[3] || "").trim()}); return false; }).join("\n");
+  const P = _mapParseFL(rest);
+  P.notes = notes;
+  const h = t[0] === "{" ? "" : (t.split(/\r?\n/).map(l => l.trim()).find(l => /^MAP\b/i.test(l)) || "");
+  P.upd = /^MAP\s+UPDATE\b/i.test(h) ? ((h.match(/\b(\d{1,2}:\d\d)\s*(ET|SGT)?/i) || [])[0] || "update").trim() : "";
+  if (P.code) P.code = P.code.replace(/\s*\([^)]*\)/g, "").trim();
+  return P;
+};
+const _mapApplyFL = mapApply;
+mapApply = function(P){
+  const ok = _mapApplyFL(P);
+  if (ok) { try {
+    const m = mapImp(); if (m) { m.notes = P.notes || []; m.upd = P.upd || ""; m.n = {...m.n, E: (P.E || []).length}; store.set(MAPI_K, m); }
+    elSave((P.E || []).map(e => ({...e})), "MAP", P.session || curPlanDay(), P.upd);
+    elBoxFill(); elRedraw(true);
+  } catch (e) { console.warn("MAP import notes / ETF list", e); } }
+  return ok;
+};
+const _mapImpHTMLFL = mapImpHTML;
+mapImpHTML = function(){
+  let h = _mapImpHTMLFL(); const m = mapImp(); if (!m) return h;
+  const p = curPlanDay(), cur = m.session === p || m.session === prevSess(p), nE = m.E ? m.E.length : 0;
+  h = h.replace(/(<b>MAP)( for )/, (x, a, b) => m.upd ? `${a} update ${esc(m.upd === "update" ? "" : m.upd)}`.trimEnd() + b : x)
+       .replace(/(\d+ on deck)/, `$1 · ${nE} ETF`);
+  const N = cur && m.notes ? m.notes : [], line = (k, lab) => { const L = N.filter(x => x.kind === k); return L.length ? `<div>${lab}: ${L.map(x => `<b>${esc(x.t)}</b>${x.note ? ` — ${esc(x.note)}` : ""}`).join(" · ")}</div>` : ""; };
+  const add = line("out", "MAP dropped") + line("watch", "MAP watching");
+  if (add) { const i = h.indexOf("<textarea"); if (i > 0) { const j = h.lastIndexOf("</div>", i); h = h.slice(0, j) + `<div class="small">${add}</div>` + h.slice(j); } }
+  return h;
+};
+
+/* ---------------- the "ETF setups" box beside A / B / On deck / Held ---------------- */
+{
+  const held = $("heldIn").closest("label");
+  held.insertAdjacentHTML("beforebegin", `<label><span class="lbl"><b>ETF setups</b> <span class="dim">MAP's E list · ticker + long / short</span> <span class="mlc" id="mlcE"></span></span><input type="text" id="etfIn" placeholder="e.g. PPH long, PPA short, IYT short" autocomplete="off" spellcheck="false"></label>`);
+  let t = null;
+  $("etfIn").addEventListener("input", () => { clearTimeout(t); t = setTimeout(elTyped, 350); });
+  $("listsClear").addEventListener("click", () => { $("etfIn").value = ""; elTyped(); });
+  elBoxFill();
+}
+function elBoxFill(){ const i = $("etfIn"); if (!i) return; const o = elGet(), m = mapImp(); i.value = elText(o ? o.E : m && m.E ? m.E : []); elCount(); }
+function elCount(){ const c = $("mlcE"); if (!c) return; const o = elCur(), n = o ? o.E.length : 0; c.textContent = n ? String(n) : ""; }
+// typed: keep MAP's fields for a ticker kept with the same side
+function elTyped(){
+  const prev = (elGet() || {}).E || ((mapImp() || {}).E) || [], by = new Map(prev.map(e => [e.t, e]));
+  const E = elParse($("etfIn").value).map((x, i) => { const o = by.get(x.t); return o && (o.side || "") === x.side ? {...o, k: i + 1} : {k: i + 1, t: x.t, side: x.side, why: "", vehicle: "", now: "", catalyst: "", typed: true}; });
+  const o = elCur(); elSave(E, "typed", o ? o.day : curPlanDay(), "");
+  elCount(); elRedraw(false);
+}
+// redraw what reads the list (never the lists box itself while you type in it)
+function elRedraw(imp){
+  if (!S.snap) return;
+  if (imp) { const b = $("mapImpBox"); if (b) b.innerHTML = mapImpHTML(); }
+  if (S.ui.tab === "watch") { if (typeof renderESCard === "function") renderESCard(); }
+  else if (S.ui.tab === "plan") renderESPlan();
+  else if (S.ui.tab === "etfs") renderETF();
+}
+// the stale-lists strip: "Keep" re-dates the ETF list with the others; "Clear" clears it when the others were cleared
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-lsx]"); if (!b) return; const k = b.dataset.lsx;
+  setTimeout(() => { const o = elGet(); if (!o) return;
+    if (k === "keep") { o.day = curPlanDay(); store.set(EL_K, o); elCount(); }
+    else if (k === "clear" && !$("focusIn").value && !($("bIn") && $("bIn").value)) { $("etfIn").value = ""; elSave([], "typed", curPlanDay(), ""); elCount(); }
+    elRedraw(false); }, 0);
+});
+// snapshot carries the list
+const _snapshotObjFL = snapshotObj;
+snapshotObj = function(){ const o = _snapshotObjFL(); o.etfList = elGet(); return o; };
+const _openSnapshotFL = openSnapshot;
+openSnapshot = async function(file){
+  let o = null; try { o = JSON.parse(await file.text()); } catch (e) {}
+  if (o && o.kind === "deep-space-snapshot" && o.etfList && Array.isArray(o.etfList.E)) store.set(EL_K, o.etfList);
+  const res = await _openSnapshotFL(file); elBoxFill(); return res;
+};
+
+/* ---------------- the card: MAP's E list first, the board's top 3 as the cross-check ---------------- */
+function esMapHTML(){
+  const E = esMapE(), o = elCur(), R = S.has && S.has.hist ? esRun() : null, m = mapImp();
+  const p = curPlanDay(), mcur = m && (m.session === p || m.session === prevSess(p));
+  const src = o ? (o.src === "MAP" ? `from MAP's import${o.upd && o.upd !== "update" ? ` (update ${esc(o.upd)})` : o.upd ? " (update)" : ""}` : "typed by you") : "from MAP's import";
+  const side = s => s ? `<b class="${s === "long" ? "pos" : "neg"}">${s === "long" ? "Long" : "Short"}</b>` : `<span class="neg">side?</span>`;
+  const board = e => {
+    if (!R) return {t: `<span class="dim">needs the stored price history</span>`, ok: null};
+    const r = R.rows.find(x => x.sym === e.t);
+    if (!r) return {t: `<span class="dim">${ETFU.has(e.t) ? "not in your ETF file" : "not on the ETF map — the board doesn't judge it"}</span>`, ok: null, r};
+    const pill = r.j.status === "Ready" ? "go" : r.j.status === "Reclaim watch" ? "zone" : "bad";
+    const ok = r.j.status !== "Out" && r.j.side === e.side;
+    const what = r.j.status === "Out" ? `Out — ${esc(r.j.fails[0] || "")}` : `${r.j.side === "long" ? "Long" : "Short"} ${r.j.status}${r.rank ? ` · board #${r.rank}` : " · not in the board's top 3"}`;
+    return {t: `<span class="pill ${pill}">${what}</span>`, ok, r};
+  };
+  const rows = (E || []).map(e => { const b = board(e), r = b.r;
+    const ag = b.ok == null ? `<span class="dim">—</span>` : !e.side ? `<span class="dim">add long / short</span>` : b.ok ? `<b class="pos">✓ agrees</b>` : `<b class="neg">differs</b>`;
+    const near = r && r.j.status !== "Out" ? esc(r.near.t) : "";
+    const rs = r && fin(r.o.rs20) ? `<span class="${r.o.rs5 > 0 ? "pos" : "neg"}">${esPP(r.o.rs5)}</span> / <b class="${r.o.rs20 > 0 ? "pos" : "neg"}">${esPP(r.o.rs20)}</b>` : "—";
+    const veh = e.vehicle ? esc(e.vehicle) : r && r.veh ? `<span class="dim">board: ${esc(r.veh.t)}</span>` : "";
+    const notes = [e.why ? "why: " + e.why : "", e.now ? "now: " + e.now : "", e.catalyst ? "catalyst: " + e.catalyst : ""].filter(Boolean).map(esc).join("<br>");
+    const open = r && r.veh && r.j.side === e.side ? r.veh.open : e.t;
+    return `<tr data-esopen="${esc(open)}"><td>E${esc(String(e.k || ""))}</td><td class="l sym"><span class="tk" data-sym="${esc(e.t)}">${esc(e.t)}</span>${e.typed ? ` <span class="pill wait" title="Typed in the ETF setups box — no MAP notes">typed</span>` : ""}</td><td class="l">${side(e.side)}</td>
+      <td class="l">${b.t}</td><td class="l">${ag}</td><td class="l small">${near}</td><td class="small">${rs}</td><td class="l small">${veh}</td><td class="l small mapwhy">${notes}</td></tr>`; }).join("");
+  const head = `<thead><tr><th>#</th><th class="l">Ticker</th><th class="l">MAP side</th><th class="l">Board's read of it</th><th class="l">Agree?</th><th class="l">To the nearer EMA</th><th title="% return minus RSP's over 5 / 20 sessions, pp">RS 5S / 20S</th><th class="l">Vehicle</th><th class="l">MAP's notes</th></tr></thead>`;
+  const N = mcur && m.notes ? m.notes.filter(x => ETFU.has(x.t) || (S.rowBySym && S.rowBySym.get(x.t) && S.rowBySym.get(x.t).etf)) : [];
+  const nl = (k, lab) => { const L = N.filter(x => x.kind === k); return L.length ? `${lab}: ${L.map(x => `<span class="tk" data-sym="${esc(x.t)}">${esc(x.t)}</span>${x.note ? ` — ${esc(x.note)}` : ""}`).join(" · ")}` : ""; };
+  const dropped = [nl("out", "MAP dropped"), nl("watch", "MAP watching")].filter(Boolean).join("<br>");
+  const stale = !E && elGet() && !elCur() ? ` The list in the box is for ${esc(jnDay(elGet().day))}, not today's plan day.` : "";
+  return `<div class="esmap"><div class="small" style="margin-bottom:4px"><b>MAP's ETF setups</b> <span class="dim">· ${E ? `${E.length} line${E.length > 1 ? "s" : ""} ${src}` : "none for today"} · MAP picks the list; the board's read of each fund is the cross-check · edit it in the ETF setups box on the Watchlist</span></div>
+    ${E ? `<div class="tscroll" style="max-height:none"><table class="mini esmt">${head}<tbody>${rows}</tbody></table></div>` : `<div class="empty" style="padding:2px 0">No MAP ETF list for today — import MAP's block, or type them in the <b>ETF setups</b> box (Watchlist → Today's MAP lists).${stale}</div>`}
+    ${dropped ? `<div class="small" style="margin-top:4px">${dropped}</div>` : ""}
+    <div class="small" style="margin:10px 0 4px"><b>Board's top 3</b> <span class="dim">· the ETF rules on the daily close, ranked on RS 20S — a cross-check on MAP's list, never a replacement</span></div></div>`;
+}
+const _esCardHTMLFL = esCardHTML;
+esCardHTML = function(){
+  let h = _esCardHTMLFL();
+  h = h.replace(/<div class="small" style="margin:8px 0 2px"><b>MAP's ETF setups<\/b>[\s\S]*?<\/div>/, "");   // the old footnote — now the table on top
+  let x = ""; try { x = esMapHTML(); } catch (e) { console.warn("MAP ETF list", e); }
+  const i = h.indexOf(`<div class="bd">`); return i < 0 ? h : h.slice(0, i + 16) + x + h.slice(i + 16);
+};
+// Watchlist: with MAP's other lists, right after On deck
+const _renderESCardFL = renderESCard;
+renderESCard = function(){
+  _renderESCardFL();
+  const c = $("esBox"), box = $("watchBody"); if (!c || !box) return;
+  const at = [...box.querySelectorAll(".wlg")].find(x => /^MAP On deck/.test((x.querySelector("h2") || {}).textContent || ""));
+  if (at && at.nextElementSibling !== c) at.after(c);
+};
+// Setups: the same card after Entry Check lists, before the inverse ETFs card
+function renderESPlan(){
+  const a = $("s61Box"); if (!a || !S.snap) return;
+  let c = $("esBoxPlan"); if (!c) { a.insertAdjacentHTML("afterend", `<div class="card g1" id="esBoxPlan"></div>`); c = $("esBoxPlan"); }
+  if (a.nextElementSibling !== c) a.after(c);
+  try { c.innerHTML = esCardHTML(); } catch (e) { console.warn("ETF setups (Setups)", e); c.innerHTML = ""; }
+}
+const _renderS61CardFL = renderS61Card;
+renderS61Card = function(){ _renderS61CardFL(); renderESPlan(); };
+document.addEventListener("click", e => {
+  if (!e.target.closest("#esBoxPlan")) return;
+  const tk = e.target.closest(".tk[data-sym]"); if (tk) { e.stopPropagation(); openDrawer(tk.dataset.sym); return; }
+  const t = e.target.closest("tr[data-esopen], tr[data-sym]"); if (t && !e.target.closest("button, a, summary")) { e.stopPropagation(); openDrawer(t.dataset.esopen || t.dataset.sym); }
+}, true);
+
+/* ---------------- ETFs → Pullbacks in an uptrend: the setup status on each fund ---------------- */
+const _renderETFFL = renderETF;
+renderETF = function(){
+  _renderETFFL();
+  const box = $("etfPull"); if (!box) return;
+  try {
+    const R = S.has && S.has.hist ? esRun() : null, E = esMapE() || [], eBy = new Map(E.map(e => [e.t, e]));
+    box.querySelectorAll(".mv .who").forEach(w => { const b = w.querySelector("b[data-sym]"); if (!b || w.querySelector(".estag")) return; const s = b.dataset.sym;
+      const r = R && R.rows.find(x => x.sym === s), e = eBy.get(s);
+      const tag = !R ? `<span class="pill" title="Load the price history for the ETF setup rules">setup: needs history</span>`
+        : !r ? `<span class="pill" title="Not on the ETF setups map — the setup rules don't judge it">setup: not on the map</span>`
+        : r.j.status === "Out" ? `<span class="pill bad" title="${esc(r.j.fails.join(" · "))}">setup: Out</span>`
+        : `<span class="pill ${r.j.status === "Ready" ? "go" : "zone"}">setup: ${r.j.side === "long" ? "Long" : "Short"} ${esc(r.j.status)}${r.rank ? ` #${r.rank}` : ""}</span>`;
+      w.insertAdjacentHTML("beforeend", `<div class="estag" style="margin-top:3px">${tag}${e ? ` <span class="pill go" title="On MAP's ETF list: ${esc(e.side || "")}">MAP E${esc(String(e.k || ""))}</span>` : ""}</div>`); });
+    if (!box.querySelector(".esnote")) box.insertAdjacentHTML("afterbegin", `<div class="small dim esnote" style="padding:0 0 6px">This card reads your ETF file's structure: an uptrend with price back at or under the 9/21 EMA. The trade list is <b>ETF setups</b> (on Setups and the Watchlist), where Ready means just <i>over</i> the 9 and 21 EMA — so a fund here is often Reclaim watch or Out there. The tag on each fund says which. <button class="btn sm" data-goto="plan">ETF setups on Setups →</button></div>`);
+  } catch (e) { console.warn("pullbacks setup tags", e); }
+};
+</script>
+
 </body>
 </html>
