@@ -1812,6 +1812,7 @@ function scatter(svg, pts, o){
   let [x0, x1] = o.xr, [y0, y1] = o.yr;
   if (o.auto) { x0 = Math.max(o.xr[0], Math.min(o.minX ?? 0, ...xv)); x1 = Math.min(o.xr[1], Math.max(o.maxX ?? 1, ...xv)); y0 = Math.max(o.yr[0], Math.min(o.minY ?? 0, ...yv)); y1 = Math.min(o.yr[1], Math.max(o.maxY ?? 1, ...yv)); }
   if (x1 - x0 < 0.5) x1 = x0 + 0.5; if (y1 - y0 < 0.5) y1 = y0 + 0.5;
+  svg._scR = {x0, x1, y0, y1, m, W, H};   // 26 Oct: the drawn ranges, for the full-screen maps and tidy labels (display only)
   const X = v => m.l + (clamp(v, x0, x1) - x0) / (x1 - x0) * (W - m.l - m.r);
   const Y = v => H - m.b - (clamp(v, y0, y1) - y0) / (y1 - y0) * (H - m.t - m.b);
   const ticks = (a, b) => { const span = b - a, st = span > 40 ? 20 : span > 16 ? 5 : span > 8 ? 2 : span > 3 ? 1 : 0.5; const out = []; for (let v = Math.ceil(a / st) * st; v <= b + 1e-9; v += st) out.push(+v.toFixed(2)); return out; };
@@ -12062,6 +12063,383 @@ renderETF = function(){
     if (!box.querySelector(".esnote")) box.insertAdjacentHTML("afterbegin", `<div class="small dim esnote" style="padding:0 0 6px">This card reads your ETF file's structure: an uptrend with price back at or under the 9/21 EMA. The trade list is <b>ETF setups</b> (on Setups and the Watchlist), where Ready means just <i>over</i> the 9 and 21 EMA — so a fund here is often Reclaim watch or Out there. The tag on each fund says which. <button class="btn sm" data-goto="plan">ETF setups on Setups →</button></div>`);
   } catch (e) { console.warn("pullbacks setup tags", e); }
 };
+</script>
+
+<script>
+"use strict";
+/* =====================================================================
+   FULL-SCREEN MAPS + TIDY LABELS + THEMES MAP (26 Oct 2026). DISPLAY ONLY — desktop only: the phone edition (html.mob)
+   is left exactly as it was (no button, no tidy labels, no Themes map).
+   Eugene, 26 Oct: "Is there a possibility of having a button to pop out that map so that it can be enlarged to the entire
+   screen instead of just working with it being embedded and locked to the current size in the page? Sometimes it
+   difficult to identify the tickers and labels especially if there are many selected. The labels tend to overlap if they
+   congregate together … I only need this edited for the desktop version." And, on a picture of a theme-by-theme map
+   ("Where the leaders sit"): "Given we also have a TAS. How would you present a separate Map to cover this? Maybe one
+   more section under leaders where I tick the themes/industry's to display in a map? … Give me your best interpretation
+   of it and just update and proceed".
+   What it touches:
+   - scatter() (block 3) gains one line in place (svg._scR = the drawn ranges). scatter and attachTips are wrapped here.
+     Every card drawn by scatter (Leaders map, My lists on the map, Watchlist map, Themes and ETF rotation maps, Gap · go ·
+     fade) gets a "⛶ Full screen" button in its header. Full screen = the same points and options redrawn to fill the
+     window: every name labelled (or the board's labels, or none), drag a box to zoom in (double-click / Reset zoom to go
+     back), Find a ticker (ringed and labelled), Esc or ✕ closes. A dot opens the ticker panel over it, as on the board.
+     It follows the board: a refresh redraws it.
+   - Tidy labels (default on; switch in the full-screen bar and on the Leaders map controls). The maps' own words (zone
+     names, the buy-zone label, line labels) and the ticker labels are placed so they don't sit on top of each other or
+     on the dots; a label with no free spot beside its dot gets a short leader line, or is left off with a count
+     ("N labels hidden — hover a dot or open full screen"). Same points, colours, rings and axes. Off = the old labels.
+   - New card "Themes map" at the end of the Leaders map tab: one row per ticked theme, strongest first; each name in the
+     theme placed by its distance from the top of the daily 9/21 band (the Leaders map's across axis, buy-zone lens
+     included), buy zone shaded. Themes from TAS (26 themes; strength = the theme's proxy ETF vs QQQ over 1W / 4W / 10W in
+     % points from the stored bars, the TAS health word Strong / Neutral / Weak = theme RS 4W > 0 + proxy in Stage 2, and
+     the proxy's TAS score) or from the board's groups (Industry / Sector / My themes as set on the Themes tab; group RS by
+     timeframe and the group state). Dot colour = Entry Check location, dot size = RS, ring = on your lists (list
+     colour). Within a row dots are nudged up / down so they don't hide each other (up/down means nothing there).
+     Theme strength is context, not a filter. The names follow the filter bar (as the Leaders map); group strength stays
+     computed on the whole file.
+   Never changes: any row, RS, location, state, list, plan, size, feed, log or self-check value.
+   Asia board: the same card; it opens on Board groups there (TAS themes are US themes against QQQ).
+   Storage (new): localStorage adrb.mapTidy (0/1, default 1); adrb.thMap = {src "tas" | "grp", sel {tas: [ids] | null,
+   grp: [names] | null} (null = the strongest 12), n names per theme, rs RS floor, liq, all (label every name)}.
+   Tests: tools/board-fsmap-test.js.
+   ===================================================================== */
+const FSM = {mob: document.documentElement.classList.contains("mob"), id: "", src: null, kind: null, st: null, raf: 0, drag: null, dragged: false, tmOpen: false};
+const fsTidy = () => { try { return store.get("adrb.mapTidy", 1) !== 0; } catch (e) { return true; } };
+const fsSetTidy = on => { try { store.set("adrb.mapTidy", on ? 1 : 0); } catch (e) {} };
+// label geometry: measured with a canvas in the page's own font (bold, so never narrower than drawn); estimate if no canvas
+const LB_CV = (() => { try { return document.createElement("canvas").getContext("2d"); } catch (e) { return null; } })();
+const lbW = (t, fs = 11) => { if (LB_CV) { try { LB_CV.font = `700 ${fs}px ${getComputedStyle(document.body).fontFamily || "sans-serif"}`; return LB_CV.measureText(String(t)).width + 2; } catch (e) {} } return String(t).length * fs * 0.64 + 2; };
+const lbBox = (x, y, w, a, fs = 11) => ({x: (a === "end" ? x - w : a === "middle" ? x - w / 2 : x) - 1, y: y - fs * 0.95, w: w + 2, h: fs * 1.22});   // the glyph box as getBBox reports it
+const bxHit = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+const fsMatch = (id, q) => { const u = String(id).toUpperCase(); return u === q || (q.length >= 3 && u.includes(q)); };
+const fsLens = t => { if (!t || typeof zlMode !== "function" || zlMode() === "band") return t; return t.replace("the top of the daily 9/21 band", "the daily " + ZL.modes[zlMode()]); };
+
+// one label placer: tries spots next to a point, then leader-line spots further out; obstacles = placed labels (+ dots when strict)
+function lbPlace(t, cx, cy, r, ctx, opt = {}){
+  const w = lbW(t, opt.fs || 11), fs = opt.fs || 11;
+  const near = opt.near || [[cx + r + 3, cy + 4, "start"], [cx - r - 3, cy + 4, "end"], [cx + r, cy - r - 2, "start"], [cx - r, cy - r - 2, "end"], [cx, cy - r - 4, "middle"], [cx, cy + r + fs + 1, "middle"], [cx + r, cy + r + fs - 1, "start"], [cx - r, cy + r + fs - 1, "end"]];
+  const ok = (b, strict) => ctx.inside(b) && !ctx.placed.some(q => bxHit(q, b)) && (!strict || !ctx.dots.some(d => d.id !== opt.id && bxHit(d, b)));
+  for (const strict of [true, false]) for (const c of near) { const b = lbBox(c[0], c[1], w, c[2], fs); if (ok(b, strict)) return {x: c[0], y: c[1], a: c[2], b}; }
+  for (const d of (opt.lead || [])) for (const ang of [-45, 45, -135, 135, -90, 90, 0, 180]) {
+    const k = ang * Math.PI / 180, x = cx + Math.cos(k) * d, y = cy + Math.sin(k) * d + 4, a = Math.cos(k) > 0.3 ? "start" : Math.cos(k) < -0.3 ? "end" : "middle", b = lbBox(x, y, w, a, fs);
+    if (ok(b, true)) return {x, y, a, b, lead: true};
+  }
+  return null;
+}
+const lbLead = (cx, cy, r, b) => { const lx = clamp(cx, b.x, b.x + b.w), ly = clamp(cy, b.y, b.y + b.h), dx = lx - cx, dy = ly - cy, d = Math.hypot(dx, dy) || 1; return `<line x1="${(cx + dx / d * (r + 1)).toFixed(1)}" y1="${(cy + dy / d * (r + 1)).toFixed(1)}" x2="${lx.toFixed(1)}" y2="${ly.toFixed(1)}" stroke="var(--ink-3)" stroke-width="1" opacity=".7" style="pointer-events:none"/>`; };
+
+// the scatter with zoom / label mode / find applied; tidy = place every text itself
+function scDraw(svg, pts, o, st = {}){
+  let P = pts;
+  const o2 = Object.assign({}, o, {xLabel: st.full ? fsLens(o.xLabel) : o.xLabel});
+  if (st.zoom) {
+    const z = st.zoom; Object.assign(o2, {xr: [z.x0, z.x1], yr: [z.y0, z.y1], auto: false, hlines: (o.hlines || []).filter(h => h.y >= z.y0 && h.y <= z.y1)});
+    P = pts.filter(p => { const x = o.x(p), y = o.y(p); return x >= z.x0 && x <= z.x1 && y >= z.y0 && y <= z.y1; });
+  }
+  const ids = P.map(o.id), q = (st.q || "").trim().toUpperCase(), find = q ? ids.filter(id => fsMatch(id, q)) : [];
+  st.found = find.length;
+  const lab = st.labels === "all" ? ids : st.labels === "none" ? [] : (o.labelIds || []).filter(id => ids.includes(id));
+  if (!st.tidy) { _scatterFS(svg, P, Object.assign(o2, {labelIds: [...new Set([...find, ...lab])]})); return fsRing(svg, P, o, find); }
+  Object.assign(o2, {labelIds: [], zones: (o2.zones || []).map(z => Object.assign({}, z, {label: ""})), box: o2.box ? Object.assign({}, o2.box, {label: ""}) : o2.box, hlines: (o2.hlines || o.hlines || []).map(h => Object.assign({}, h, {label: ""}))});
+  _scatterFS(svg, P, o2);
+  const R = svg._scR; if (!R) return;
+  const {m, W, H} = R, X = v => m.l + (clamp(v, R.x0, R.x1) - R.x0) / (R.x1 - R.x0) * (W - m.l - m.r), Y = v => H - m.b - (clamp(v, R.y0, R.y1) - R.y0) / (R.y1 - R.y0) * (H - m.t - m.b);
+  const ctx = {placed: [], dots: [], inside: b => b.x >= 1 && b.x + b.w <= W - 1 && b.y >= 0 && b.y + b.h <= H - m.b + 2};
+  let s = "";
+  // the words scatter draws itself stay put; they are obstacles
+  for (const qd of (o.quads || [])) ctx.placed.push(lbBox(qd.right ? W - m.r - 6 : m.l + 8, qd.top ? m.t + 12 : H - m.b - 8, lbW(qd.t), qd.right ? "end" : "start"));
+  const put = (cands, t, style, force) => {
+    const w = lbW(t);
+    for (const [x, y, a] of cands) { const b = lbBox(x, y, w, a); if (ctx.inside(b) && !ctx.placed.some(p => bxHit(p, b))) { ctx.placed.push(b); s += `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${a}" style="${style}">${esc(t)}</text>`; return; } }
+    if (force) { const [x, y, a] = cands[0]; ctx.placed.push(lbBox(x, y, w, a)); s += `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${a}" style="${style}">${esc(t)}</text>`; }
+  };
+  if (o.box && o.box.label) { const b = o.box, cx = (X(b.x0) + X(b.x1)) / 2, top = Y(b.y1), bot = Y(b.y0);
+    put([[cx, top - 6, "middle"], [cx, top + 15, "middle"], [X(b.x1) + 6, top + 12, "start"], [cx, bot + 15, "middle"], [cx, bot - 6, "middle"]], b.label, "fill:var(--st1);font-weight:700", true); }
+  for (const h of (o2.hlines || [])) { const src = (o.hlines || []).find(x => x.y === h.y && x.c === h.c); const t = src && src.label; if (!t) continue; const y = Y(h.y);
+    put([[m.l + 6, y - 5, "start"], [W - m.r - 6, y - 5, "end"], [m.l + 6, y + 14, "start"], [W - m.r - 6, y + 14, "end"], [(m.l + W - m.r) / 2, y - 5, "middle"]], t, `fill:${h.c}`, true); }
+  for (const z of (o.zones || [])) if (z.label) { const L = X(z.x0), T = Y(z.y1), c = []; for (let k = 0; k < 5; k++) c.push([L + 6, T + 14 + k * 15, "start"]); put(c, z.label, `fill:${z.lc || "var(--ink-3)"};font-weight:600`, false); }
+  // dots (+ rings) as obstacles, then the ticker labels: found names first, then the board's order (RS first on the stock maps)
+  const by = new Map(), rad = p => (o.size ? o.size(p) : 5);
+  P.forEach(p => { const id = o.id(p), cx = X(o.x(p)), cy = Y(o.y(p)), r = rad(p) + (o.rings ? o.rings(p).length * 3.5 : 0) + 1; by.set(id, {p, cx, cy, r: rad(p)}); ctx.dots.push({id, x: cx - r, y: cy - r, w: 2 * r, h: 2 * r}); });
+  let hid = 0;
+  for (const id of [...new Set([...find, ...lab])]) {
+    const d = by.get(id); if (!d) continue;
+    const t = o.lab ? o.lab(d.p) : id, hit = find.includes(id), g = lbPlace(t, d.cx, d.cy, d.r + 1, ctx, {id, lead: st.full ? [22, 34, 48, 64, 84] : [22, 32]});
+    if (!g) { hid++; continue; }
+    ctx.placed.push(g.b);
+    if (g.lead) s += lbLead(d.cx, d.cy, d.r, g.b);
+    s += `<text x="${g.x.toFixed(1)}" y="${g.y.toFixed(1)}" text-anchor="${g.a}" class="sclab" style="fill:${hit ? "var(--accent)" : "var(--ink-2)"};font-weight:${hit ? 750 : 600}">${esc(t)}</text>`;
+  }
+  if (hid) { const t = `${hid} label${hid > 1 ? "s" : ""} hidden — hover a dot${st.full ? " or drag a box to zoom in" : " or open full screen"}`; s += `<text x="${W - m.r}" y="${H - 4}" text-anchor="end" class="schid" style="font-size:10.5px">${esc(t)}</text>`; }
+  svg.innerHTML += s;
+  svg.dataset.hidden = hid;
+  fsRing(svg, P, o, find);
+}
+function fsRing(svg, P, o, find){
+  if (!find || !find.length || !svg._scR) return;
+  const R = svg._scR, {m, W, H} = R, X = v => m.l + (clamp(v, R.x0, R.x1) - R.x0) / (R.x1 - R.x0) * (W - m.l - m.r), Y = v => H - m.b - (clamp(v, R.y0, R.y1) - R.y0) / (R.y1 - R.y0) * (H - m.t - m.b);
+  svg.innerHTML += P.filter(p => find.includes(o.id(p))).map(p => `<circle cx="${X(o.x(p))}" cy="${Y(o.y(p))}" r="${(o.size ? o.size(p) : 5) + 11}" fill="none" stroke="var(--accent)" stroke-width="2.5" class="fsfind" style="pointer-events:none"/>`).join("");
+}
+
+const _scatterFS = scatter, _attachTipsFS = attachTips;
+scatter = function(svg, pts, o){
+  if (FSM.mob || !svg) return _scatterFS(svg, pts, o);
+  svg._fsArgs = {pts, o};
+  if (fsTidy()) scDraw(svg, pts, o, {tidy: true}); else _scatterFS(svg, pts, o);
+  fsBtn(svg);
+  if (svg.id && svg.id === FSM.id) fsSoon();
+};
+attachTips = function(svg, getRow, tipFn, onClick){
+  if (svg) { svg._fsTip = [getRow, tipFn, onClick]; if (svg.id && svg.id === FSM.id) fsSoon(); }
+  return _attachTipsFS(svg, getRow, tipFn, onClick);
+};
+function fsBtn(svg){
+  const card = svg.closest(".card"), hd = card && card.querySelector(":scope > .hd");
+  if (!hd || !svg.id || hd.querySelector(`.fsb[data-fsid="${svg.id}"]`)) return;
+  hd.insertAdjacentHTML("beforeend", `<button class="btn sm fsb" data-fsid="${svg.id}" title="Open this map full screen: every name labelled, drag a box to zoom in, find a ticker. Esc closes.">⛶ Full screen</button>`);
+}
+
+// ---- the full-screen overlay
+if (!FSM.mob) {
+  document.body.insertAdjacentHTML("beforeend", `<div id="fsMap" role="dialog" aria-label="Full-screen map">
+  <div class="fsbar"><div class="fst"><b id="fsTitle"></b><span class="small" id="fsSub"></span></div><span class="spacer"></span>
+    <input type="text" id="fsFind" placeholder="Find ticker…" autocomplete="off" spellcheck="false"><span class="small" id="fsFound"></span>
+    <span class="seg" id="fsLab"><button data-k="all">Label all</button><button data-k="board">Board's labels</button><button data-k="none">No labels</button></span>
+    <label class="tog" title="Place labels so they don't overlap (also on the board's maps)"><input type="checkbox" id="fsTidyC">Tidy labels</label>
+    <button class="btn sm" id="fsReset">Reset zoom</button><span class="small dim" id="fsHint">drag a box to zoom in</span>
+    <button class="btn sm" id="fsClose" title="Close (Esc)">✕ Close</button></div>
+  <div class="fsplot" id="fsBox"><svg id="fsPlot" class="plot"></svg><div id="fsDrag"></div></div>
+  <div class="legend" id="fsLegend"></div></div>`);
+}
+const fsSrc = () => FSM.id ? (document.getElementById(FSM.id) || FSM.src) : null;   // a card redrawn from scratch (Watchlist map) has a new svg with the same id
+const fsCard = () => { const s = fsSrc(); return s && s.closest(".card"); };
+function fsOpen(src, kind){
+  if (FSM.mob || !src) return;
+  FSM.src = src; FSM.id = src.id; FSM.kind = kind || "sc"; FSM.st = {labels: "all", zoom: null, q: "", full: true};
+  $("fsFind").value = "";
+  document.documentElement.classList.add("fsopen"); $("fsMap").classList.add("on");
+  const h = fsCard() && fsCard().querySelector(":scope > .hd h2"); $("fsTitle").textContent = h ? h.textContent : "Map";
+  fsDraw(); setTimeout(() => $("fsFind").focus(), 30);
+}
+function fsClose(){ FSM.src = null; FSM.id = ""; $("fsMap").classList.remove("on"); document.documentElement.classList.remove("fsopen"); $("tip").style.display = "none"; }
+const fsSoon = () => { if (FSM.raf) return; FSM.raf = requestAnimationFrame(() => { FSM.raf = 0; fsDraw(); }); };
+function fsDraw(){
+  const src = fsSrc(); if (!src) return;
+  const svg = $("fsPlot"), box = $("fsBox"), st = FSM.st, card = fsCard();
+  st.tidy = fsTidy(); $("fsTidyC").checked = st.tidy;
+  $("fsLab").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.k === st.labels));
+  const W = box.clientWidth - 2, H = Math.max(320, box.clientHeight - 4);
+  svg.style.width = W + "px";
+  if (FSM.kind === "tm") { svg.setAttribute("height", H); tmDraw(svg, W, H, st); }
+  else { const a = src._fsArgs; if (!a) return; svg.setAttribute("height", H); svg.style.height = H + "px"; scDraw(svg, a.pts, a.o, st); }
+  if (src._fsTip) _attachTipsFS(svg, ...src._fsTip);
+  const sub = card && card.querySelector(":scope > .hd .sub"), lg = card && card.querySelector(".legend");
+  $("fsSub").textContent = sub ? sub.textContent : "";
+  $("fsLegend").innerHTML = lg ? lg.innerHTML : "";
+  $("fsFound").textContent = st.q ? (st.found ? `${st.found} found` : st.zoom ? "not in this zoom" : "not on this map") : "";
+  const zm = FSM.kind === "sc";
+  $("fsReset").classList.toggle("hidden", !zm); $("fsHint").classList.toggle("hidden", !zm);
+  $("fsReset").disabled = !st.zoom; $("fsHint").textContent = st.zoom ? "zoomed in · drag again to zoom further · double-click to reset" : "drag a box to zoom in";
+}
+if (!FSM.mob) {
+  document.addEventListener("click", e => {
+    const b = e.target.closest(".fsb"); if (!b) return;
+    e.preventDefault(); e.stopPropagation();
+    if (b.dataset.fsid) fsOpen($(b.dataset.fsid), b.dataset.fsid === "tmPlot" ? "tm" : "sc");
+  }, true);
+  $("fsClose").onclick = fsClose;
+  $("fsReset").onclick = () => { FSM.st.zoom = null; fsDraw(); };
+  $("fsLab").onclick = e => { const b = e.target.closest("button"); if (!b) return; FSM.st.labels = b.dataset.k; fsDraw(); };
+  $("fsTidyC").onchange = e => { fsSetTidy(e.target.checked); fsDraw(); try { renderAll(); } catch (x) {} };
+  $("fsFind").oninput = e => { FSM.st.q = e.target.value; fsDraw(); };
+  window.addEventListener("keydown", e => { if (e.key !== "Escape" || !FSM.src) return; if ($("drawer").classList.contains("open")) return; fsClose(); }, true);
+  window.addEventListener("resize", () => { if (FSM.src) fsSoon(); });
+  // drag a box to zoom (scatter maps only); a drag never opens a ticker
+  const box = $("fsBox"), dr = $("fsDrag");
+  const pos = e => { const rc = $("fsPlot").getBoundingClientRect(); return {x: e.clientX - rc.left, y: e.clientY - rc.top, rc}; };
+  box.addEventListener("mousedown", e => {
+    if (FSM.kind !== "sc" || e.button !== 0) return; const R = $("fsPlot")._scR; if (!R) return;
+    const p = pos(e); if (p.x < R.m.l || p.x > R.W - R.m.r || p.y < R.m.t || p.y > R.H - R.m.b) return;
+    FSM.drag = p; e.preventDefault();
+  });
+  window.addEventListener("mousemove", e => {
+    if (!FSM.drag) return; const p = pos(e), a = FSM.drag, br = box.getBoundingClientRect();
+    Object.assign(dr.style, {display: "block", left: (Math.min(a.x, p.x) + p.rc.left - br.left + box.scrollLeft) + "px", top: (Math.min(a.y, p.y) + p.rc.top - br.top + box.scrollTop) + "px", width: Math.abs(p.x - a.x) + "px", height: Math.abs(p.y - a.y) + "px"});
+  });
+  window.addEventListener("mouseup", e => {
+    if (!FSM.drag) return; const a = FSM.drag, p = pos(e), R = $("fsPlot")._scR; FSM.drag = null; dr.style.display = "none";
+    if (!R || Math.abs(p.x - a.x) < 10 || Math.abs(p.y - a.y) < 10) return;
+    const {m, W, H} = R, dx = v => R.x0 + (clamp(v, m.l, W - m.r) - m.l) / (W - m.l - m.r) * (R.x1 - R.x0), dy = v => R.y0 + (H - m.b - clamp(v, m.t, H - m.b)) / (H - m.t - m.b) * (R.y1 - R.y0);
+    FSM.st.zoom = {x0: dx(Math.min(a.x, p.x)), x1: dx(Math.max(a.x, p.x)), y0: dy(Math.max(a.y, p.y)), y1: dy(Math.min(a.y, p.y))};
+    FSM.dragged = true; setTimeout(() => FSM.dragged = false, 0); fsDraw();
+  });
+  box.addEventListener("click", e => { if (FSM.dragged) { e.stopPropagation(); FSM.dragged = false; } }, true);
+  box.addEventListener("dblclick", () => { if (FSM.kind === "sc" && FSM.st.zoom) { FSM.st.zoom = null; fsDraw(); } });
+}
+
+// ---- Themes map
+const TM_PICK = 12;
+function tmCfg(){
+  const d = {src: typeof ASIA !== "undefined" ? "grp" : "tas", sel: {tas: null, grp: null}, n: 15, rs: 0, liq: false, all: false};
+  try { const v = store.get("adrb.thMap", null); if (v && typeof v === "object") return Object.assign(d, v, {sel: Object.assign({tas: null, grp: null}, v.sel || {})}); } catch (e) {}
+  return d;
+}
+const tmSave = c => { try { store.set("adrb.thMap", c); } catch (e) {} };
+const tmGrpBy = () => ({industry: "Industry", sector: "Sector", theme: "My themes"})[CFG.groupBy] || "Industry";
+// every theme with its members (whole file) and its strength, strongest first
+function tmThemes(c){
+  if (c.src === "tas") {
+    const q = dssOf("QQQ"), qt = q && q.tas, by = new Map();
+    for (const r of S.stocks) { if (r.etf) continue; const th = tasTheme(r.sym, r.industry); if (th.layer !== 3 || !th.id) continue; if (!by.has(th.id)) by.set(th.id, []); by.get(th.id).push(r); }
+    return TAS_THEMES.map(t => {
+      const p = dssOf(t[1]), P = p && p.tas, d = k => P && qt && fin(P[k]) && fin(qt[k]) ? P[k] - qt[k] : NaN, rs4 = d("r21");
+      const hl = P && fin(rs4) ? (rs4 > 0 ? 1 : 0) + (P.stage === 2 ? 1 : 0) : null;
+      return {key: String(t[0]), name: t[2], sub: t[1], m: by.get(t[0]) || [], cols: [d("r5"), d("r21"), d("r50")], tag: hl == null ? "no bars" : ["Weak", "Neutral", "Strong"][hl], tagC: hl == null ? "var(--ink-3)" : ["var(--st5)", "var(--st3)", "var(--st1)"][hl], last: P && fin(P.score) ? Math.round(P.score) : null, sort: (hl ?? -1) * 1000 + (fin(rs4) ? rs4 : -999)};
+    }).filter(t => t.m.length).sort((a, b) => b.sort - a.sort);
+  }
+  return S.groups.filter(g => g.grs != null).map(g => ({key: g.name, name: g.name, sub: g.sector && CFG.groupBy !== "sector" ? g.sector : "", m: g.members, cols: ["p1w", "p1m", "p3m"].map(k => g["grs_" + k] ?? NaN), tag: g.state, tagC: gStateColor(g.state), last: g.grs, grp: true}));
+}
+function tmSel(c, T){ const s = c.sel[c.src]; return Array.isArray(s) ? T.filter(t => s.includes(t.key)) : T.slice(0, TM_PICK); }
+function tmListMap(){ const mp = new Map(); try { mlNames().forEach(e => mp.set(e.s, e)); } catch (e) {} return mp; }
+// draw: W wide; H = the room in full screen (rows grow to fill it), else the height comes from the rows
+function tmDraw(svg, W, H, st = {}){
+  const c = tmCfg(), T = tmThemes(c), rows = tmSel(c, T), vis = new Set(VS()), lists = tmListMap(), q = (st.q || "").trim().toUpperCase();
+  const tas = c.src === "tas", LW = 372, top = 30, bot = 34, x0p = LW + 14, x1p = W - 18;
+  const R = rows.map(t => ({t, n: t.m.filter(r => vis.has(r) && ecX(r) && isFinite(ecX(r).dB) && (r.rs ?? 0) >= (+c.rs || 0) && (!c.liq || !r.thin)).sort((a, b) => (b.rs ?? 0) - (a.rs ?? 0)).slice(0, Math.max(1, +c.n || 15))}));
+  const all = R.flatMap(o => o.n.map(r => ecX(r).dB));
+  const lo = Math.max(-4, Math.min(-1, Math.floor(Math.min(0, ...all)))), hi = Math.min(6, Math.max(2, Math.ceil(Math.max(1, ...all))));
+  const rh = H ? clamp(Math.floor((H - top - bot) / Math.max(1, R.length)), 40, 76) : 40, Ht = top + R.length * rh + bot;
+  svg.setAttribute("height", Ht); svg.style.height = Ht + "px"; svg.setAttribute("viewBox", `0 0 ${W} ${Ht}`);
+  const X = v => x0p + (clamp(v, lo, hi) - lo) / (hi - lo) * (x1p - x0p), zh = S61.above;
+  const num = v => !fin(v) ? "—" : tas ? (v > 0 ? "+" : "") + (Math.abs(v) >= 10 ? Math.round(v) : v.toFixed(1)) : String(Math.round(v));
+  const tint = v => !fin(v) ? "transparent" : tas ? (v > 0 ? "var(--good-soft)" : "var(--down-soft)") : (v >= 50 ? "var(--good-soft)" : "var(--down-soft)");
+  const colX = [214, 256, 298], lastX = 346;
+  let s = R.map((o, i) => i % 2 ? `<rect x="0" y="${top + i * rh}" width="${W}" height="${rh}" fill="var(--surface-2)" opacity=".55"/>` : "").join("") + `<rect x="${X(0)}" y="${top - 6}" width="${X(zh) - X(0)}" height="${R.length * rh + 6}" fill="var(--good-soft)" opacity=".7"/>`
+    + `<line x1="${X(0)}" x2="${X(0)}" y1="${top - 6}" y2="${top + R.length * rh}" stroke="var(--st1)" stroke-width="1.2"/><line x1="${X(zh)}" x2="${X(zh)}" y1="${top - 6}" y2="${top + R.length * rh}" stroke="var(--st1)" stroke-width="1.2"/>`
+    + `<text x="${(X(0) + X(zh)) / 2}" y="${top - 12}" text-anchor="middle" style="fill:var(--st1);font-weight:700;font-size:10px;letter-spacing:.05em">BUY ZONE</text>`
+    + `<text x="8" y="${top - 12}" style="font-size:10px;font-weight:600;letter-spacing:.04em">${tas ? "TAS THEME" : tmGrpBy().toUpperCase()}</text>`
+    + `<text x="${colX[1]}" y="${top - 20}" text-anchor="middle" style="font-size:9.5px">${tas ? "proxy vs QQQ, % pts" : "group RS by timeframe"}</text>`
+    + (tas ? ["1W", "4W", "10W"] : ["1W", "1M", "3M"]).map((h, i) => `<text x="${colX[i]}" y="${top - 8}" text-anchor="middle" style="font-size:10px;font-weight:600">${h}</text>`).join("")
+    + `<text x="${lastX}" y="${top - 8}" text-anchor="middle" style="font-size:10px;font-weight:600">${tas ? "Score" : "RS"}</text>`;
+  for (let v = lo; v <= hi; v++) s += `<line x1="${X(v)}" x2="${X(v)}" y1="${top}" y2="${top + R.length * rh}" stroke="${v === 0 ? "var(--line-strong)" : "var(--line)"}"/><text x="${X(v)}" y="${top + R.length * rh + 14}" text-anchor="middle">${v > 0 ? "+" + v : v}</text>`;
+  s += `<text x="${(x0p + x1p) / 2}" y="${Ht - 4}" text-anchor="middle">${esc(fsLens("← under · distance from the top of the daily 9/21 band (ADR) · over →"))}${all.some(v => v > hi || v < lo) ? " · names further out sit on the edge (faded)" : ""}</text>`;
+  let n = 0, inZ = 0, onL = 0, labels = "", hid = 0, found = 0;
+  R.forEach((o, i) => {
+    const y0 = top + i * rh, cy = y0 + rh / 2, t = o.t;
+    s += `<line x1="0" x2="${W}" y1="${y0 + rh}" y2="${y0 + rh}" stroke="var(--line)" opacity=".6"/>`;
+    const nm = t.name.length > 27 ? t.name.slice(0, 26) + "…" : t.name;
+    s += `<text x="8" y="${cy - 2}" style="fill:var(--ink);font-weight:650;font-size:12px;${t.grp ? "cursor:pointer" : ""}" ${t.grp ? `data-gopen="${esc(t.key)}"` : ""}><title>${esc(t.name)}${t.sub ? " · " + esc(t.sub) : ""}</title>${esc(nm)}</text>`
+      + `<text x="8" y="${cy + 12}" style="font-size:10px"><tspan style="fill:${t.tagC};font-weight:700">${esc(t.tag || "")}</tspan> · ${o.n.length} of ${t.m.length}${t.sub && (t.tag || "").length + String(t.sub).length < 18 ? ` · ${esc(t.sub)}` : ""}</text>`;
+    t.cols.forEach((v, k) => { s += `<rect x="${colX[k] - 18}" y="${cy - 9}" width="36" height="17" rx="3" fill="${tint(v)}"/><text x="${colX[k]}" y="${cy + 4}" text-anchor="middle" style="fill:var(--ink-2);font-size:10.5px;font-weight:600">${num(v)}</text>`; });
+    s += `<text x="${lastX}" y="${cy + 4}" text-anchor="middle" style="fill:var(--ink);font-size:11px;font-weight:650">${t.last ?? "—"}</text>`;
+    // dots, strongest RS first; nudged up / down inside the row when they'd cover one another
+    const dots = [], ctx = {placed: [], dots: [], inside: b => b.y >= y0 + 1 && b.y + b.h <= y0 + rh - 1 && b.x >= x0p - 30 && b.x + b.w <= W - 2};
+    const off = [0, -7, 7, -13, 13, -18, 18].filter(d => Math.abs(d) <= rh / 2 - 6);
+    for (const r of o.n) {
+      const x = ecX(r), cx = X(x.dB), rad = 3 + clamp((r.rs ?? 0) / 99, 0, 1) * 4.5;
+      let cyy = cy; for (const d of off) { if (!dots.some(p => Math.hypot(p.cx - cx, p.cy - (cy + d)) < p.rad + rad + 1)) { cyy = cy + d; break; } }
+      const L = lists.get(r.sym), k = ecsOf(r), out = x.dB > hi || x.dB < lo, hit = !!q && fsMatch(r.sym, q);
+      dots.push({r, cx, cy: cyy, rad, L, k, out, hit});
+      ctx.dots.push({id: r.sym, x: cx - rad - (L ? 3 : 0), y: cyy - rad - (L ? 3 : 0), w: 2 * rad + (L ? 6 : 0), h: 2 * rad + (L ? 6 : 0)});
+      n++; if (k === 1) inZ++; if (L) onL++; if (hit) found++;
+    }
+    for (const d of [...dots].reverse()) {
+      s += `<circle cx="${d.cx.toFixed(1)}" cy="${d.cy.toFixed(1)}" r="${d.rad.toFixed(1)}" fill="${d.k ? ECSK[d.k].c : "var(--ink-3)"}" fill-opacity="${d.out ? .45 : .9}" stroke="var(--surface)" stroke-width="1.2" data-id="${esc(d.r.sym)}" style="cursor:pointer"/>`;
+      if (d.L) s += `<circle cx="${d.cx.toFixed(1)}" cy="${d.cy.toFixed(1)}" r="${(d.rad + 3).toFixed(1)}" fill="none" stroke="${ML_C[d.L.src] || "var(--ink)"}" stroke-width="1.8" style="pointer-events:none"/>`;
+      if (d.hit) s += `<circle cx="${d.cx.toFixed(1)}" cy="${d.cy.toFixed(1)}" r="${(d.rad + 9).toFixed(1)}" fill="none" stroke="var(--accent)" stroke-width="2.5" class="fsfind" style="pointer-events:none"/>`;
+    }
+    // labels: found names, your lists, then in / just / deep under the buy zone (or every name), by RS
+    const want = dots.filter(d => d.hit || c.all || st.labels === "all" || (st.labels !== "none" && (d.L || [1, 2, 4].includes(d.k))));
+    want.sort((a, b) => (b.hit - a.hit) || (!!b.L - !!a.L) || ((b.r.rs ?? 0) - (a.r.rs ?? 0)));
+    for (const d of want) {
+      const fs = 10.5, g = lbPlace(d.r.sym, d.cx, d.cy, d.rad + (d.L ? 3 : 1), ctx, {id: d.r.sym, fs, near: [[d.cx, d.cy - d.rad - 4, "middle"], [d.cx, d.cy + d.rad + fs + 1, "middle"], [d.cx + d.rad + 3, d.cy + 4, "start"], [d.cx - d.rad - 3, d.cy + 4, "end"], [d.cx + d.rad, d.cy - d.rad - 2, "start"], [d.cx - d.rad, d.cy - d.rad - 2, "end"], [d.cx + d.rad, d.cy + d.rad + fs - 1, "start"], [d.cx - d.rad, d.cy + d.rad + fs - 1, "end"]], lead: [16, 24, 32]});
+      if (!g) { hid++; continue; }
+      ctx.placed.push(g.b);
+      if (g.lead) labels += lbLead(d.cx, d.cy, d.rad, g.b);
+      labels += `<text x="${g.x.toFixed(1)}" y="${g.y.toFixed(1)}" text-anchor="${g.a}" class="sclab" style="font-size:${fs}px;fill:${d.hit ? "var(--accent)" : "var(--ink)"};font-weight:${d.hit ? 750 : 650}">${esc(d.r.sym)}</text>`;
+    }
+  });
+  if (hid) s += `<text x="${W - 18}" y="${top - 12}" text-anchor="end" class="schid" style="font-size:10px">${hid} label${hid > 1 ? "s" : ""} hidden — hover a dot${st.full ? "" : " or open full screen"}</text>`;
+  if (!R.length) s += `<text x="${W / 2}" y="${top + 20}" text-anchor="middle">No theme ticked — pick themes above.</text>`;
+  svg.innerHTML = s + labels;
+  svg.dataset.hidden = hid;
+  st.found = found;
+  return {rows: R, n, inZ, onL, T};
+}
+function tmTip(r){
+  const e = tmListMap().get(r.sym), c = tmCfg(), th = c.src === "tas" ? tasName(tasTheme(r.sym, r.industry).id) : r.group;
+  return (e ? `<div class="small"><b>${e.srcs.map(k => esc(ML_N[k] || k)).join(" · ")}</b></div>` : "") + rowTip(r) + tipRow(c.src === "tas" ? "TAS theme" : tmGrpBy(), esc(th || "—"));
+}
+function tmRender(){
+  if (FSM.mob) return;
+  const tab = $("tab-map"); if (!tab) return;
+  if (!$("tmCard")) tab.insertAdjacentHTML("beforeend", `<div class="card g1" id="tmCard"><div class="hd"><h2>Themes map</h2><span class="sub" id="tmSub"></span><span class="spacer"></span><button class="btn sm fsb" data-fsid="tmPlot" title="Open the Themes map full screen. Esc closes.">⛶ Full screen</button></div>
+    <div class="bd" id="tmCtl"></div><div id="tmMsg"></div><div style="padding:0 8px 6px"><svg id="tmPlot" class="plot tmplot" height="200"></svg></div><div class="legend" id="tmLegend"></div></div>`);
+  const c = tmCfg(), T = tmThemes(c), sel = new Set(tmSel(c, T).map(t => t.key));
+  $("tmCtl").innerHTML = `<div class="tmrow"><div class="grp"><span class="lbl">Themes from</span><span class="seg" id="tmSrc"><button data-k="tas" class="${c.src === "tas" ? "on" : ""}" title="The 26 TAS themes (thematic acceleration screener)">TAS themes</button><button data-k="grp" class="${c.src === "grp" ? "on" : ""}" title="The board's groups — Industry, Sector or My themes, as set on the Themes tab">Board groups · ${tmGrpBy()}</button></span></div>
+      <div class="grp"><span class="lbl">Names per theme</span><input type="number" id="tmN" min="1" max="60" value="${c.n}" style="width:52px"></div>
+      <div class="grp"><span class="lbl">RS ≥</span><input type="number" id="tmRS" value="${c.rs}" style="width:52px"></div>
+      <label class="tog"><input type="checkbox" id="tmLiq" ${c.liq ? "checked" : ""}>Liquid only</label>
+      <label class="tog" title="Off: labels go on names in or under the buy zone and names on your lists"><input type="checkbox" id="tmAll" ${c.all ? "checked" : ""}>Label every name</label></div>
+    <details class="tmpick" id="tmPick" ${FSM.tmOpen ? "open" : ""}><summary><b>Pick themes</b> <span class="small">${sel.size} of ${T.length} ticked${Array.isArray(c.sel[c.src]) ? "" : ` — the strongest ${TM_PICK} until you tick your own`}</span></summary>
+      <div class="tmbtns"><button class="btn sm" data-tmq="top">Strongest ${TM_PICK}</button><button class="btn sm" data-tmq="all">All</button><button class="btn sm" data-tmq="none">Clear</button><input type="text" id="tmQ" placeholder="Filter the list…" style="width:150px"></div>
+      <div class="tmgrid">${T.map(t => `<label class="tmopt" data-nm="${esc(t.name.toLowerCase())}"><input type="checkbox" data-tmk="${esc(t.key)}" ${sel.has(t.key) ? "checked" : ""}><span>${esc(t.name)}</span> <span class="small" style="color:${t.tagC}">${esc(t.tag || "")}</span> <span class="small dim">${t.m.length}</span></label>`).join("")}</div></details>`;
+  const save = () => { tmSave(c); tmRender(); };
+  $("tmSrc").onclick = e => { const b = e.target.closest("button"); if (!b) return; c.src = b.dataset.k; save(); };
+  $("tmN").onchange = e => { c.n = clamp(Math.round(+e.target.value || 15), 1, 60); save(); };
+  $("tmRS").onchange = e => { c.rs = +e.target.value || 0; save(); };
+  $("tmLiq").onchange = e => { c.liq = e.target.checked; save(); };
+  $("tmAll").onchange = e => { c.all = e.target.checked; save(); };
+  $("tmPick").ontoggle = e => { FSM.tmOpen = e.target.open; };
+  $("tmPick").querySelectorAll("[data-tmq]").forEach(b => b.onclick = () => { const k = b.dataset.tmq; c.sel[c.src] = k === "top" ? null : k === "all" ? T.map(t => t.key) : []; save(); });
+  $("tmPick").querySelectorAll("[data-tmk]").forEach(i => i.onchange = () => { const cur = new Set(tmSel(c, T).map(t => t.key)); i.checked ? cur.add(i.dataset.tmk) : cur.delete(i.dataset.tmk); c.sel[c.src] = T.map(t => t.key).filter(k => cur.has(k)); save(); });
+  $("tmQ").oninput = e => { const q = e.target.value.trim().toLowerCase(); $("tmPick").querySelectorAll(".tmopt").forEach(l => l.classList.toggle("hidden", !!q && !l.dataset.nm.includes(q))); };
+  $("tmMsg").innerHTML = !S.has.hist ? `<div class="empty">${ECS_NONE} — the Themes map is empty until then.</div>` : c.src === "tas" && !dssOf("QQQ") ? `<div class="empty">TAS theme strength needs QQQ and the theme ETFs in the stored price history.</div>` : "";
+  const svg = $("tmPlot"), W = Math.max(760, svg.parentElement.clientWidth - 16 || 1100);
+  svg.style.width = W + "px";
+  const o = tmDraw(svg, W, 0, {});
+  attachTips(svg, id => S.rows.find(r => r.sym === id), tmTip, openDrawer);
+  $("tmSub").textContent = `${o.rows.length} theme${o.rows.length === 1 ? "" : "s"} · ${o.n} names · ${o.inZ} in the buy zone · ${o.onL} on your lists · strongest theme first · theme strength is context, not a filter`;
+  $("tmLegend").innerHTML = ECS.map(s => `<span><span class="sw" style="background:${s.c}"></span>${esc(s.name)}</span>`).join("") + `<span><span class="sw" style="background:transparent;border:1.8px solid var(--st1)"></span>ring = on your lists (list colour)</span><span class="small">· dot size = RS · shaded = buy zone · ${c.src === "tas" ? "TAS: proxy ETF vs QQQ in % points; Strong = 4W ahead of QQQ and the proxy in Stage 2" : "group RS 1–99 by timeframe; " + tmGrpBy()} · names in each row follow the filter bar, strongest RS first</span>`;
+  if (FSM.id === "tmPlot") fsSoon();
+}
+if (!FSM.mob) {
+  const _renderMapFS = renderMap;
+  renderMap = function(){
+    _renderMapFS();
+    const ctl = $("mapCtl");
+    if (ctl && !$("mTidy")) {
+      ctl.insertAdjacentHTML("beforeend", `<label class="tog" title="Place map labels so they don't overlap; a label with no room is left off (hover the dot or open full screen). Off = the old labels."><input type="checkbox" id="mTidy" ${fsTidy() ? "checked" : ""}>Tidy labels</label>`);
+      $("mTidy").addEventListener("change", e => { fsSetTidy(e.target.checked); renderMap(); });
+    } else if ($("mTidy")) $("mTidy").checked = fsTidy();
+    try { tmRender(); } catch (e) { console.warn("Themes map", e); }
+  };
+}
+document.head.insertAdjacentHTML("beforeend", `<style>
+.card .hd .fsb{margin-left:auto}
+#fsMap{display:none;position:fixed;inset:0;z-index:55;background:var(--page);flex-direction:column;padding:10px 14px 8px}
+#fsMap.on{display:flex}
+html.fsopen, html.fsopen body{overflow:hidden}
+#fsMap .fsbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:0 2px 8px;border-bottom:1px solid var(--line)}
+#fsMap .fst{display:flex;align-items:baseline;gap:10px;min-width:0}
+#fsMap .fst b{font-size:15px}
+#fsMap .spacer{flex:1}
+#fsMap #fsFind{width:130px}
+#fsMap .fsplot{flex:1;position:relative;overflow:auto;margin-top:6px;user-select:none;background:var(--surface);border:1px solid var(--line);border-radius:10px}
+#fsMap .legend{padding-top:6px}
+#fsDrag{display:none;position:absolute;border:1.5px dashed var(--accent);background:color-mix(in srgb, var(--accent) 10%, transparent);pointer-events:none}
+svg .schid{fill:var(--ink-3);font-style:italic}
+svg text.sclab{paint-order:stroke;stroke:var(--surface);stroke-width:3px;stroke-linejoin:round}
+#tmCtl .tmrow{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+#tmCtl .grp{display:flex;align-items:center;gap:6px}
+#tmCtl .lbl{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+.tmpick{margin-top:8px}
+.tmpick summary{cursor:pointer}
+.tmbtns{display:flex;gap:6px;align-items:center;margin:6px 0}
+.tmgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:2px 14px;max-height:260px;overflow:auto;padding:4px 2px}
+.tmopt{display:flex;gap:6px;align-items:baseline;font-size:12px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#tmCard svg.tmplot{overflow:visible}
+</style>`);
 </script>
 
 </body>
