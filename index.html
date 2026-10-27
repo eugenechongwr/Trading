@@ -8432,7 +8432,7 @@ function s61VsPill(r){ const d = r && !r.etf && S.has.hist ? dssOf(r.sym) : null
 /* ---------------- ticker panel / drawer: one "Entry Check" block (was "Spec 6.1") ----------------
    This is the Detailed view (every check on its own row). The Simple view (the default since 21 Oct) is built in the
    Entry Check script at the end from the same pieces: s61RowHTML, s61ChipsHTML, s61LiveHTML, s61SizeHTML. */
-const ecTagHTML = () => `<span class="ectag" title="Rules: Unified Spec 6.1 (Chart &amp; Entry Spec 6.1 in Notion · Deep Space Screener v5.0 · Intraday Pivot on the 30-min chart)">rules v6.1</span>`;
+const ecTagHTML = () => `<span class="ectag" title="Rules: Unified Spec 6.1 (Chart &amp; Entry Spec 6.1 in Notion · Deep Space Screener v5.0 · Leader Pullback indicator (was Intraday Pivot) on the 30-min chart)">rules v6.1</span>`;
 const ecNotLive = () => "";
 // one check row; information-only checks never show a red ✕: under the guide reads as a neutral "!"
 function s61RowHTML(c){
@@ -8489,7 +8489,7 @@ function s61PanelHTML(r){
     ${[3, 4, 5, 6, 7, 8, 9, 10, 11].map(n => s61RowHTML(s.ck[n])).join("")}
     ${s61LiveHTML(s)}${s61SizeHTML(r, s)}
     <div class="small" style="margin-top:6px">Setup Quality <b>${s.sq}/5</b> · Old pivot level <b>${s.shadow != null ? f2(s.shadow) : "—"}</b> <span class="dim">(reference only)</span> · <label class="tog"><input type="checkbox" data-s61cat="${esc(r.sym)}" ${cat ? "checked" : ""}>verified fresh catalyst</label></div>
-    <div class="small dim">Trigger (on TradingView, Intraday Pivot): a 30-min candle closes back above the 30-min 21 EMA (the trigger line), earliest the 10:00 New York close; buy at the next 30-min candle's open. Stop = the day low at the trigger. Exits: ⅓ at 2R (3R if chosen before entry) or the T+3 daily close — a T+3 close below the entry sells the whole position → stop to breakeven → shave 10% at each whole ADR from 7 ADR above the daily 50 SMA → runner out on a daily close under the daily 9 EMA.</div></div>`;
+    <div class="small dim">Trigger (on TradingView, Leader Pullback indicator): a 30-min candle closes back above the 30-min 21 EMA (the trigger line), earliest the 10:00 New York close; buy at the next 30-min candle's open. Stop = the day low at the trigger. Exits: ⅓ at 2R (3R if chosen before entry) or the T+3 daily close — a T+3 close below the entry sells the whole position → stop to breakeven → shave 10% at each whole ADR from 7 ADR above the daily 50 SMA → runner out on a daily close under the daily 9 EMA.</div></div>`;
 }
 // MAP's call, settable here too (the Market card needs the breadth file); the same stored value as the Market card
 function s61MapSel(z){ return `<select data-s61map title="MAP's Overall Verdict for today — the same setting as on Market"><option value="">— not set —</option>${MAPV.map(v => `<option ${z.regSet && z.reg === v ? "selected" : ""}>${v}</option>`).join("")}</select>`; }
@@ -8601,7 +8601,7 @@ renderSettings = function(){
   _renderSettings61();
   const reset = $("sReset"); if (!reset) return;
   const box = document.createElement("div");
-  box.innerHTML = `<h4>Entry Check <span class="ectag" title="Rules: Unified Spec 6.1 (Chart &amp; Entry Spec 6.1 in Notion · Deep Space Screener v5.0 · Intraday Pivot)">rules v6.1</span></h4>
+  box.innerHTML = `<h4>Entry Check <span class="ectag" title="Rules: Unified Spec 6.1 (Chart &amp; Entry Spec 6.1 in Notion · Deep Space Screener v5.0 · Leader Pullback indicator)">rules v6.1</span></h4>
     <div class="row"><div>Rules in force<div class="d">Entry Check (rules v6.1) is the only rule set since 22 Oct — Spec 6.0 is retired. The Setups lists, the ticker panel, the chart levels and the Board log all read it.</div></div><div></div></div>
     <div class="row"><div>Entry Check panel: detailed view<div class="d">Off (default): one call at the top in words, the key prices, the checks strip and one sentence per failing check — every row behind "Show the working". On: the older layout, every check on its own row. The same switch sits on the panel (Simple / Detailed). Display only.</div></div><div><input type="checkbox" id="ecViewSw" ${store.get("adrb.ecView", "simple") === "detailed" ? "checked" : ""}></div></div>`;
   reset.parentElement.before(box);
@@ -9985,7 +9985,7 @@ const EC_CALL = {"A-eligible": {t: "READY TO TRADE", c: "go"}, "OnDeck-L2": {t: 
 // short names for the check numbers (Setups card "Out" tally, two-blocker sentence)
 const EC_CK = {1: "Stock size", 2: "Bad data", 3: "Trend", 4: "Stage", 5: "Stretch", 6: "Zone", 7: "Group", 8: "RS", 9: "Earnings", 10: "Room", 11: "Day low"};
 const ecView = () => store.get("adrb.ecView", "simple") === "detailed" ? "detailed" : "simple";
-const ecReady = "In the buy zone and every check passes. On TradingView, wait for Intraday Pivot to say GET READY → BUY.";
+const ecReady = "In the buy zone and every check passes. On TradingView, wait for the Leader Pullback indicator to say GET READY → BUY.";
 
 // one plain sentence for every failing / blocking check 1–9, keyed by check number
 function ecWhy(s){
@@ -10081,7 +10081,7 @@ s61PanelHTML = function(r){
     ${chips ? `<div class="s61chips">${chips}</div>` : ""}
     <details class="ecsz" data-ecf="adrb.ecSize" ${store.get("adrb.ecSize", false) ? "open" : ""}><summary>${ecSizeLine(s)}</summary>${s61SizeHTML(r, s)}</details>
     ${work}
-    <div class="small dim" style="margin-top:6px">Trigger (on TradingView, Intraday Pivot): a 30-min candle closes back above the 30-min 21 EMA (the trigger line), earliest the 10:00 New York close; buy at the next 30-min candle's open. Stop = the day low at the trigger, no more than 0.6 ADR under the entry.</div>${ecFoot()}</div>`;
+    <div class="small dim" style="margin-top:6px">Trigger (on TradingView, Leader Pullback indicator): a 30-min candle closes back above the 30-min 21 EMA (the trigger line), earliest the 10:00 New York close; buy at the next 30-min candle's open. Stop = the day low at the trigger, no more than 0.6 ADR under the entry.</div>${ecFoot()}</div>`;
 };
 // the ticker on the panel (the Settings switch re-opens it)
 const _openDrawerEC = openDrawer;
@@ -12439,6 +12439,583 @@ svg text.sclab{paint-order:stroke;stroke:var(--surface);stroke-width:3px;stroke-
 .tmgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:2px 14px;max-height:260px;overflow:auto;padding:4px 2px}
 .tmopt{display:flex;gap:6px;align-items:baseline;font-size:12px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #tmCard svg.tmplot{overflow:visible}
+</style>`);
+</script>
+
+<script>
+"use strict";
+/* =====================================================================
+   PLAYBOOKS 2 + 3 — R1 WASHOUT AND OVERSOLD BOUNCE BESIDE ENTRY CHECK (27 Oct 2026). Names on screen (Eugene, 27 Oct: "find the best trading centric name … change the name across all my systems"): 1 = Leader Pullback (its checklist keeps the name Entry Check), 2 = Shakeout Reclaim (code R1), 3 = Floor Bounce (code OB). Codes, storage keys, functions and the MAP O lines are unchanged. Eugene (chat, 27 Oct): "Build it.
+   Since you're at it. Build the r1 as well into the board. Have a think how best to display the 3 different playbooks …
+   something like being able to click playbook 1/2/3 … an effective means of clearly segregating the filters for each
+   playbook … Yes map should have its own oversold watch as well."
+   Written rules: docs/playbooks-2-3-spec-2026-10-27.md (sections A–D). Scope:
+   - TRADING LOGIC (new routes only, Playbook 1 untouched): Playbook 2 = R1 — Leader Washout Reversal, EXPERIMENTAL LIVE
+     (Notion page of 25 Sep 2026, amended 19 Oct 2026), the R1 Pine's daily layer ported line for line (r1Calc). Territory:
+     the Notion 19 Oct rule (close under the daily 21 EMA, or the 21 EMA not rising) by default; the Pine's old Spec 6.0
+     test (under the 9 or 21 EMA) one click away for comparison — RULED 27 Oct (Eugene: "Notion rule") (localStorage
+     adrb.r1Terr = "notion" | "old"). Playbook 3 = OB — Oversold bounce at a level (Monis), PAPER / WATCH ONLY, never sized
+     (obCalc, spec section B; Notion draft page 27 Oct).
+   - DISPLAY: the playbook switch (context bar + top of Setups; localStorage adrb.pb = 1 | 2 | 3, default 1). Setups leads
+     with the chosen playbook's card (2 = #pbR1Box, 3 = #pbOBBox; Playbook 1's cards are hidden, not removed, and come back
+     on switching to 1); the ticker panel gets "R1" and "Oversold" tabs beside "Entry Check" (the chosen playbook's tab opens
+     first); the board chart draws the chosen playbook's levels (BCL_CODE += R1 / OB codes); each playbook keeps its own
+     filter set (adrb.pbGF {1, 2, 3}; the live set stays in adrb.gf), with its own first-visit preset; filter criteria
+     (category "Playbooks"), screens (group "Playbooks 2 · 3"); a Today line; a Watchlist card (#pbWatch).
+   - MAP: paste-block O lines "O1 TICKER | level: … | test: … | why: … | kill: … | vehicle: …" (up to 3; JSON "O") → stored
+     in adrb.mapImp as O; shown on the Oversold card and the Watchlist card with the board's read. A / B / D / H / E lines
+     parse exactly as before (O lines need their number, so OUT / OVER-B lines are never read as O lines).
+   - Self-check: a separate short copy of the R1 state machine and the OB status for every stock with history (pbSelf).
+   Never changes: Entry Check checks / lists / sizes, rows, ranks, states, the Daily Plan, the Board log, the Deep Space
+   feed CSV, the ETF feed, the Decision-log CSV, settings-hash keys. Storage NEW: adrb.pb, adrb.pbGF, adrb.r1Terr.
+   ===================================================================== */
+const PB_N = {1: "Leader Pullback", 2: "Shakeout Reclaim", 3: "Floor Bounce"};
+const PB_D = {1: "Playbook 1 · Leader Pullback — buy strong leaders when they dip back to their rising averages; the Entry Check (rules v6.1) is its checklist; canonical, in test since 26 Oct",
+  2: "Playbook 2 · Shakeout Reclaim (R1) — a former leader is shaken out under its averages, then takes the level back; experimental live, 0.10% NLV, outside the Entry Check test",
+  3: "Playbook 3 · Floor Bounce (OB) — a fast drop lands on a price floor set earlier and bounces (Monis); paper / watch only, never sized"};
+const pbCur = () => { let v = 1; try { v = +store.get("adrb.pb", 1) || 1; } catch (e) {} return v === 2 || v === 3 ? v : 1; };
+const p2 = x => fin(x) ? x.toFixed(2) : "—";
+const pbHH = () => !!(S.has && S.has.hist && HIST.nD);
+// the per-symbol caches follow the price bars only (the SPEED script's key): a settings change that rebuilds the rows but
+// moves no price reuses them; the card / list builders below rebuild from these on dssKey, so row facts (RS, group) stay fresh
+const pbKey = () => typeof spdKey === "function" ? spdKey() : dssKey();
+
+/* ---------------- Playbook 2 · R1 (the R1 Pine's f_daily, bar by bar) ---------------- */
+const R1C = {px: 10, dv: 100e6, dvN: 20, adrN: 20, adr: 4, nearHi: 15, look: 60, hiN: 252, reset: 1.5, pivMin: 3, pivMax: 40, capRng: 1.5, capRvol: 1.5, capTop: 35, expiry: 3, maxStop: 1.0, e21LB: 5};
+const R1_ST = ["—", "Former leader", "Reset — watch", "Armed", "Expired", "Handed to Playbook 1"];
+const r1Terr = () => { try { return store.get("adrb.r1Terr", "notion") === "old" ? "old" : "notion"; } catch (e) { return "notion"; } };
+// rolling helpers with Pine's na rules: a window that runs off the start is NaN
+const pbHi = (a, n, k) => { if (k - n + 1 < 0) return NaN; let m = -Infinity; for (let u = k - n + 1; u <= k; u++) { if (!fin(a[u])) return NaN; if (a[u] > m) m = a[u]; } return m; };
+const pbLo = (a, n, k) => { if (k - n + 1 < 0) return NaN; let m = Infinity; for (let u = k - n + 1; u <= k; u++) { if (!fin(a[u])) return NaN; if (a[u] < m) m = a[u]; } return m; };
+function r1Calc(b, terr){
+  if (!b || b.n < 30) return null;
+  const C = R1C, {c, h, l, v} = b, n = b.n, old = terr === "old";
+  const e9 = PZ.ema(c, 9), e21 = PZ.ema(c, 21), e50 = PZ.ema(c, 50), s50 = PZ.sma(c, 50), s200 = PZ.sma(c, 200);
+  const adrS = PZ.sma(PZ.map(n, k => h[k] / l[k]), C.adrN), dvS = PZ.sma(PZ.map(n, k => c[k] * v[k]), C.dvN);
+  const rngS = PZ.sma(PZ.map(n, k => h[k] - l[k]), 20), volS = PZ.sma(v, 50);
+  const nearHi = new Uint8Array(n);
+  let inCamp = false, campStart = null, armIdx = null, armType = 0, washLo = NaN, pv1 = NaN, pb1 = null, pv2 = NaN, pb2 = null;
+  const out = {};
+  for (let k = 0; k < n; k++) {
+    const adr = 100 * (adrS[k] - 1), adrAbs = adr / 100 * c[k], dv = dvS[k];
+    const hi52 = pbHi(h, C.hiN, k), hi20 = pbHi(h, 20, k), hi20p = k ? pbHi(h, 20, k - 1) : NaN;
+    nearHi[k] = fin(hi52) && c[k] >= hi52 * (1 - C.nearHi / 100) ? 1 : 0;
+    let leader = false; for (let u = Math.max(0, k - C.look + 1); u <= k; u++) if (nearHi[u]) { leader = true; break; }
+    const gate = c[k] > C.px && dv >= C.dv && adr >= C.adr && c[k] > s200[k] && s50[k] > s200[k] && leader;
+    const e21Up = k - C.e21LB >= 0 && e21[k] > e21[k - C.e21LB];
+    const inP1 = old ? (c[k] > e9[k] && c[k] > e21[k]) : (c[k] > e21[k] && e21Up);
+    const promo = old ? (c[k] > e9[k] && c[k] > e21[k] && c[k] > e50[k]) : inP1;
+    const resetNow = adrAbs > 0 && (hi20 - l[k]) / adrAbs >= C.reset && (l[k] <= e21[k] || l[k] <= s50[k]);
+    // pivotlow(2, 2) confirmed on bar k (pivot bar k − 2)
+    if (k >= 4 && l[k - 2] < l[k - 3] && l[k - 2] < l[k - 4] && l[k - 2] < l[k - 1] && l[k - 2] < l[k]) { pv2 = pv1; pb2 = pb1; pv1 = l[k - 2]; pb1 = k - 2; }
+    const age1 = pb1 == null ? NaN : k - pb1, age2 = pb2 == null ? NaN : k - pb2;
+    const pvRef = fin(pv1) && age1 >= C.pivMin && age1 <= C.pivMax ? pv1 : fin(pv2) && age2 >= C.pivMin && age2 <= C.pivMax ? pv2 : NaN;
+    const uar = fin(pvRef) && l[k] < pvRef && c[k] > pvRef;
+    const rng = h[k] - l[k], lo10 = k ? pbLo(l, 10, k - 1) : NaN, rngAvg = k ? rngS[k - 1] : NaN, volAvg = k ? volS[k - 1] : NaN;
+    const cap = rng > 0 && l[k] < lo10 && rng >= C.capRng * rngAvg && v[k] >= C.capRvol * volAvg && (c[k] - l[k]) / rng >= 1 - C.capTop / 100;
+    let promoted = false;
+    if (!inCamp && gate && resetNow && !inP1) { inCamp = true; campStart = k; armIdx = null; armType = 0; washLo = NaN; }
+    if (inCamp) { if (c[k] < s200[k] || h[k] > hi20p) inCamp = false; else if (promo) { inCamp = false; promoted = true; } }
+    if (!inCamp) { armIdx = null; washLo = NaN; }
+    const armNow = inCamp && gate && !inP1 && (uar || cap);
+    if (armNow) { armIdx = k; armType = uar ? 1 : 2; washLo = fin(washLo) ? Math.min(washLo, l[k]) : l[k]; }
+    else if (inCamp && fin(washLo)) washLo = Math.min(washLo, l[k]);
+    const since = armIdx == null ? NaN : k - armIdx, armLive = inCamp && armIdx != null && since <= C.expiry - 1;
+    const state = promoted ? 5 : armLive ? 3 : inCamp && armIdx != null ? 4 : inCamp ? 2 : gate ? 1 : 0;
+    if (k === n - 1) Object.assign(out, {state, daysLeft: armLive ? C.expiry - since : 0, armType, armDate: armIdx == null ? null : b.dates[armIdx], wash: washLo, campDate: campStart == null || (!inCamp && !promoted) ? null : b.dates[campStart],
+      adr, adrD: adrAbs, dv, close: c[k], low: l[k], e9: e9[k], e21: e21[k], e21Up, s50: s50[k], s200: s200[k], hi52, leader, inP1, gate, resetNow, pvRef, uar, cap, armNow,
+      g: {px: c[k] > C.px, dv: dv >= C.dv, adr: adr >= C.adr, a200: c[k] > s200[k], s50: s50[k] > s200[k], leader}, to: b.dates[k], terr: old ? "old" : "notion"});
+  }
+  return out;
+}
+const R1X = {key: "", map: new Map()};
+function r1Of(r){
+  if (!r || r.etf || !pbHH()) return null;
+  const k = pbKey() + "|" + r1Terr(); if (R1X.key !== k) { R1X.key = k; R1X.map = new Map(); }
+  if (R1X.map.has(r.sym)) return R1X.map.get(r.sym);
+  let x = null; try { x = r1Calc(dssBars(r.sym), r1Terr()); } catch (e) { console.warn("R1", r.sym, e); }
+  R1X.map.set(r.sym, x); return x;
+}
+// the call in words + colour (Entry Check style)
+function r1Call(x){
+  if (!x) return {t: "—", c: "", s: "needs the price history"};
+  if (x.state === 3) return x.close > x.s50 ? {t: "ARMED", c: "go", s: `armed (${x.armType === 1 ? "U&R" : "CAP"}) — valid the next ${x.daysLeft} session${x.daysLeft === 1 ? "" : "s"}; wait for the 30-min higher-low reclaim from 10:00 ET`}
+    : {t: "ARMED · NEEDS 50 SMA", c: "zone", s: `armed (${x.armType === 1 ? "U&R" : "CAP"}) but closed under the daily 50 SMA ${p2(x.s50)} — the trigger needs price back above it`};
+  if (x.state === 2) return {t: "RESET — WATCH", c: "wait", s: "campaign live (the reset touched the daily 21 EMA / 50 SMA) — not armed: waits for an undercut-and-reclaim of a pivot low or a capitulation day"};
+  if (x.state === 4) return {t: "EXPIRED", c: "", s: "armed more than 3 sessions ago without a trigger — needs to re-arm"};
+  if (x.state === 5) return {t: "P1 ZONE", c: "", s: "handed to Playbook 1 — use Entry Check"};
+  if (x.state === 1) return {t: x.inP1 ? "P1 ZONE" : "FORMER LEADER", c: "", s: x.inP1 ? "in Playbook 1 territory — use Entry Check" : "passes the former-leader gate; no reset yet"};
+  return {t: "NOT R1", c: "bad", s: r1GateWhy(x)};
+}
+function r1GateWhy(x){
+  const g = x.g, w = [];
+  if (!g.px) w.push(`price $${p2(x.close)} (needs over $10)`); if (!g.dv) w.push(`$${fin(x.dv) ? Math.round(x.dv / 1e6) : "—"}M a day (needs $100M)`);
+  if (!g.adr) w.push(`ADR ${fin(x.adr) ? x.adr.toFixed(1) : "—"}% (needs 4%)`); if (!g.a200) w.push("under the daily 200 SMA"); if (!g.s50) w.push("50 SMA under the 200 SMA");
+  if (!g.leader) w.push(fin(x.hi52) ? "not within 15% of the 52-week high in the last 60 sessions" : "fewer than 252 stored sessions (the former-leader test needs a 52-week high)");
+  return "not a former leader: " + (w.join(" · ") || "—");
+}
+const r1Earn = (r, x) => { try { return s61Earn(r.eru, x.to, s61Bmo().has(r.sym)); } catch (e) { return {n: null}; } };
+// the call with the 5-session earnings gate (R1 page, 19 Oct: applies to R1 now)
+function r1CallR(r, x){ const c = r1Call(x); if (!x || x.state !== 3) return c; const er = r1Earn(r, x);
+  return er.n != null && er.n < S61.erMin ? {t: "ARMED · NO ENTRY (EARNINGS)", c: "bad", s: `${c.s} — but earnings in ${er.n} session${er.n === 1 ? "" : "s"}: no new R1 entry (needs 6+)`} : c; }
+
+/* ---------------- Playbook 3 · Oversold bounce at a level ---------------- */
+const OBC = {look: 8, drop: 3.0, ups: 1, zone: 0.25, near: 1.0, piv: 5, lb: 252, rvHi: 2.0, rvLo: 1.2, volN: 50, adrN: 20, lod: 0.6, dvN: 20, dv: 100e6, cap: 1e9, px: 10, eDv: 20e6, ePx: 10};
+const OB_ST = {ur: {n: "Undercut & reclaim", c: "go", o: 1}, t1: {n: "First test", c: "go", o: 2}, ap: {n: "Approaching", c: "zone", o: 3}, t2: {n: "Second test — watch only", c: "wait", o: 4},
+  tested: {n: "Tested — next touch is a second test", c: "wait", o: 5}, gone: {n: "Bounced — gone", c: "", o: 6}, far: {n: "Too far above the level", c: "", o: 7}, nolvl: {n: "No level under the price", c: "bad", o: 8},
+  nodrop: {n: "No sudden drop", c: "", o: 9}, liq: {n: "Liquidity", c: "bad", o: 10}, err: {n: "Not enough history", c: "", o: 11}};
+const OB_CAND = new Set(["ur", "t1", "ap"]), OB_WATCH = new Set(["t2", "tested"]);
+function obCalc(b, etf, mcap){
+  const C = OBC;
+  if (!b || b.n < 30) return {st: "err", why: b ? `only ${b.n} stored bars` : "no stored bars"};
+  const {c, h, l, v} = b, n = b.n, t = n - 1, D0 = b.dates;
+  let iH = -1, H = -Infinity; for (let k = Math.max(0, t - C.look + 1); k <= t; k++) if (h[k] >= H) { H = h[k]; iH = k; }
+  let dv = 0, kd = 0; for (let k = t - C.dvN + 1; k <= t; k++) if (k >= 0 && fin(c[k] * v[k])) { dv += c[k] * v[k]; kd++; } dv = kd === C.dvN ? dv / kd : NaN;
+  const liq = etf ? dv >= C.eDv && c[t] >= C.ePx : mcap != null && mcap >= C.cap && dv >= C.dv && c[t] > C.px;
+  const o = {to: D0[t], close: c[t], lo: l[t], H, hDate: D0[iH], iH, days: t - iH, dv, liq, etf: !!etf, mcap};
+  if (iH - C.adrN + 1 < 0) return {...o, st: "err", why: "not enough bars before the high"};
+  let sa = 0; for (let k = iH - C.adrN + 1; k <= iH; k++) sa += (h[k] - l[k]) / c[k];
+  const D = sa / C.adrN * c[iH], z = C.zone * D; o.D = D; o.adrPct = sa / C.adrN * 100; o.z = z;
+  if (!(D > 0)) return {...o, st: "err", why: "no range before the high"};
+  let lmin = Infinity, ups = 0; for (let k = iH + 1; k <= t; k++) { if (l[k] < lmin) lmin = l[k]; if (c[k] > c[k - 1]) ups++; }
+  o.lmin = iH < t ? lmin : NaN; o.dropA = iH < t ? (H - lmin) / D : 0; o.ups = ups; o.sudden = iH < t && o.dropA >= C.drop && ups <= C.ups;
+  // levels set before the drop (own bar ≤ iH − 5, within 252 sessions)
+  const P = C.piv, Lv = [], first = Math.max(P, t - C.lb + 1), lastP = iH - P;
+  for (let p = first; p <= lastP; p++) {
+    let ph = true, pl = true; for (let u = p - P; u <= p + P; u++) { if (u === p) continue; if (!(h[p] >= h[u])) ph = false; if (!(l[p] <= l[u])) pl = false; }
+    if (ph) { let fl = false; for (let j = p + 1; j <= iH; j++) if (c[j] > h[p]) { fl = true; break; } if (fl) Lv.push({p: h[p], s: "swing high", d: D0[p]}); }
+    if (pl) { let ok = true; for (let j = p + 1; j <= iH; j++) if (c[j] < l[p]) { ok = false; break; } if (ok) Lv.push({p: l[p], s: "swing low", d: D0[p]}); }
+  }
+  for (let k = Math.max(1, t - C.lb + 1); k <= lastP; k++) if (l[k] > h[k - 1]) { const g = h[k - 1]; let open = true; for (let j = k + 1; j <= iH; j++) if (l[j] <= g) { open = false; break; } if (open) Lv.push({p: g, s: "gap", d: D0[k]}); }
+  const cl = []; for (const q of Lv.filter(q => q.p < H).sort((a, b) => b.p - a.p)) { const cur = cl[cl.length - 1]; if (cur && cur.p - q.p <= z) cur.src.push(q); else cl.push({p: q.p, src: [q]}); }
+  o.levels = cl; o.lost = []; let act = null;
+  for (const q of cl) { if (c[t] < q.p - z) o.lost.push(q); else { act = q; break; } }
+  o.lvl = act; o.next = act ? cl[cl.indexOf(act) + 1] || null : null;
+  if (!liq) return {...o, st: "liq", why: etf ? `${fin(dv) ? "$" + (dv / 1e6).toFixed(1) + "M" : "—"} a day (ETF floor $20M) · close $${p2(c[t])}` : `cap ${mcap == null ? "unknown" : "$" + (mcap / 1e9).toFixed(1) + "B"} · ${fin(dv) ? "$" + Math.round(dv / 1e6) + "M" : "—"} a day · $${p2(c[t])} (needs cap $1B, $100M a day, over $10)`};
+  if (!o.sudden) return {...o, st: "nodrop", why: iH === t ? "made its 8-session high today" : `${o.dropA.toFixed(1)} ADR off the ${D0[iH]} high in ${t - iH} session${t - iH === 1 ? "" : "s"}, ${ups} up close${ups === 1 ? "" : "s"} (needs ≥ ${C.drop} ADR, ≤ ${C.ups} up close)`};
+  if (!act) return {...o, st: "nolvl", why: cl.length ? `every level under the high is lost (closed under ${o.lost.map(q => p2(q.p)).join(", ")})` : "no swing level or open gap under the high in the last 252 sessions"};
+  const L = act.p, touch = k => l[k] <= L + z; let tests = 0;
+  for (let k = iH + 1; k <= t; k++) if (touch(k) && (k === iH + 1 || !touch(k - 1))) tests++;
+  o.L = L; o.tests = tests; o.today = touch(t); o.dA = (c[t] - L) / D;
+  let st;
+  if (o.today) st = tests === 1 ? (l[t] < L && c[t] >= L ? "ur" : "t1") : "t2";
+  else if (tests >= 1) st = c[t] - L > C.near * D ? "gone" : "tested";
+  else st = o.dA <= C.near ? "ap" : "far";
+  if (o.today && t - C.volN >= 0) { let s = 0; for (let k = t - C.volN; k < t; k++) s += v[k]; const a = s / C.volN; o.rv = a > 0 ? v[t] / a : NaN; }
+  return {...o, st};
+}
+const OBX = {key: "", map: new Map()};
+function obOfSym(sym, etf, mcap){
+  if (!pbHH()) return null;
+  const k = pbKey(); if (OBX.key !== k) { OBX.key = k; OBX.map = new Map(); }
+  const key = sym + "|" + (etf ? 1 : 0) + "|" + (mcap ?? ""); if (OBX.map.has(key)) return OBX.map.get(key);
+  let x = null; try { x = obCalc(dssBars(sym), etf, mcap); } catch (e) { console.warn("OB", sym, e); }
+  OBX.map.set(key, x); return x;
+}
+const obOf = r => !r ? null : obOfSym(r.sym, !!r.etf || ETFU.has(r.sym), r.etf ? null : (r.mcap ?? null));
+const obSrc = q => [...new Set(q.src.map(s => s.s))].join(" + ") + (q.src.length > 1 ? " (confluence)" : "");
+const obRank = (a, b) => OB_ST[a.x.st].o - OB_ST[b.x.st].o || Math.abs(a.x.dA) - Math.abs(b.x.dA) || b.x.dropA - a.x.dropA || (a.sym < b.sym ? -1 : 1);
+function obVol(x){ if (!fin(x.rv)) return ""; return x.rv >= OBC.rvHi ? `<span class="neg" title="Monis: a breakdown needs a volume surge — a surge into the level is the warning sign">volume surge ${x.rv.toFixed(1)}× — breakdown risk</span>` : x.rv < OBC.rvLo ? `<span class="pos" title="No surge into the level: sellers aren't pressing">quiet test ${x.rv.toFixed(1)}×</span>` : `${x.rv.toFixed(1)}× volume`; }
+// every OB name (stocks in the file + the ETF map funds with stored bars), worked out on the whole file
+const OBR = {key: "", v: null};
+function obRun(){
+  if (!S.snap || !pbHH()) return null;
+  const k = dssKey(); if (OBR.key === k && OBR.v) return OBR.v;
+  const rows = [];
+  for (const r of S.stocks) { const x = obOf(r); if (x) rows.push({sym: r.sym, r, x, etf: false}); }
+  if (typeof ETFU !== "undefined") for (const [t, m] of ETFU) if (HIST.idx && HIST.idx.has(t)) { const x = obOfSym(t, true, null); if (x) rows.push({sym: t, r: S.rowBySym.get(t) || null, x, etf: true, g: m.g, lev: m.lev}); }
+  const ctx = ["QQQ", "SPY"].map(t => ({t, x: HIST.idx && HIST.idx.has(t) ? obOfSym(t, true, null) : null}));
+  let t2108 = null; try { const top = SB && SB.res && SB.res.rows && SB.res.rows[0]; if (top && fin(top.t2108)) t2108 = {v: top.t2108, d: top.d}; } catch (e) {}
+  OBR.key = k; OBR.v = {rows, ctx, t2108, to: HIST.dates[HIST.nD - 1]}; return OBR.v;
+}
+
+/* ---------------- the playbook switch ---------------- */
+function pbSegHTML(id){ const k = pbCur(); return `<span class="seg pbseg" id="${id}" title="Which playbook the Setups page, the ticker panel's first tab, the chart levels and the filter bar follow">${[1, 2, 3].map(i => `<button data-pb="${i}" class="${i === k ? "on" : ""}" title="${esc(PB_D[i])}">${i} · ${PB_N[i]}</button>`).join("")}</span>`; }
+function pbChipPaint(){
+  const lb = document.querySelector(".livebox"); if (!lb) return;
+  let c = $("pbChip");
+  if (!c) { (($("zlChip")) || lb).insertAdjacentHTML("beforebegin", `<span class="chip pbchip" id="pbChip"></span>`); c = $("pbChip"); }
+  c.innerHTML = `<span class="lbl">Playbook</span>` + pbSegHTML("pbSw");
+}
+function pbDefaultGF(k){
+  const p = k === 2 ? GF_PRESETS["Playbook 2 · Shakeout Reclaim"] : k === 3 ? GF_PRESETS["Playbook 3 · Floor Bounce"] : null;
+  return {...structuredClone(GF_DEF), on: true, gates: {...GF_DEF.gates, ...((p && p.gates) || {})}, crit: structuredClone((p && p.crit) || {})};
+}
+function pbSet(k){
+  k = +k; const was = pbCur(); if (k === was || ![1, 2, 3].includes(k)) return;
+  const all = store.get("adrb.pbGF", {}) || {};
+  all[was] = structuredClone(GF);
+  GF = all[k] ? {...structuredClone(GF_DEF), ...structuredClone(all[k]), gates: {...GF_DEF.gates, ...(all[k].gates || {})}, crit: structuredClone(all[k].crit || {})} : pbDefaultGF(k);
+  store.set("adrb.pbGF", all); store.set("adrb.pb", k);
+  WSI.tpTab = k === 2 ? "r1" : k === 3 ? "ob" : "plan"; store.set("adrb.tpTab", WSI.tpTab);
+  toast(`Playbook ${k} · ${PB_N[k]} — its own filters are loaded`);
+  gfApply(); if (!S.snap) renderAll();
+  const dr = $("drawer"); if (dr && dr.classList.contains("open") && typeof WSI !== "undefined" && WSI.cur && S.rowBySym && S.rowBySym.has(WSI.cur)) openDrawer(WSI.cur);
+}
+document.addEventListener("click", e => { const b = e.target.closest("[data-pb]"); if (b && b.closest(".pbseg")) { e.preventDefault(); pbSet(b.dataset.pb); } });
+GF_PRESETS["Playbook 2 · Shakeout Reclaim"] = {gates: {dvMin: 100, pxMin: 10, adrMin: 4}, crit: {}};
+GF_PRESETS["Playbook 3 · Floor Bounce"] = {gates: {dvMin: 100, mcapMin: 1, pxMin: 10}, crit: {}};
+// the filter bar names the playbook it belongs to
+const _renderGBarPB = renderGBar;
+renderGBar = function(){
+  _renderGBarPB();
+  const el = document.querySelector("#gbar .gbar-in"); if (!el) return;
+  const k = pbCur(); el.insertAdjacentHTML("afterbegin", `<span class="gchip pbg pb${k}" title="Each playbook keeps its own filters. Switching playbook saves these and loads the other playbook's set.">Filters for <b>Playbook ${k} · ${PB_N[k]}</b></span>`);
+};
+
+/* ---------------- filter criteria + screens ---------------- */
+CRIT_CATS.push("Playbooks");
+for (const c of [
+  {k: "r1st", cat: "Playbooks", l: "Shakeout Reclaim (R1) state is", type: "multi", p: [3], need: HH, opts: () => R1_ST.map((n, i) => [i, n]).slice(1), t: (r, p) => { const x = r1Of(r); return x ? p.map(Number).includes(x.state) : null; }},
+  {k: "obst", cat: "Playbooks", l: "Floor Bounce status is", type: "multi", p: ["ur", "t1", "ap"], need: HH, opts: () => Object.entries(OB_ST).filter(([k]) => k !== "err").map(([k, o]) => [k, o.n]), t: (r, p) => { const x = obOf(r); return x ? p.includes(x.st) : null; }}
+]) { CRIT.push(c); CRIT_BY[c.k] = c; }
+SC_ORDER.splice(SC_ORDER.indexOf("Other"), 0, "Playbooks 2 · 3");
+for (const sc of [
+  {k: "r1arm", t: "Shakeout Reclaim armed (Playbook 2)", d: "A former leader that reset into its daily 21 EMA / 50 SMA and then undercut a pivot low and closed back above it (U&R) or had a capitulation day (CAP) — armed for the next 3 sessions. The trigger is on the 30-min (Shakeout Reclaim indicator).", need: ["hist"], f: r => { const x = r1Of(r); return !!x && x.state === 3; }},
+  {k: "r1camp", t: "Shakeout Reclaim campaign live — reset or armed", d: "Former leaders in an R1 campaign: the reset (a 1.5 ADR pullback that touched the daily 21 EMA / 50 SMA) is in, under Playbook 1 territory.", need: ["hist"], f: r => { const x = r1Of(r); return !!x && (x.state === 2 || x.state === 3); }},
+  {k: "obc", t: "Floor Bounce — at or near a floor (Playbook 3)", d: "A sudden drop (3+ ADR in at most 7 sessions, no more than one up close) into a daily level set before the drop: first test, undercut & reclaim, or within 1 ADR above. Paper / watch only.", need: ["hist"], f: r => { const x = obOf(r); return !!x && OB_CAND.has(x.st); }},
+  {k: "obur", t: "Floor Bounce — undercut & reclaim (Playbook 3)", d: "Today undercut the level and closed back above it, on the first test — Monis's strongest oversold reversal. Paper / watch only.", need: ["hist"], f: r => { const x = obOf(r); return !!x && x.st === "ur"; }}
+]) { SCREENS.push(sc); SC_CAT[sc.k] = "Playbooks 2 · 3"; }
+
+/* ---------------- Setups: the R1 card ---------------- */
+function r1Rows(){
+  if (!S.snap || !pbHH()) return null;
+  const out = []; for (const r of S.stocks) { const x = r1Of(r); if (x && x.state >= 1) out.push({r, x}); }
+  return out;
+}
+function r1CardHTML(){
+  const terr = r1Terr();
+  const hd = sub => `<div class="hd"><h2>Playbook 2 · Shakeout Reclaim (R1)</h2><span class="sub">${sub}</span><span class="spacer"></span>
+    <label class="small" title="Ruled 27 Oct 2026 (Eugene: &quot;Notion rule&quot;): R1 territory = a close under the daily 21 EMA, or the 21 EMA not rising (R1 Notion page, amended 19 Oct). The old Spec 6.0 test stays here for comparison only.">R1 territory <select data-r1terr><option value="notion" ${terr === "notion" ? "selected" : ""}>Notion 19 Oct: under the 21 EMA or 21 not rising</option><option value="old" ${terr === "old" ? "selected" : ""}>Old Spec 6.0 test (comparison only): under the 9 or 21 EMA</option></select></label></div>`;
+  if (!pbHH()) return hd("experimental live · 0.10% NLV") + `<div class="bd"><div class="empty">R1 reads the stored daily bars. <button class="btn sm" data-hist="full">Load price history</button></div></div>`;
+  const R = r1Rows() || [], vis = R.filter(o => gOK(o.r)), hid = R.length - vis.length;
+  const by = s => vis.filter(o => o.x.state === s);
+  const arm = by(3).sort((a, b) => b.x.daysLeft - a.x.daysLeft || (b.r.rs ?? -1) - (a.r.rs ?? -1) || (a.r.sym < b.r.sym ? -1 : 1));
+  const rst = by(2).sort((a, b) => (b.r.rs ?? -1) - (a.r.rs ?? -1) || (a.r.sym < b.r.sym ? -1 : 1));
+  const tkc = o => `<span class="tk" data-sym="${esc(o.r.sym)}">${esc(o.r.sym)}</span>`;
+  const armRow = o => { const x = o.x, er = r1Earn(o.r, x), erBad = er.n != null && er.n < S61.erMin, c = r1CallR(o.r, x), stopLim = R1C.maxStop * x.adrD;
+    return `<tr data-sym="${esc(o.r.sym)}"><td class="l sym">${esc(o.r.sym)}</td><td>${rsBadge(o.r.rs)}</td><td class="l small">${esc(o.r.group || "")}<br><span class="dim">${esc(o.r.gState || "")}</span></td>
+      <td class="l"><span class="pill ${c.c}">${x.armType === 1 ? "U&R" : "CAP"} · ${x.daysLeft} left</span></td><td>${p2(x.wash)}</td><td>${p2(x.close)}</td>
+      <td class="${x.close > x.s50 ? "pos" : "neg"}" title="The trigger needs price back above the daily 50 SMA">${p2(x.s50)}${x.close > x.s50 ? " ✓" : " — needs above"}</td>
+      <td title="Stop = the session low at the trigger; wider than 1.0 ADR = no trade">${fin(stopLim) ? "$" + stopLim.toFixed(2) : "—"}</td><td>${fin(x.adr) ? x.adr.toFixed(1) + "%" : "—"}</td>
+      <td class="${erBad ? "neg" : ""}" title="${erBad ? "R1 follows the 5-session earnings gate: no new entry" : "sessions to earnings"}">${er.n == null ? "?" : er.n}${erBad ? " — no entry" : ""}</td><td class="small">${esc(x.campDate || "—")}</td></tr>`; };
+  const rstRow = o => { const x = o.x; return `<tr data-sym="${esc(o.r.sym)}"><td class="l sym">${esc(o.r.sym)}</td><td>${rsBadge(o.r.rs)}</td><td class="l small">${esc(o.r.group || "")}</td><td>${p2(x.close)}</td><td>${p2(x.e21)}</td><td>${p2(x.s50)}</td><td>${fin(x.pvRef) ? p2(x.pvRef) : "—"}</td><td>${fin(x.adr) ? x.adr.toFixed(1) + "%" : "—"}</td><td class="small">${esc(x.campDate || "—")}</td></tr>`; };
+  const n1 = by(1).length, ex = by(4), p1 = by(5);
+  return hd(`experimental live · 0.10% NLV · own pilot, outside the Entry Check test · daily close ${esc((R[0] && R[0].x.to) || HIST.dates[HIST.nD - 1] || "—")}`) + `<div class="bd">
+    <div class="small" style="margin-bottom:6px">A former leader pulls back into its daily 21 EMA / 50 SMA, gets flushed (undercut of a pivot low and a close back above it = <b>U&amp;R</b>, or a capitulation day = <b>CAP</b>) and reclaims. <b>Armed</b> names can trigger on the next 3 sessions: on the 30-min (R1 indicator), from 10:00 ET, a higher low, then a close above the prior bar's high, the 30-min 9 EMA and VWAP, back above the daily 50 SMA. Stop = the session low, no more than 1.0 ADR. Size 0.10% NLV, max 3 attempts per campaign (Trade Log).${terr === "old" ? ` <b class="neg">Old territory rule selected.</b>` : ""}</div>
+    <h4 style="margin:8px 0 4px">Armed — can trigger next session (${arm.length})</h4>
+    ${arm.length ? `<div class="tscroll" style="max-height:none"><table class="mini r1t"><thead><tr><th class="l">Ticker</th><th>RS</th><th class="l">Group</th><th class="l">Armed</th><th title="Lowest low since arming">Washout low</th><th>Close</th><th>Daily 50 SMA</th><th title="1.0 ADR in dollars: the stop (session low) can't be further than this under the entry">Max stop</th><th>ADR</th><th title="Sessions to earnings — needs 6+">Earn.</th><th class="l">Campaign since</th></tr></thead><tbody>${arm.map(armRow).join("")}</tbody></table></div>` : `<div class="empty" style="padding:4px 0"><b>None armed</b> today.</div>`}
+    <h4 style="margin:12px 0 4px">Reset — watch (${rst.length})</h4>
+    ${rst.length ? `<div class="tscroll" style="max-height:340px"><table class="mini r1t"><thead><tr><th class="l">Ticker</th><th>RS</th><th class="l">Group</th><th>Close</th><th>21 EMA</th><th>50 SMA</th><th title="The pivot low a U&R would undercut (3–40 sessions old)">Pivot low</th><th>ADR</th><th class="l">Campaign since</th></tr></thead><tbody>${rst.map(rstRow).join("")}</tbody></table></div>` : `<div class="empty" style="padding:4px 0">No campaign live.</div>`}
+    <div class="small" style="margin-top:8px">${ex.length ? `<b>Expired</b> (armed, no trigger in 3 sessions): ${ex.map(tkc).join(" ")}. ` : ""}${p1.length ? `<b>Handed to Playbook 1 today</b>: ${p1.map(tkc).join(" ")} — use Entry Check. ` : ""}${n1} former leader${n1 === 1 ? "" : "s"} with no campaign.${hid ? ` ${hid} R1 name${hid === 1 ? "" : "s"} hidden by the filter bar.` : ""}</div>
+    <details class="tp-fold"><summary>Shakeout Reclaim rules on the board (port of the indicator's daily layer, code R1)</summary><div class="small" style="padding:4px 0">Former leader: close over $10, $100M a day (20-day), ADR ≥ 4% (20-day mean of high ÷ low − 1), close over the 200 SMA, 50 SMA over the 200, within 15% of the 52-week high at some point in the last 60 sessions. Reset (starts a campaign, outside Playbook 1 territory): 20-day high − low ≥ 1.5 ADR and the low touched the daily 21 EMA or 50 SMA. Armed: undercut of a pivot low (2 bars each side, 3–40 sessions old) with a close back above it, or a capitulation day (new 10-day low, range ≥ 1.5× its 20-day average, volume ≥ 1.5× its 50-day average, close in the top 35%). Armed lasts 3 sessions. The campaign ends on a close under the 200 SMA, a new 20-day high, or a hand-over to Playbook 1 (${terr === "notion" ? "a close over a rising daily 21 EMA" : "a close over the 9, 21 and 50 EMA"}). The 30-min trigger, the attempt count and live signals are TradingView's (R1 indicator). Notion: R1 — Leader Washout Reversal (experimental live, amended 19 Oct).</div></details></div>`;
+}
+
+/* ---------------- Setups: the Oversold card ---------------- */
+function obCtxHTML(R){
+  const one = o => { const x = o.x; if (!x || !fin(x.D)) return `<span>${o.t} —</span>`; const dd = x.dropA;
+    return `<span title="Drop from its 8-session high (${esc(x.hDate || "")}) to the lowest low since, in its ADR before the drop">${o.t} <b class="${x.sudden ? "neg" : ""}">${fin(dd) ? dd.toFixed(1) : "—"} ADR</b> off the high${x.sudden ? " · sudden drop" : ""}</span>`; };
+  const t = R.t2108 ? `<span title="Share of stocks above their 40-day average (Market monitor)">T2108 <b class="${R.t2108.v < 20 ? "pos" : ""}">${R.t2108.v.toFixed(0)}%</b>${R.t2108.v < 20 ? " · washed out" : ""}</span>` : `<span class="dim">T2108: open Market once to compute it</span>`;
+  return `<div class="obctx">${R.ctx.map(one).join("")}${t}</div>`;
+}
+function obMapO(){ const m = mapImp(); if (!m || !m.O || !m.O.length) return null; const p = curPlanDay(); return m.session && m.session !== p && m.session !== prevSess(p) ? null : m.O; }
+function obMapHTML(R){
+  const O = obMapO(); if (!O) return `<div class="small dim" style="margin:6px 0">MAP's Floor Bounce watch: none imported for this plan day (paste-block <code>O1 TICKER | level: … | test: … | why: … | kill: …</code>).</div>`;
+  return `<div class="small" style="margin:6px 0"><b>MAP's Floor Bounce watch</b> (paste block O lines): ${O.map(o => { const row = R.rows.find(q => q.sym === o.t), x = row && row.x;
+    const b = !x ? "no stored bars" : `board: ${OB_ST[x.st].n}${fin(x.L) ? ` at ${p2(x.L)}` : ""}${fin(o.level) && fin(x.L) && Math.abs(o.level - x.L) > (x.z || 0) ? ` (MAP's level ${p2(o.level)})` : ""}`;
+    return `<span class="tk" data-sym="${esc(o.t)}">O${o.k} ${esc(o.t)}</span>${fin(o.level) ? ` · level ${p2(o.level)}` : ""}${o.test ? ` · ${esc(o.test)} test` : ""}${o.why ? ` · ${esc(o.why)}` : ""}${o.kill ? ` · kill: ${esc(o.kill)}` : ""}${o.vehicle ? ` · vehicle ${esc(o.vehicle)}` : ""} <span class="dim">(${esc(b)})</span>`; }).join("<br>")}</div>`;
+}
+function obRowHTML(o, etf){
+  const x = o.x, st = OB_ST[x.st], er = !etf && o.r ? r1Earn(o.r, x) : {n: null}, erW = er.n != null && er.n <= 5;
+  return `<tr data-sym="${esc(o.sym)}"><td class="l sym">${esc(o.sym)}</td>${etf ? `<td class="l small">${esc(o.g || "")}</td>` : `<td>${o.r ? rsBadge(o.r.rs) : "—"}</td><td class="l small">${esc((o.r && o.r.group) || "")}</td>`}
+    <td class="l"><span class="pill ${st.c}">${st.n}</span></td><td title="${esc(x.lvl ? x.lvl.src.map(s => `${s.s} ${s.d} ${p2(s.p)}`).join(" · ") : "")}"><b>${p2(x.L)}</b><br><span class="dim small">${x.lvl ? esc(obSrc(x.lvl)) : ""}</span></td>
+    <td class="small">${p2(x.L - x.z)} – ${p2(x.L + x.z)}</td><td>${p2(x.close)}</td><td>${fin(x.dA) ? sg(x.dA, 2) : "—"}</td>
+    <td title="From the ${esc(x.hDate)} high to the lowest low since, in the ADR before the drop">${fin(x.dropA) ? x.dropA.toFixed(1) : "—"} <span class="dim">· ${x.days}d</span></td><td>${x.tests ?? 0}</td><td class="small">${obVol(x)}</td>
+    ${etf ? `<td class="l small">${esc(o.sym)}${o.lev && o.lev.length ? ` · or ${esc(o.lev.join(" / "))} (leveraged)` : ""}</td>` : `<td class="${erW ? "neg" : ""}" title="${erW ? "Earnings inside 5 sessions: day trade only, no runner over the report" : "sessions to earnings"}">${er.n == null ? "?" : er.n}${erW ? " — day trade only" : ""}</td>`}
+    <td class="l small">stop = day low at the trigger (≤ 0.6 ADR = $${p2(OBC.lod * x.D)}) · dead on a close under ${p2(x.L - x.z)}${x.lost.length ? ` · lost: ${x.lost.slice(0, 2).map(q => p2(q.p)).join(", ")}` : ""}${x.next ? ` · next ${p2(x.next.p)}` : ""}</td></tr>`;
+}
+function obCardHTML(){
+  const hd = sub => `<div class="hd"><h2>Playbook 3 · Floor Bounce</h2><span class="sub">${sub}</span></div>`;
+  if (!pbHH()) return hd("paper / watch only · never sized") + `<div class="bd"><div class="empty">The oversold read uses the stored daily bars. <button class="btn sm" data-hist="full">Load price history</button></div></div>`;
+  const R = obRun(); if (!R) return hd("") + `<div class="bd"><div class="empty">Load your files first.</div></div>`;
+  const st = R.rows.filter(o => !o.etf), et = R.rows.filter(o => o.etf);
+  const visS = st.filter(o => !o.r || gOK(o.r)), cand = visS.filter(o => OB_CAND.has(o.x.st)).sort(obRank), watch = visS.filter(o => OB_WATCH.has(o.x.st)).sort(obRank);
+  const hid = st.filter(o => OB_CAND.has(o.x.st)).length - cand.length;
+  const eC = et.filter(o => OB_CAND.has(o.x.st) || OB_WATCH.has(o.x.st)).sort(obRank);
+  const head = etf => `<thead><tr><th class="l">${etf ? "Fund" : "Ticker"}</th>${etf ? `<th class="l">Group</th>` : `<th>RS</th><th class="l">Group</th>`}<th class="l">Status</th><th title="The level the drop came into (set before the drop) — hover for its sources">Level</th><th>Zone (± 0.25 ADR)</th><th>Close</th><th title="(close − level) ÷ ADR before the drop">vs level</th><th title="ADR from the 8-session high · sessions since">Drop</th><th title="Touches of the zone since the high">Tests</th><th>Test-day volume</th>${etf ? `<th class="l">Vehicle</th>` : `<th>Earn.</th>`}<th class="l">Plan words (paper)</th></tr></thead>`;
+  const nDrop = st.filter(o => o.x.sudden).length;
+  return hd(`paper / watch only · never sized · proposal (Monis) · daily close ${esc(R.to || "—")}`) + `<div class="bd">
+    ${obCtxHTML(R)}
+    <div class="small" style="margin:6px 0">A <b>sudden drop</b> (3+ ADR in at most 7 sessions, no more than one up close) into a daily level set before the drop (a swing high that turned support, an intact swing low, or the edge of an open gap). Best: the <b>first test</b>, or an <b>undercut &amp; reclaim</b>. The second test fails more often. Trigger on the 30-min (Floor Bounce indicator) from 10:00 ET: in or under the zone, a close back over the level and the prior bar's high, entry ≤ 0.6 ADR over the day low (= the stop). One attempt per level.</div>
+    ${obMapHTML(R)}
+    <h4 style="margin:8px 0 4px">Candidates (${cand.length})</h4>
+    ${cand.length ? `<div class="tscroll" style="max-height:none"><table class="mini obt">${head(false)}<tbody>${cand.map(o => obRowHTML(o, false)).join("")}</tbody></table></div>` : `<div class="empty" style="padding:4px 0"><b>None</b> — no stock in the file is at, under or within 1 ADR above a level after a sudden drop (${nDrop} had a sudden drop).</div>`}
+    ${watch.length ? `<div class="small" style="margin-top:6px"><b>Watch only</b> (second test, or tested already): ${watch.map(o => `<span class="tk" data-sym="${esc(o.sym)}">${esc(o.sym)}</span> <span class="dim">${p2(o.x.L)}</span>`).join(" · ")}</div>` : ""}
+    <h4 style="margin:12px 0 4px">Sector ETFs on the ETF map (${eC.length})</h4>
+    ${eC.length ? `<div class="tscroll" style="max-height:none"><table class="mini obt">${head(true)}<tbody>${eC.map(o => obRowHTML(o, true)).join("")}</tbody></table></div>` : `<div class="empty" style="padding:4px 0">No map fund is oversold at a level today.</div>`}
+    <div class="small dim" style="margin-top:6px">${nDrop} stock${nDrop === 1 ? "" : "s"} had a sudden drop.${hid ? ` ${hid} candidate${hid === 1 ? "" : "s"} hidden by the filter bar.` : ""} The board can't see order flow (Monis confirms the level on Bookmap): the test-day volume is the stand-in — a surge into the level is the warning.</div>
+    <details class="tp-fold"><summary>Floor Bounce rules on the board (docs/playbooks-2-3-spec-2026-10-27.md, section B)</summary><div class="small" style="padding:4px 0">Liquidity: stocks cap ≥ $1B, $100M a day (20-day), over $10; ETFs $20M a day, $10+. The high = the highest high of the last 8 sessions; ADR = the 20-day mean of (high − low) ÷ close up to that high, in dollars at that close. Sudden drop: ≥ 3 ADR from the high to the lowest low since, at most one up close since. Levels (set 5+ sessions before the high, last 252 sessions): swing highs (5 bars each side) that a later close went over, swing lows no close went under, the bottom edge of a gap up no low has filled; levels within 0.25 ADR merge (the top one is the level). Walking down from the high, a level closed under by more than 0.25 ADR is lost; the first one left is the level. A test = touching the zone (low ≤ level + 0.25 ADR) after not touching. Status: undercut &amp; reclaim (first test, low under the level, close at or over it) · first test · second test (watch only) · bounced (touched earlier, now 1+ ADR above) · tested · approaching (≤ 1 ADR above, not touched) · too far. Paper / watch only; Notion: OB — Oversold Bounce at a Level — DRAFT (27 Oct).</div></details></div>`;
+}
+
+/* ---------------- Setups page: which playbook leads ---------------- */
+function pbPlanPaint(){
+  const tab = $("tab-plan"); if (!tab) return;
+  const k = pbCur();
+  let seg = $("pbTop"); if (!seg) { const lede = $("planLede"); (lede || tab.firstElementChild).insertAdjacentHTML(lede ? "afterend" : "beforebegin", `<div class="pbtop" id="pbTop"></div>`); seg = $("pbTop"); }
+  seg.innerHTML = `<span class="lbl">Playbook</span>${pbSegHTML("pbSeg")}<span class="small dim">${esc(PB_D[k])}</span>`;
+  tab.classList.toggle("pbOn", k !== 1);
+  let box = $("pbBox"); if (!box) { seg.insertAdjacentHTML("afterend", `<div class="card g1" id="pbBox"></div>`); box = $("pbBox"); }
+  box.classList.toggle("hidden", k === 1);
+  if (k === 1) { box.innerHTML = ""; box.removeAttribute("data-pb"); return; }
+  box.dataset.pb = k;
+  try { box.innerHTML = k === 2 ? r1CardHTML() : obCardHTML(); } catch (e) { console.warn("playbook card", e); box.innerHTML = `<div class="bd"><div class="empty">Couldn't build this card: ${esc(e.message)}</div></div>`; }
+  const lede = $("planLede"); if (lede) lede.innerHTML = k === 2 ? `<b>Playbook 2 · Shakeout Reclaim (R1)</b> — former leaders flushed under their daily 21 EMA that reclaim. Read from the stored daily bars; the trigger is the Shakeout Reclaim indicator's on the 30-min. Click a name for its Shakeout Reclaim tab, chart levels and Entry Check.`
+    : `<b>Playbook 3 · Floor Bounce</b> — fast drops onto a daily price floor (Monis). Paper / watch only. Click a name for its Floor Bounce tab and the level on the chart.`;
+}
+const _renderTabPB = renderTab;
+renderTab = function(t){
+  _renderTabPB(t);
+  if (t !== "plan" || !S.snap) return;
+  try { pbPlanPaint(); if (WS && typeof buildSecs === "function") buildSecs("plan"); } catch (e) { console.warn("playbooks", e); }
+};
+const _renderAllPB = renderAll;
+renderAll = function(){ _renderAllPB(); try { pbChipPaint(); } catch (e) { console.warn("playbook chip", e); } };
+document.addEventListener("change", e => { const s = e.target.closest("[data-r1terr]"); if (!s) return; store.set("adrb.r1Terr", s.value === "old" ? "old" : "notion"); R1X.key = ""; renderAll(); });
+document.addEventListener("click", e => {
+  const t = e.target.closest("#pbBox tr[data-sym], #pbBox .tk[data-sym], #pbWatch tr[data-sym], #pbWatch .tk[data-sym]");
+  if (t && !e.target.closest("button, a, summary, select, input, [data-wlpin]")) { e.stopPropagation(); const s = t.dataset.sym; if (S.rowBySym && S.rowBySym.has(s)) openDrawer(s); else if (typeof invPanel === "function") openDrawer(s); }
+}, true);
+
+/* ---------------- ticker panel: R1 and Oversold beside Entry Check ---------------- */
+function pbStrip(items){ return `<div class="pbstrip">${items.map(([ok, l, tip]) => `<span class="${ok === true ? "pos" : ok === false ? "neg" : "dim"}" title="${esc(tip || "")}">${ok === true ? "✓" : ok === false ? "✕" : "·"} ${esc(l)}</span>`).join(" ")}</div>`; }
+function r1PaneHTML(r){
+  if (r.etf) return `<div class="pbp"><div class="small">R1 is a stock playbook (former leaders).</div></div>`;
+  const x = r1Of(r); if (!x) return `<div class="pbp"><div class="small">${pbHH() ? "Not enough stored bars for R1." : "R1 needs the price history (Data check → Load price history)."}</div></div>`;
+  const c = r1CallR(r, x), er = r1Earn(r, x), erOk = er.n == null ? null : er.n >= S61.erMin, stopLim = R1C.maxStop * x.adrD;
+  return `<div class="pbp"><div class="pbh"><b>Shakeout Reclaim · ${esc(r.sym)}</b> <span class="small dim">Playbook 2 · code R1 · experimental live · 0.10% NLV</span><span class="spacer"></span><span class="pill ${c.c}">${esc(c.t)}</span></div>
+    <div class="pbsay"><b>${esc(c.s[0].toUpperCase() + c.s.slice(1))}.</b></div>
+    ${pbStrip([[x.gate, "Former leader", x.gate ? "passes the gate" : r1GateWhy(x)], [x.state >= 2 && x.state <= 4, "Reset", "campaign live (1.5 ADR reset into the daily 21 EMA / 50 SMA)"], [x.state === 3, x.state === 3 ? `Armed ${x.armType === 1 ? "U&R" : "CAP"} · ${x.daysLeft} left` : "Armed", "U&R of a pivot low or a capitulation day, last 3 sessions"],
+      [!x.inP1, x.inP1 ? "In P1 territory" : "R1 territory", x.terr === "notion" ? "R1 = close under the daily 21 EMA or the 21 EMA not rising (Notion 19 Oct)" : "R1 = close under the daily 9 or 21 EMA (old Spec 6.0 test)"], [x.close > x.s50, "50 SMA", `the trigger needs price above the daily 50 SMA ${p2(x.s50)}`], [erOk, er.n == null ? "Earn ?" : `Earn ${er.n} sess`, "no new entry with earnings inside 5 sessions"]])}
+    <div class="small" style="margin-top:6px">${x.state === 3 || x.state === 4 ? `Washout low <b>${p2(x.wash)}</b> · ` : ""}Close ${p2(x.close)} · daily 21 EMA ${p2(x.e21)}${x.e21Up ? " (rising)" : " (not rising)"} · 50 SMA ${p2(x.s50)} · 200 SMA ${p2(x.s200)} · ADR ${fin(x.adr) ? x.adr.toFixed(1) + "%" : "—"}${fin(x.pvRef) ? ` · pivot low ${p2(x.pvRef)}` : ""}${x.campDate ? ` · campaign since ${esc(x.campDate)}` : ""}</div>
+    <div class="small" style="margin-top:6px">Trigger (TradingView, Shakeout Reclaim indicator, 30-min): from 10:00 ET, today's low already in and this bar a higher low; the bar closes over the prior bar's high, the 30-min 9 EMA and VWAP; price over the daily 50 SMA. Entry at the next bar's open. Stop = the session low, at most 1.0 ADR${fin(stopLim) ? ` ($${stopLim.toFixed(2)})` : ""} under the entry — wider = no trade. 0.10% NLV · max 3 attempts per campaign (Trade Log).</div></div>`;
+}
+function obPaneHTML(r){
+  const x = obOf(r); if (!x) return `<div class="pbp"><div class="small">${pbHH() ? "Not enough stored bars." : "The oversold read needs the price history (Data check → Load price history)."}</div></div>`;
+  const st = OB_ST[x.st], ok = OB_CAND.has(x.st), lv = x.levels || [];
+  const lvRows = lv.slice(0, 8).map(q => `<tr class="${x.lvl === q ? "on" : x.lost.includes(q) ? "dim" : ""}"><td>${p2(q.p)}</td><td class="l small">${esc(obSrc(q))}</td><td class="l small">${x.lvl === q ? "the level" : x.lost.includes(q) ? "lost (closed under)" : "lower"}</td><td class="small">${esc(q.src.map(s => s.d).join(", "))}</td></tr>`).join("");
+  return `<div class="pbp"><div class="pbh"><b>Floor Bounce · ${esc(r.sym)}</b> <span class="small dim">Playbook 3 · paper / watch only</span><span class="spacer"></span><span class="pill ${st.c}">${esc(st.n)}</span></div>
+    <div class="pbsay"><b>${x.why ? esc(st.n + " — " + x.why) : ok ? `${esc(st.n)} at ${p2(x.L)} (zone ${p2(x.L - x.z)} – ${p2(x.L + x.z)}).` : esc(st.n) + (fin(x.L) ? ` — level ${p2(x.L)}` : "")}</b></div>
+    ${pbStrip([[x.liq, "Stock", x.etf ? "ETF floor: $20M a day, $10+" : "cap ≥ $1B, $100M a day, over $10"], [!!x.sudden, fin(x.dropA) ? `Drop ${x.dropA.toFixed(1)} ADR · ${x.days}d` : "Drop", "≥ 3 ADR from the 8-session high in ≤ 7 sessions, ≤ 1 up close"], [!!x.lvl, x.lvl ? "Level " + p2(x.L) : "Level", "a daily level set before the drop"],
+      [x.tests == null ? null : x.tests <= 1, x.tests ? `Test ${x.tests}` : "Not tested", "first test best; the second test fails more often"], [fin(x.dA) ? x.dA <= OBC.near : null, fin(x.dA) ? `${sg(x.dA, 2)} ADR` : "Zone", "within 1 ADR above the level, or in the zone"], [fin(x.rv) ? x.rv < OBC.rvHi : null, fin(x.rv) ? `Vol ${x.rv.toFixed(1)}×` : "Vol", "a volume surge into the level warns of a breakdown"]])}
+    <div class="small" style="margin-top:6px">High ${p2(x.H)} on ${esc(x.hDate || "—")} · lowest since ${p2(x.lmin)} · ${x.ups ?? 0} up close${x.ups === 1 ? "" : "s"} · ADR before the drop ${fin(x.adrPct) ? x.adrPct.toFixed(2) + "%" : "—"} ($${p2(x.D)})</div>
+    ${lvRows ? `<table class="mini obl" style="margin-top:6px"><thead><tr><th>Level</th><th class="l">Made of</th><th class="l"></th><th>Set on</th></tr></thead><tbody>${lvRows}</tbody></table>` : ""}
+    <div class="small" style="margin-top:6px">Trigger (TradingView, Floor Bounce indicator, 30-min): from 10:00 ET, today's low in or under the zone, a bar closes back at or over the level and over the prior bar's high; entry ≤ 0.6 ADR over the day low; stop = the day low. One attempt per level. Dead on a daily close under ${fin(x.L) ? p2(x.L - x.z) : "the zone"}, or a gap up more than 1 ADR over the level. Paper / watch only — never sized.</div></div>`;
+}
+if (WS) {
+  const _tpBuildPB = tpBuild;
+  tpBuild = function(r){
+    const want = WSI.tpTab;
+    _tpBuildPB(r);
+    const dr = $("drawer"); if (!dr.classList.contains("open")) return;
+    const tabs = dr.querySelector(".tp-tabs"), plan = dr.querySelector('.tp-tabs button[data-tpt="plan"]'), right = dr.querySelector(".tp-right"); if (!tabs || !right) return;
+    const add = (k, label, html, afterK) => { const b = document.createElement("button"); b.dataset.tpt = k; b.textContent = label;
+      const ref = dr.querySelector(`.tp-tabs button[data-tpt="${afterK}"]`) || plan; if (ref) ref.after(b); else tabs.appendChild(b);
+      const d = document.createElement("div"); d.className = "tp-pane"; d.dataset.p = k; d.innerHTML = html; right.appendChild(d); };
+    if (!r.etf) add("r1", "Shakeout", r1PaneHTML(r), "plan");
+    add("ob", "Floor Bounce", obPaneHTML(r), "r1");
+    const on = (want === "r1" && !r.etf) || want === "ob" ? want : (want === "r1" ? "ob" : null);
+    if (on) { WSI.tpTab = on; dr.querySelectorAll("[data-tpt]").forEach(x => x.classList.toggle("on", x.dataset.tpt === on)); dr.querySelectorAll(".tp-pane").forEach(p => p.classList.toggle("on", p.dataset.p === on)); }
+  };
+} else {
+  const _openDrawerPB = openDrawer;
+  openDrawer = function(sym){
+    _openDrawerPB(sym);
+    const r = S.rowBySym && S.rowBySym.get(sym), dr = $("drawer"); if (!r || !dr.classList.contains("open")) return;
+    const at = dr.querySelector(".dpn") || dr.querySelector(".s61p"); const html = (r.etf ? "" : r1PaneHTML(r)) + obPaneHTML(r);
+    if (at) at.insertAdjacentHTML("afterend", `<div class="pbcls">${html}</div>`); else dr.insertAdjacentHTML("beforeend", `<div class="pbcls">${html}</div>`);
+  };
+}
+
+/* ---------------- board chart: the chosen playbook's levels ---------------- */
+BCL_CODE.push([/^R1 washout low/, "wash", "WASH"], [/^R1 U&R pivot/, "rpiv", "PIV"], [/^R1 stop limit/, "r1s", "1 ADR"], [/^OB level/, "obl", "LVL"], [/^OB zone top/, "obzh", "ZN hi"], [/^OB zone bottom/, "obzl", "ZN lo"], [/^OB lost level/, "obx", "LOST"], [/^OB next level/, "obn", "NEXT"]);
+const PB_L61 = /^(buy zone lo|buy zone hi|planned entry|1st resistance|LOD stop|max entry)/;
+const _bcModelPB = bcModel;
+bcModel = async function(r, iv){
+  const M = await _bcModelPB(r, iv), k = pbCur();
+  if (!M || M.err || k === 1 || !bcShow().l61 || r._inv) return M;
+  M.lines = M.lines.filter(l => !PB_L61.test(l.title));
+  const L = (price, color, title, style = 2) => { if (fin(price)) M.lines.push({price, color, title, lineStyle: style}); };
+  if (k === 2 && !r.etf) { const x = r1Of(r);
+    if (x) { if (x.state === 3 || x.state === 4) L(x.wash, BC_STYLE.zone, "R1 washout low", 0); if (fin(x.pvRef)) L(x.pvRef, BC_STYLE.res, "R1 U&R pivot low", 2);
+      if (fin(x.adrD) && (x.state === 3)) L(x.close - R1C.maxStop * x.adrD, BC_STYLE.stop, "R1 stop limit (1 ADR under the close)", 1); M.pb = {k, state: x.state}; } }
+  if (k === 3) { const x = obOf(r);
+    if (x && fin(x.L)) { L(x.L, BC_STYLE.entry, "OB level", 0); L(x.L + x.z, BC_STYLE.zone, "OB zone top", 1); L(x.L - x.z, BC_STYLE.zone, "OB zone bottom", 1); if (x.next) L(x.next.p, BC_STYLE.s200, "OB next level", 2); }
+    if (x && x.lost) for (const q of x.lost.slice(-2)) L(q.p, BC_STYLE.stop, "OB lost level", 2);
+    if (x) M.pb = {k, st: x.st, iH: x.hDate}; }
+  try { M.lab = bcLabels(M.lines); M.band = bcBand(M); } catch (e) { console.warn("playbook chart labels", e); }
+  return M;
+};
+// shade the OB zone from the high to today (daily)
+const _bcBandPB = bcBand;
+bcBand = function(M){
+  const b = _bcBandPB(M); if (b || !M || !M.pb || M.pb.k !== 3) return b;
+  const hi = M.lines.find(l => l.title === "OB zone top"), lo = M.lines.find(l => l.title === "OB zone bottom"), n = M.bars.length; if (!hi || !lo || !n) return null;
+  const a = new Array(n).fill(null), from = M.iv === "D" && M.pb.iH ? M.bars.findIndex(x => x.time >= M.pb.iH) : n - 1;
+  for (let k = Math.max(0, from < 0 ? n - 1 : from); k < n; k++) a[k] = [lo.price, hi.price];
+  return {z: {lo: lo.price, hi: hi.price}, a};
+};
+
+/* ---------------- Today + Watchlist ---------------- */
+const _envHTMLPB = envHTML;
+envHTML = function(){
+  const h = _envHTMLPB(); if (!S.snap || !pbHH()) return h;
+  let line = ""; try { const R = r1Rows() || [], a = R.filter(o => o.x.state === 3).map(o => o.r.sym), O = obRun(), c = O ? O.rows.filter(o => OB_CAND.has(o.x.st) && !o.etf).sort(obRank).map(o => o.sym) : [];
+    line = `<div class="small pbline" style="margin-top:6px"><b>Other playbooks:</b> Shakeout Reclaim ${a.length} armed${a.length ? ` (${a.slice(0, 6).map(s => `<span class="tk" data-sym="${esc(s)}">${esc(s)}</span>`).join(" ")})` : ""} · Floor Bounce ${c.length} at or near a floor${c.length ? ` (${c.slice(0, 6).map(s => `<span class="tk" data-sym="${esc(s)}">${esc(s)}</span>`).join(" ")})` : ""} — <a href="#" data-pbgo="2">open Shakeout Reclaim</a> · <a href="#" data-pbgo="3">open Floor Bounce</a></div>`; } catch (e) { console.warn("playbooks today", e); }
+  const i = h.lastIndexOf("</div>"); return i < 0 ? h + line : h.slice(0, i) + line + h.slice(i);
+};
+document.addEventListener("click", e => { const a = e.target.closest("[data-pbgo]"); if (!a) return; e.preventDefault(); pbSet(a.dataset.pbgo); goTab("plan"); });
+document.addEventListener("click", e => { const t = e.target.closest(".pbline .tk[data-sym]"); if (t) { e.stopPropagation(); openDrawer(t.dataset.sym); } }, true);
+function pbWatchHTML(){
+  const hd = `<div class="hd"><h2>Playbooks 2 · 3 — Shakeout Reclaim armed and Floor Bounce watch</h2><span class="sub">Shakeout Reclaim = experimental live · Floor Bounce = paper / watch only · never on the Entry Check lists</span></div>`;
+  if (!pbHH()) return hd + `<div class="bd"><div class="empty">Needs the stored price history.</div></div>`;
+  const R = r1Rows() || [], a = R.filter(o => o.x.state === 3).sort((p, q) => q.x.daysLeft - p.x.daysLeft || (q.r.rs ?? -1) - (p.r.rs ?? -1)), O = obRun();
+  const c = O ? O.rows.filter(o => OB_CAND.has(o.x.st)).sort(obRank).slice(0, 5) : [];
+  return hd + `<div class="bd">${O ? obMapHTML(O) : ""}
+    <div class="small" style="margin:4px 0"><b>Shakeout Reclaim armed</b> (${a.length}): ${a.length ? a.map(o => `<span class="tk" data-sym="${esc(o.r.sym)}">${esc(o.r.sym)}</span> <span class="dim">${o.x.armType === 1 ? "U&R" : "CAP"} · ${o.x.daysLeft} left${o.x.close > o.x.s50 ? "" : " · needs 50 SMA"}</span>`).join(" · ") : "none"}</div>
+    <div class="small" style="margin:4px 0"><b>Floor Bounce — board's top 5</b>: ${c.length ? c.map(o => `<span class="tk" data-sym="${esc(o.sym)}">${esc(o.sym)}</span> <span class="dim">${OB_ST[o.x.st].n} · ${p2(o.x.L)}</span>`).join(" · ") : "none"}</div>
+    <div class="small"><a href="#" data-pbgo="2">Playbook 2 · Shakeout Reclaim</a> · <a href="#" data-pbgo="3">Playbook 3 · Floor Bounce</a></div></div>`;
+}
+const _renderWatchPB = renderWatch;
+renderWatch = function(){
+  _renderWatchPB(); if (!S.snap) return;
+  const box = $("watchBody"); if (!box) return;
+  let c = $("pbWatch"); if (!c) { box.insertAdjacentHTML("beforeend", `<div class="card g1" id="pbWatch"></div>`); c = $("pbWatch"); }
+  const es = $("esBox"); if (es && es.nextElementSibling !== c) es.after(c);
+  try { c.innerHTML = pbWatchHTML(); } catch (e) { console.warn("playbooks watch", e); c.innerHTML = ""; }
+};
+
+/* ---------------- MAP import: O lines (the oversold watch) ---------------- */
+const OB_OLINE = /^O\s*(\d+)[.):]?\s+([A-Za-z0-9.:\-]+)\s*(?:\|(.*))?$/i;
+const _mapParsePB = mapParse;
+mapParse = function(text){
+  const t = String(text || "").trim(), O = [], warn = [];
+  const add = (k, sym, f) => { sym = esSym(sym); if (!sym) return; if (O.some(o => o.t === sym)) { warn.push(`${sym} is on two O lines — kept the first`); return; }
+    const lv = parseFloat(String(f.level ?? "").replace(/[$,]/g, "")); O.push({k: k || O.length + 1, t: sym, level: fin(lv) ? lv : null, test: String(f.test || "").trim(), why: String(f.why || "").trim(), kill: String(f.kill || "").trim(), vehicle: String(f.vehicle || "").trim()}); };
+  let rest = t;
+  if (t[0] === "{") { try { const j = JSON.parse(t); (j.O || []).forEach((x, i) => typeof x === "string" ? add(i + 1, x, {}) : add(x.k || i + 1, x.t || x.ticker, x)); } catch (e) {} }
+  else {
+    const keep = [];
+    for (const raw of t.split(/\r?\n/)) { const m = raw.trim().match(OB_OLINE); if (!m) { keep.push(raw); continue; }
+      const f = {}; (m[3] || "").split("|").forEach(kv => { const x = kv.match(/^\s*([a-z ]+?)\s*:\s*(.*)$/i); if (!x) return; const key = {level: "level", lvl: "level", test: "test", why: "why", note: "why", kill: "kill", invalid: "kill", vehicle: "vehicle"}[x[1].toLowerCase().trim()]; if (key) f[key] = x[2].trim(); });
+      add(+m[1], m[2], f); }
+    rest = keep.join("\n");
+  }
+  const P = _mapParsePB(rest);
+  P.O = O; P.warn.push(...warn);
+  if (O.length) P.errs = P.errs.filter(x => !/^No ticker lines|^Nothing pasted/.test(x));
+  return P;
+};
+const _mapApplyPB = mapApply;
+mapApply = function(P){
+  const ok = _mapApplyPB(P);
+  if (ok && P.O) { try { const m = mapImp(); if (m) { m.O = P.O; m.n = {...m.n, O: P.O.length}; store.set(MAPI_K, m); }
+    if (P.O.length) toast(`MAP Floor Bounce watch: ${P.O.length} O line${P.O.length > 1 ? "s" : ""} (${P.O.map(o => o.t).join(", ")})`);
+    if (S.ui.tab === "watch") renderWatch(); if (S.ui.tab === "plan") renderTab("plan"); } catch (e) { console.warn("MAP O lines", e); } }
+  return ok;
+};
+const _mapImpHTMLPB = mapImpHTML;
+mapImpHTML = function(){
+  const h = _mapImpHTMLPB(), m = mapImp(), n = m && m.O ? m.O.length : 0;
+  const note = `<div class="small dim" style="margin-top:4px">Floor Bounce watch (Playbook 3): <code>O1 SOXL | level: 81.5 | test: first | why: … | kill: …</code> — up to three O lines; they show on the Floor Bounce card and the Watchlist, never on the A / B lists.${n ? ` Last import: ${n} O line${n > 1 ? "s" : ""} (${m.O.map(o => esc(o.t)).join(", ")}).` : ""}</div>`;
+  const i = h.lastIndexOf("</div>"); return i < 0 ? h + note : h.slice(0, i) + note + h.slice(i);
+};
+
+/* ---------------- self-check: a separate short copy of both rule sets ---------------- */
+function pbSelf(){
+  const out = [], F = (ok, sym, what, board, mine) => out.push({ok, sym, what, board, mine});
+  const ema = (a, p) => { const al = 2 / (p + 1), o = []; let e = NaN, s = 0, q = 0; for (const x of a) { if (!isFinite(e)) { s += x; q++; e = q === p ? s / p : NaN; } else e = al * x + (1 - al) * e; o.push(e); } return o; };
+  const sma = (a, p) => a.map((_, k) => { if (k < p - 1) return NaN; let s = 0; for (let u = k - p + 1; u <= k; u++) s += a[u]; return s / p; });
+  const terr = r1Terr();
+  for (const r of S.stocks) {
+    const b = dssBars(r.sym); if (!b || b.n < 30) continue;
+    const c = [...b.c], h = [...b.h], l = [...b.l], v = [...b.v], n = c.length;
+    if (![c, h, l, v].every(a => a.every(isFinite))) continue;
+    // R1, bar by bar
+    const x = r1Of(r);
+    if (x) {
+      const E9 = ema(c, 9), E21 = ema(c, 21), E50 = ema(c, 50), S50 = sma(c, 50), S200 = sma(c, 200), AD = sma(h.map((x, k) => x / l[k]), 20), DV = sma(c.map((x, k) => x * v[k]), 20), RG = sma(h.map((x, k) => x - l[k]), 20), VA = sma(v, 50);
+      const hiN = (a, p, k) => k - p + 1 < 0 ? NaN : Math.max(...a.slice(k - p + 1, k + 1)), loN = (a, p, k) => k - p + 1 < 0 ? NaN : Math.min(...a.slice(k - p + 1, k + 1));
+      let camp = false, ai = -1, wl = NaN, p1 = [], st = 0, near = [], days = 0;
+      for (let k = 0; k < n; k++) {
+        const adr = 100 * (AD[k] - 1), aD = adr / 100 * c[k], h52 = hiN(h, 252, k); near.push(isFinite(h52) && c[k] >= 0.85 * h52);
+        const gate = c[k] > 10 && DV[k] >= 100e6 && adr >= 4 && c[k] > S200[k] && S50[k] > S200[k] && near.slice(Math.max(0, k - 59)).some(Boolean);
+        const ins = terr === "old" ? c[k] > E9[k] && c[k] > E21[k] : c[k] > E21[k] && k >= 5 && E21[k] > E21[k - 5];
+        const pro = terr === "old" ? c[k] > E9[k] && c[k] > E21[k] && c[k] > E50[k] : ins;
+        const rs = aD > 0 && (hiN(h, 20, k) - l[k]) / aD >= 1.5 && (l[k] <= E21[k] || l[k] <= S50[k]);
+        if (k >= 4 && [l[k - 3], l[k - 4], l[k - 1], l[k]].every(y => l[k - 2] < y)) p1 = [[l[k - 2], k - 2], ...p1].slice(0, 2);
+        const ref = (p1.find(([, i]) => k - i >= 3 && k - i <= 40) || [NaN])[0];
+        const uar = isFinite(ref) && l[k] < ref && c[k] > ref, rg = h[k] - l[k];
+        const cap = k > 0 && rg > 0 && l[k] < loN(l, 10, k - 1) && rg >= 1.5 * RG[k - 1] && v[k] >= 1.5 * VA[k - 1] && (c[k] - l[k]) / rg >= 0.65;
+        let pr = false;
+        if (!camp && gate && rs && !ins) { camp = true; ai = -1; wl = NaN; }
+        if (camp) { if (c[k] < S200[k] || (k > 0 && h[k] > hiN(h, 20, k - 1))) camp = false; else if (pro) { camp = false; pr = true; } }
+        if (!camp) { ai = -1; wl = NaN; }
+        if (camp && gate && !ins && (uar || cap)) { ai = k; wl = isFinite(wl) ? Math.min(wl, l[k]) : l[k]; } else if (camp && isFinite(wl)) wl = Math.min(wl, l[k]);
+        const live = camp && ai >= 0 && k - ai <= 2; st = pr ? 5 : live ? 3 : camp && ai >= 0 ? 4 : camp ? 2 : gate ? 1 : 0; days = live ? 3 - (k - ai) : 0;
+      }
+      F(st === x.state && days === x.daysLeft, r.sym, "Shakeout Reclaim (R1) state", `${R1_ST[x.state]}${x.state === 3 ? " · " + x.daysLeft : ""}`, `${R1_ST[st]}${st === 3 ? " · " + days : ""}`);
+    }
+    // OB status
+    const o = obOf(r);
+    if (o && o.st !== "err") {
+      const t = n - 1; let iH = t - 7 < 0 ? 0 : t - 7; for (let k = iH; k <= t; k++) if (h[k] >= h[iH]) iH = k;
+      let D = 0; for (let k = iH - 19; k <= iH; k++) D += (h[k] - l[k]) / c[k]; D = D / 20 * c[iH]; const z = 0.25 * D;
+      const dv = c.slice(t - 19).reduce((s, y, j) => s + y * v[t - 19 + j], 0) / 20;
+      const liq = r.mcap != null && r.mcap >= 1e9 && dv >= 100e6 && c[t] > 10;
+      const lm = iH < t ? Math.min(...l.slice(iH + 1)) : NaN, up = c.slice(iH + 1).filter((y, j) => y > c[iH + j]).length, sud = iH < t && (h[iH] - lm) / D >= 3 && up <= 1;
+      const lv = [];
+      for (let p = Math.max(5, t - 251); p <= iH - 5; p++) {
+        const win = [...Array(11).keys()].map(j => p - 5 + j).filter(u => u !== p);
+        if (win.every(u => h[p] >= h[u]) && c.slice(p + 1, iH + 1).some(y => y > h[p])) lv.push(h[p]);
+        if (win.every(u => l[p] <= l[u]) && !c.slice(p + 1, iH + 1).some(y => y < l[p])) lv.push(l[p]);
+      }
+      for (let k = Math.max(1, t - 251); k <= iH - 5; k++) if (l[k] > h[k - 1] && !l.slice(k + 1, iH + 1).some(y => y <= h[k - 1])) lv.push(h[k - 1]);
+      const tops = []; for (const p of lv.filter(p => p < h[iH]).sort((a, b) => b - a)) if (!tops.length || tops[tops.length - 1].top - p > z) tops.push({top: p});
+      const act = tops.find(q => c[t] >= q.top - z);
+      let s;
+      if (!liq) s = "liq"; else if (!sud) s = "nodrop"; else if (!act) s = "nolvl";
+      else { const L = act.top, tc = k => l[k] <= L + z; let tn = 0; for (let k = iH + 1; k <= t; k++) if (tc(k) && (k === iH + 1 || !tc(k - 1))) tn++;
+        s = tc(t) ? (tn === 1 ? (l[t] < L && c[t] >= L ? "ur" : "t1") : "t2") : tn >= 1 ? (c[t] - L > D ? "gone" : "tested") : (c[t] - L) / D <= 1 ? "ap" : "far"; }
+      F(s === o.st, r.sym, "Floor Bounce status", OB_ST[o.st].n, OB_ST[s] ? OB_ST[s].n : s);
+    }
+  }
+  return out;
+}
+const _selfCheckPB = selfCheck;
+selfCheck = function(){
+  const R = _selfCheckPB();
+  try { if (S.snap && pbHH()) for (const c of pbSelf()) { R.n++; if (!c.ok) R.fails.push({sym: c.sym, what: c.what, board: c.board, mine: c.mine}); } } catch (e) { console.warn("playbooks self-check", e); }
+  return R;
+};
+
+document.head.insertAdjacentHTML("beforeend", `<style>
+.pbseg button{white-space:nowrap}
+.pbchip{display:inline-flex;align-items:center;gap:6px;padding:2px 6px}
+.pbchip .lbl{font-size:11px;color:var(--ink-3)}
+.pbchip .seg button{font-size:11.5px;padding:2px 8px}
+.pbtop{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:2px 0 10px}
+.pbtop .lbl{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+.pbtop .seg button{font-size:13px;padding:4px 12px}
+#tab-plan.pbOn > :not(#planLede):not(#pbTop):not(#pbBox){display:none!important}
+#pbBox table td{vertical-align:top} #pbBox tr[data-sym],#pbBox .tk,#pbWatch .tk{cursor:pointer}
+.obctx{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2,transparent)}
+.gchip.pbg{background:transparent;border-style:dashed}
+.gchip.pbg.pb2{border-color:#ff9800}.gchip.pbg.pb3{border-color:#7e57c2}
+.pbp{border:1px solid var(--line);border-radius:10px;padding:6px 10px 8px;margin:2px 0 10px;background:var(--surface)}
+.pbp .pbh{display:flex;align-items:center;gap:8px;margin-bottom:4px} .pbp .pbsay{font-size:13px;margin:4px 0}
+.pbstrip{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;margin-top:6px}
+table.obl tr.on td{font-weight:600} table.obl tr.dim td{opacity:.55}
+.pbcls .pbp{margin-top:10px}
 </style>`);
 </script>
 
