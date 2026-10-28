@@ -8081,7 +8081,7 @@ const _loadNewF = loadNew;
 loadNew = async function(files){
   const arr = [...files], texts = await readFiles(arr), cmp = [], rest = [];
   arr.forEach((f, i) => (cmpType(texts[i].text) ? cmp : rest).push(i));
-  cmp.forEach(i => { if (S.snap && S.has.hist) dssCompare(texts[i].name, texts[i].text); else toast(`${texts[i].name} is a TradingView screener export — load your files and the price history first, then compare it on Data check`); });
+  cmp.forEach(i => { if (S.snap && S.has.hist) dssCompare(texts[i].name, texts[i].text, texts[i].mtime); else toast(`${texts[i].name} is a TradingView screener export — load your files and the price history first, then compare it on Data check`); });
   if (rest.length) return _loadNewF(rest.map(i => arr[i]));
 };
 
@@ -8089,7 +8089,7 @@ loadNew = async function(files){
 $("snapBtn").insertAdjacentHTML("afterend", `<button class="btn" id="feedBtn" title="Deep Space feed: one CSV with the Deep Space Screener columns, 6.0X, REACCEL, TAS, Power List and board context — for the daily MAP/BRIEF">Feed CSV</button>`);
 $("feedBtn").onclick = () => feedExport();
 document.body.insertAdjacentHTML("beforeend", `<input type="file" id="fileDss" accept=".csv,text/csv" multiple class="hidden">`);
-$("fileDss").onchange = async e => { const fs = [...e.target.files]; e.target.value = ""; for (const f of fs) { const t = await f.text(); if (!cmpType(t)) { toast(`${f.name} isn't a Deep Space Screener, TAS or REACCEL export`); continue; } dssCompare(f.name, t); } };
+$("fileDss").onchange = async e => { const fs = [...e.target.files]; e.target.value = ""; for (const f of fs) { const t = await f.text(); if (!cmpType(t)) { toast(`${f.name} isn't a Deep Space Screener, TAS or REACCEL export`); continue; } dssCompare(f.name, t, f.lastModified || null); } };
 function cmpHTML(R, any){
   const colRows = R.cols.filter(c => c.n).map(c => `<tr><td class="l">${esc(c.h)}</td><td>${c.n}</td><td class="${c.same / c.n >= 0.95 ? "pos" : c.same / c.n >= 0.8 ? "" : "neg"}"><b>${dssPct(c.same, c.n)}</b></td><td class="l small">${c.diffs.slice(0, 4).map(([s, a, b]) => `${esc(s)} ${a == null ? "—" : +(+a).toFixed(2)} vs ${b == null ? "—" : +b.toFixed(2)}`).join(" · ")}</td></tr>`).join("");
   const conf = Object.entries(R.conf).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k.replace("→", " → ")}: ${v}`).join(" · ");
@@ -9185,11 +9185,11 @@ function msrcFromExport(name, text){
   return true;
 }
 const _dssCompareB = dssCompare;
-dssCompare = function(name, text){ try { msrcFromExport(name, text); } catch (e) { console.warn("map source", e); } return _dssCompareB(name, text); };
+dssCompare = function(name, text, mtime){ try { msrcFromExport(name, text, mtime); } catch (e) { console.warn("map source", e); } return _dssCompareB(name, text, mtime); };
 const _loadNewB = loadNew;
 loadNew = async function(files){
   const arr = [...files];
-  if (!(S.snap && S.has.hist)) { try { const texts = await readFiles(arr); texts.forEach(t => msrcFromExport(t.name, t.text)); } catch (e) {} }
+  if (!(S.snap && S.has.hist)) { try { const texts = await readFiles(arr); texts.forEach(t => msrcFromExport(t.name, t.text, t.mtime)); } catch (e) {} }
   return _loadNewB(arr);
 };
 const _snapshotObjB = snapshotObj;
@@ -13526,6 +13526,70 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 .sychip:hover{color:var(--ink)} .sychip.bad{color:var(--crit)}
 #sySet .sydet{margin:2px 0 10px} #sySet .sydet summary{cursor:pointer;font-size:12.5px;color:var(--ink-2)} #sySet ol{margin:6px 0 8px 18px;padding:0;line-height:1.5}
 </style>`);
+</script>
+
+<script>
+"use strict";
+/* =====================================================================
+   MAP SOURCE DATES = THE NEW YORK SESSION (27 Oct, Eugene: "under watchlist, map source universe, the text file doesnt change
+   despite me updating the screener export to 27 oct … the csv had outdated data from 24th oct"). Display / tracking only: no
+   zone / stop / target / state / RS / list maths change; feed column names unchanged.
+   - Bug: a screener export was filed under the date in its name (your Singapore date), while the board's own file is read as
+     the New York session it holds (23 Oct ruling, tzSessDate: "my files are saved basis singapore time"). An export named
+     27 Oct and saved Tue 13:58 Singapore holds Monday 26's close but was filed as 27 Oct, i.e. "after" the board's 26 Oct
+     file, so msrcCur skipped it and the card and the feed (In MAP Source, MAP Source Date) kept the 24 Oct list.
+   - Now an export goes through the same reading as the stock file: when its name carries the local date it was saved on,
+     it is filed under the New York session that had opened at that moment. A name with another date keeps that date; a
+     pasted list keeps the date picked on the card.
+   - Lists recorded before this fix are re-filed once on load (the upload time stands in for the save time; on a clash the
+     later upload wins), and so are old-format lists in a snapshot being opened.
+   - The card names the session and the file's own date; the recorded-list table's first column reads "Session".
+   - dssCompare / msrcFromExport callers (drop / Load files, the export picker) now pass the file's save time.
+   Storage: adrb.mapSrc (same key; entries gain nameDate = the date in the file name, "" for pasted). No new keys.
+   ===================================================================== */
+const msrcSess = (nameDate, mtime) => { const t = nameDate && mtime ? tzSessDate(nameDate, mtime) : null; return t ? t.sess : nameDate; };
+// re-file entries recorded before 27 Oct (no nameDate) under the New York session they hold
+function msrcRefileDays(days){
+  const out = {}; let n = 0;
+  const put = (k, e) => { if (!out[k] || (e.at || 0) > (out[k].at || 0)) out[k] = e; };
+  for (const k of Object.keys(days || {})) { const e = days[k]; if (!e || typeof e !== "object") continue;
+    if ("nameDate" in e) { put(k, e); continue; }
+    const nd = e.src === "screener export" ? msrcDateOf(e.file) : null, to = nd === k ? msrcSess(k, e.at) || k : k;
+    if (to !== k) n++;
+    put(to, {...e, nameDate: nd || ""}); }
+  return {days: out, n};
+}
+function msrcRefile(){
+  const o = msrcAll(), ks = Object.keys(o.days); if (ks.every(k => o.days[k] && "nameDate" in o.days[k])) return 0;
+  const r = msrcRefileDays(o.days); o.days = r.days; store.set(MSRC.k, o); MSRC.c = null; return r.n;
+}
+try { msrcRefile(); } catch (e) { console.warn("map source re-file", e); }
+msrcFromExport = function(name, text, mtime){
+  if (!isDss(cmpType(text))) return false;
+  const syms = msrcSyms(text); if (!syms.length) return false;
+  const nd = msrcDateOf(name), date = msrcSess(nd, mtime) || (S.snap && S.snap.asOf) || etParts(Date.now()).d;
+  const o = msrcAll().days[date], same = o && o.syms === [...new Set(syms)].sort().join(" ");
+  msrcSave(date, syms, name, "screener export");
+  const a = msrcAll(); if (a.days[date]) { a.days[date].nameDate = nd || ""; store.set(MSRC.k, a); MSRC.c = null; }
+  if (!same) toast(`MAP source universe recorded: ${new Set(syms).size} names for the ${date} New York session${nd && nd !== date ? ` (file named ${nd})` : ""}`);
+  if (S.snap) { if (S.ui.tab === "data" || S.ui.tab === "watch") renderTab(S.ui.tab); }
+  return true;
+};
+const _msrcCurMF = msrcCur;
+msrcCur = function(){ const v = _msrcCurMF(); if (v && !("nameDate" in v)) { const e = msrcAll().days[v.date]; v.nameDate = (e && e.nameDate) || ""; } return v; };
+const _msrcHTMLMF = msrcHTML;
+msrcHTML = function(){
+  let h = _msrcHTMLMF(); const m = msrcCur();
+  if (m && m.nameDate && m.nameDate !== m.date) h = h.replace(`names from <b>${esc(m.date)}</b>`, `names for the <b>${esc(m.date)}</b> New York session (file named ${esc(m.nameDate)}, your date)`);
+  return h.replace(`<th class="l">Date</th>`, `<th class="l" title="The New York session the list holds. An export named with your date and saved before the US open holds the session before.">Session</th>`);
+};
+const _openSnapshotMF = openSnapshot;
+openSnapshot = async function(file){
+  try { const o = JSON.parse(await file.text());
+    if (o && o.kind === "deep-space-snapshot" && o.mapSrc && o.mapSrc.days && Object.values(o.mapSrc.days).some(e => e && !("nameDate" in e))) {
+      o.mapSrc.days = msrcRefileDays(o.mapSrc.days).days; file = new File([JSON.stringify(o)], file.name, {lastModified: file.lastModified}); } } catch (e) {}
+  return _openSnapshotMF(file);
+};
 </script>
 
 </body>
