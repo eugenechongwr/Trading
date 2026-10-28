@@ -13999,3 +13999,181 @@ mSync();
 </script>
 </body>
 </html>
+<script>
+"use strict";
+/* =====================================================================
+   BOARD HOOKS (28 Oct 2026). Plumbing only — changes no number, list, size, feed or record.
+   Eugene (chat, 28 Oct), on the rebuild proposal (docs/rebuild-proposal-review-2026-10-28.md): "ok do 1/2/3" — part 2 =
+   stop adding function overrides. Until now every new section saved the old renderTab / openDrawer / tpBuild … and put a
+   wrapper over it (200 such overrides; renderTab alone 22). From here, new work plugs in at a named hook point instead:
+     hookOn("panel", name, (r, dr, ws) => …)  after the ticker panel is fully built (workspace: tpBuild; classic: openDrawer),
+                                              also when the chart window renders a name unseen (workspace layout)
+     hookOn("tab", name, t => …)              after renderTab(t) has drawn a page
+   Each hook runs in its own try/catch (a broken card logs an error and the panel still opens). A section that needs a point
+   that isn't here adds it in this script — one wrapper per point, here and nowhere else.
+   Ratchet: tools/board-hooks-test.js counts the function overrides in index.html and fails if the count grows past the
+   number in that test (lower it as old wrappers are retired; never raise it without Eugene's ok).
+   Storage: none.
+   ===================================================================== */
+const HOOK = {panel: [], tab: []};
+function hookOn(point, name, fn){ if (!HOOK[point]) throw new Error("No hook point " + point); HOOK[point] = HOOK[point].filter(h => h.name !== name); HOOK[point].push({name, fn}); }
+function hookRun(point, ...a){ for (const h of HOOK[point] || []) { try { h.fn(...a); } catch (e) { console.error(`hook ${point}/${h.name}:`, e); } } }
+if (WS) {
+  const _tpBuildHK = tpBuild;
+  tpBuild = function(r){ const out = _tpBuildHK(r); const dr = $("drawer"); if (r && dr.classList.contains("open") && dr.classList.contains("tp")) hookRun("panel", r, dr, true); return out; };
+} else {
+  const _openDrawerHK = openDrawer;
+  openDrawer = function(sym){ const out = _openDrawerHK(sym); const r = S.rowBySym && S.rowBySym.get(sym), dr = $("drawer"); if (r && dr.classList.contains("open") && !dr.classList.contains("invp")) hookRun("panel", r, dr, false); return out; };
+}
+const _renderTabHK = renderTab;
+renderTab = function(t){ const out = _renderTabHK(t); hookRun("tab", t); return out; };
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   NAME CHECK (28 Oct 2026). Display only — reads numbers the board already has; never changes rows, ranks, states,
+   group strength, lists, sizes, the plan, the feeds, the Decision log or MAP import.
+   Eugene (chat, 28 Oct): the fatigue is "jumping between tabs to check one name. like if i see a name, i want to check
+   where it stands on a gap/go/fade/reversal map. see what its rank is in its group. how strong its group is. how is the
+   index performing today. to determine if its the best trade choice compared to the others."
+   One strip at the top of the ticker panel (both layouts; the chart window's full views copy it from the panel head):
+   - Today's map: the Stocks today "Gap · go · fade" read for this name (gapBucket / GAPB, unchanged), gap and move since
+     the open in ADR; premarket files show the premarket move (the read comes after the open).
+   - Index today: SPY · QQQ · IWM day % from the files (else the last stored session, dated), the name's move vs the
+     board's benchmark in ADR (r.ipVs), MAP's call.
+   - Group today: the group's median day move and how many members are up; rank among groups (S.groups order) + state.
+   - Among your candidates: where this name ranks on RS, group strength and today's move vs the index, among the names on
+     your Watchlist lists (MAP A / B / on deck, Ready to trade, New Discoveries, favourites — held names left out) or the
+     list you are stepping through. Fold = side-by-side table (best value in each column marked; extended names marked).
+     No combined score: each column stands on its own.
+   - A warning line only when it applies: extended past the cap, too high above the buy zone, MAP Mixed / Defensive.
+   Plugs in through hookOn("panel") — no function override.
+   Storage NEW: adrb.ncOpen (comparison open), adrb.ncCmp ("lists" | "here"). Test: tools/board-namecheck-test.js.
+   ===================================================================== */
+const NC = {sym: null};
+const ncNth = n => n + (n % 10 === 1 && n % 100 !== 11 ? "st" : n % 10 === 2 && n % 100 !== 12 ? "nd" : n % 10 === 3 && n % 100 !== 13 ? "rd" : "th");
+const ncPct = x => fin(x) ? (x > 0 ? "+" : x < 0 ? "−" : "") + Math.abs(x).toFixed(1) + "%" : "—";
+const ncAdr = x => fin(x) ? (x > 0 ? "+" : x < 0 ? "−" : "") + Math.abs(x).toFixed(1) + " ADR" : "—";
+const ncCls = x => fin(x) ? (x > 0 ? "pos" : x < 0 ? "neg" : "") : "dim";
+const ncCmp = () => store.get("adrb.ncCmp", "lists") === "here" ? "here" : "lists";
+const ncPm = () => S.mode === "pm";
+const ncDay = r => r ? (ncPm() ? r.pmPct : r.dayPct) : null;
+const ncVs = r => r ? (ncPm() ? (fin(r.pmU) && S.bench && S.bench.row && fin(S.bench.row.pmU) ? r.pmU - S.bench.row.pmU : null) : r.ipVs) : null;
+// index day moves: the files first (Live mode updates them), else the last two stored closes
+function ncIdx(){
+  const asia = typeof window !== "undefined" && window.ASIA;
+  const syms = asia ? [] : ["SPY", "QQQ", "IWM"];
+  if (S.bench && S.bench.row && !syms.includes(S.bench.sym)) syms.push(S.bench.sym);
+  return syms.map(s => {
+    const r = S.rowBySym && S.rowBySym.get(s), v = ncDay(r);
+    if (fin(v)) return {s, v};
+    const b = typeof dssBars === "function" ? dssBars(s) : null, n = b ? b.c.length : 0;
+    if (n > 1 && fin(b.c[n - 1]) && fin(b.c[n - 2])) return {s, v: (b.c[n - 1] / b.c[n - 2] - 1) * 100, d: b.dates[n - 1]};
+    return null;
+  }).filter(Boolean);
+}
+function ncGroup(r){
+  const g = !r.etf && S.groupMap ? S.groupMap.get(r.group) : null; if (!g) return null;
+  const ranked = S.groups.filter(x => x.grs != null), gi = ranked.indexOf(g), mv = g.members.map(ncDay).filter(fin);
+  return {g, rank: gi >= 0 ? gi + 1 : null, of: ranked.length, med: median(mv), up: mv.filter(x => x > 0).length, n: mv.length};
+}
+const NC_ORD = {"A-eligible": 0, "OnDeck-L2": 1, "OnDeck-1blocker": 1, "OnDeck-L3": 1, Background: 2, Out: 3};
+function ncCall(r){
+  const s = !r.etf && S.has.hist && typeof s61Of === "function" ? s61Of(r) : null;
+  if (s && EC_CALL[s.list]) return {t: LIST61[s.list].n, c: EC_CALL[s.list].c, o: NC_ORD[s.list] ?? 2, above: !!(s.x && s.x.loc === "ABOVE")};
+  return {t: statusOf(r).t, c: "", o: 2, above: false};
+}
+function ncCands(r){
+  const by = S.rowBySym || new Map(), out = [], seen = new Set();
+  const add = (s, src) => { if (seen.has(s)) return; const x = by.get(s); if (!x || !!x.etf !== !!r.etf) return; seen.add(s); out.push({r: x, src}); };
+  const here = ncCmp() === "here" && WSI.list.length > 1 && WSI.list.includes(r.sym);
+  if (here) WSI.list.forEach(s => add(s, "list"));
+  else { try { wlGroups().forEach(([, L]) => L.forEach(e => { if (e.src !== "H") add(e.s, e.src); })); } catch (e) {} }
+  add(r.sym, "this");
+  return {here, rows: out};
+}
+// the model: plain data only; ncHTML draws it
+function ncModel(r){
+  const pm = ncPm(), b = gapBucket(r), grp = ncGroup(r), mr = mapRegime(), C = ncCands(r);
+  const items = C.rows.map(e => { const x = e.r, gg = ncGroup(x), cl = ncCall(x);
+    return {sym: x.sym, src: e.src, me: x.sym === r.sym, call: cl, gap: gapBucket(x), day: ncDay(x), vs: ncVs(x), rs: x.rs ?? null, gRank: x.gRank ?? null, gN: x.gN ?? null,
+      grp: gg ? gg.rank : null, grpOf: gg ? gg.of : null, gname: x.group || "", ext: fin(x.extU) ? x.extU : null}; });
+  const place = (key, better) => { const me = items.find(i => i.me), v = me ? me[key] : null; if (v == null || items.length < 2) return null;
+    const vals = items.map(i => i[key]).filter(x => x != null); return {n: 1 + vals.filter(x => better(x, v)).length, of: vals.length}; };
+  return {sym: r.sym, etf: !!r.etf, pm, live: !!(S.snap && S.snap.live), asOf: S.snap ? S.snap.asOf : null,
+    gap: b ? {k: b, n: GAPB[b].n, c: GAPB[b].c, d: GAPB[b].d} : null, gapU: r.gapU, openU: r.openU, pmU: r.pmU, day: ncDay(r), vs: ncVs(r), bench: S.bench ? S.bench.sym : "",
+    idx: ncIdx(), map: mr.v || "", grp, call: ncCall(r), ext: fin(r.extU) ? r.extU : null, cap: CFG.extCap, th: CFG.gapTh,
+    here: C.here, canHere: WSI.list.length > 1 && WSI.list.includes(r.sym), items,
+    place: {rs: place("rs", (x, v) => x > v), grp: place("grp", (x, v) => x < v), vs: place("vs", (x, v) => x > v)}};
+}
+function ncMapTile(m){
+  if (m.pm) return fin(m.pmU) ? `<b>Premarket ${ncAdr(m.pmU)}</b><small>gap read comes after the open</small>` : `<b class="dim">No premarket move in the file</b><small>gap read comes after the open</small>`;
+  if (m.gap) return `<b><span class="ncsw" style="background:${m.gap.c}"></span>${esc(m.gap.n)}</b><small>gap ${ncAdr(m.gapU)} · since open ${ncAdr(m.openU)}</small>`;
+  if (!fin(m.gapU) || !fin(m.openU)) return `<b class="dim">No gap data</b><small>needs change from open in the file</small>`;
+  const o = m.openU, w = o >= 0.3 ? "up from the open" : o <= -0.3 ? "down from the open" : "flat from the open";
+  return `<b>No gap</b><small>gap ${ncAdr(m.gapU)} (under ${m.th}) · ${w} ${ncAdr(o)}</small>`;
+}
+function ncHTML(m){
+  const ix = m.idx.length ? m.idx.map(o => `${esc(o.s)} <span class="${ncCls(o.v)}">${ncPct(o.v)}</span>`).join(" · ") : `<span class="dim">no index in your files</span>`;
+  const ixd = m.idx.find(o => o.d) ? ` · stored ${esc(m.idx.find(o => o.d).d)}` : "";
+  const g = m.grp;
+  const grpT = g ? `<b><span class="${ncCls(g.med)}">${ncPct(g.med)}</span> median · ${g.up} of ${g.n} up</b><small>${g.rank ? `${ncNth(g.rank)} of ${g.of} groups · RS ${g.g.grs} · ${esc(g.g.state)}` : `${g.g.n} names · too small to rank`}</small>` : `<b class="dim">${m.etf ? "ETF — no stock group" : "No group"}</b><small></small>`;
+  const P = m.place, pl = (p, l) => p ? `<span title="${l}: ${ncNth(p.n)} of ${p.of}">${l} <b class="${p.n === 1 ? "pos" : ""}">${ncNth(p.n)}</b></span>` : "";
+  const n = m.items.length, srcL = m.here ? "this list" : "your lists";
+  const candT = n < 2 ? `<b class="dim">Only this name</b><small>${m.here ? "" : "add names to your Watchlist (☆) to compare"}</small>`
+    : `<b class="ncpl">${[pl(P.rs, "RS"), pl(P.grp, "group"), pl(P.vs, m.pm ? "premarket" : "today")].filter(Boolean).join(" · ") || "—"}</b><small>of ${n} names on ${srcL}${m.items.find(i => i.me && i.src === "this") ? " (this name isn't on them)" : ""}</small>`;
+  const warn = [];
+  if (fin(m.ext) && m.ext > m.cap) warn.push(`Extended: ${m.ext.toFixed(1)} ADR above the 50 SMA (cap ${m.cap}) — a chase, not a pullback.`);
+  if (m.call.above) warn.push("Too high above the buy zone — wait for the pullback.");
+  if (/^(Mixed|Defensive)$/i.test(m.map)) warn.push(`MAP says ${esc(m.map)} — size cut applies${/Defensive/i.test(m.map) ? "; look at the Shorts page for hedges too" : ""}.`);
+  const best = (key, better) => { const v = m.items.map(i => i[key]).filter(x => x != null); if (v.length < 2) return null; return v.reduce((a, x) => better(x, a) ? x : a); };
+  const bRs = best("rs", (x, a) => x > a), bG = best("grp", (x, a) => x < a), bIn = best("gRank", (x, a) => x < a), bVs = best("vs", (x, a) => x > a);
+  const rows = [...m.items].sort((a, b) => a.call.o - b.call.o || (b.rs ?? -1) - (a.rs ?? -1) || (a.sym < b.sym ? -1 : 1));
+  const shown = rows.slice(0, 15), mark = (v, bv) => v != null && bv != null && v === bv ? " ncbest" : "";
+  const tbl = n < 2 ? "" : `<div class="ncsc"><table class="mini nct"><thead><tr><th class="l">Name</th><th class="l">Entry Check</th><th class="l" title="Stocks today gap · go · fade read">Today's map</th><th title="${m.pm ? "Premarket" : "Today's"} move vs ${esc(m.bench)}, in the name's ADR">vs index</th><th>RS</th><th title="Rank by RS inside its own group">In group</th><th class="l" title="Group rank among all ranked groups">Group</th><th title="ADR above the 50 SMA; marked past the ${m.cap} ADR cap">Ext</th></tr></thead><tbody>${shown.map(i => `<tr data-sym="${esc(i.sym)}" class="${i.me ? "ncme" : ""}">
+      <td class="l sym"><b>${esc(i.sym)}</b>${i.src !== "this" && i.src !== "list" && typeof WL_SRC !== "undefined" && WL_SRC[i.src] ? ` <span class="small dim">${esc(WL_SRC[i.src])}</span>` : ""}</td>
+      <td class="l"><span class="pill ${i.call.c}">${esc(i.call.t)}</span></td>
+      <td class="l small">${i.gap ? `<span class="ncsw" style="background:${GAPB[i.gap].c}"></span>${esc(GAPB[i.gap].n)}` : `<span class="dim">${m.pm ? "premarket" : "no gap"}</span>`}</td>
+      <td class="${ncCls(i.vs)}${mark(i.vs, bVs)}">${ncAdr(i.vs).replace(" ADR", "")}</td><td class="${mark(i.rs, bRs).trim()}">${i.rs ?? "—"}</td>
+      <td class="${mark(i.gRank, bIn).trim()}">${i.gRank ? `${i.gRank}/${i.gN}` : "—"}</td>
+      <td class="l small${mark(i.grp, bG)}">${i.grp ? `${ncNth(i.grp)} of ${i.grpOf}` : "—"} <span class="dim">${esc(i.gname)}</span></td>
+      <td class="${fin(i.ext) && i.ext > m.cap ? "ncx" : ""}">${fin(i.ext) ? i.ext.toFixed(1) : "—"}</td></tr>`).join("")}</tbody></table></div>${rows.length > shown.length ? `<div class="small dim">+${rows.length - shown.length} more on ${srcL} (the ranks above count all ${n})</div>` : ""}`;
+  const seg = m.canHere ? `<span class="seg ncseg"><button data-ncc="lists" class="${m.here ? "" : "on"}">Your lists</button><button data-ncc="here" class="${m.here ? "on" : ""}">This list</button></span>` : "";
+  const when = m.asOf ? `<span class="small dim">${m.live ? "Live mode · 15-min delayed · " : ""}data ${esc(m.asOf)}${ixd}</span>` : "";
+  return `<details class="nc" data-nc="${esc(m.sym)}" ${store.get("adrb.ncOpen", false) ? "open" : ""}><summary><div class="ncrow">
+      <span class="nct1"><i>Today's map</i>${ncMapTile(m)}</span>
+      <span class="nct1"><i>Index today</i><b>${ix}</b><small>${esc(m.sym)} vs ${esc(m.bench || "index")}: <span class="${ncCls(m.vs)}">${ncAdr(m.vs)}</span>${m.map ? ` · MAP ${esc(m.map)}` : ""}</small></span>
+      <span class="nct1"><i>Group today</i>${grpT}</span>
+      <span class="nct1"><i>Among your candidates</i>${candT}</span></div>
+      ${warn.length ? `<div class="ncw">${warn.map(w => `<span>⚠ ${w}</span>`).join("")}</div>` : ""}</summary>
+    <div class="ncbd"><div class="nchd"><b>Compare</b> <span class="small">best in each column is marked · no combined score · click a name to open it</span><span class="spacer"></span>${seg}${when}</div>${tbl || `<div class="small dim">Nothing to compare yet.</div>`}</div></details>`;
+}
+function ncPaint(r, dr, ws){
+  dr.querySelectorAll(".nc").forEach(x => x.remove());
+  const wrap = document.createElement("div"); wrap.innerHTML = ncHTML(ncModel(r)).trim(); const el = wrap.firstElementChild;
+  const ctx = ws ? dr.querySelector(".tp-head .tp-ctx") : null, tv = dr.querySelector("#tvbox");
+  if (ctx) ctx.after(el); else if (ws && dr.querySelector(".tp-head")) dr.querySelector(".tp-head").appendChild(el); else if (tv) tv.before(el); else dr.appendChild(el);
+  el.addEventListener("toggle", () => store.set("adrb.ncOpen", el.open));
+  el.addEventListener("click", e => { const b = e.target.closest("[data-ncc]"); if (!b) return; e.preventDefault(); e.stopPropagation(); store.set("adrb.ncCmp", b.dataset.ncc); ncPaint(r, dr, ws); });
+  NC.sym = r.sym;
+}
+hookOn("panel", "namecheck", ncPaint);
+document.head.insertAdjacentHTML("beforeend", `<style>
+.nc{margin:0 0 6px;border:1px solid var(--line);border-radius:9px;background:var(--surface)}
+.nc > summary{list-style:none;cursor:pointer;padding:0} .nc > summary::-webkit-details-marker{display:none}
+.nc .ncrow{display:flex;flex-wrap:wrap}
+.nc .nct1{flex:1 1 160px;display:flex;flex-direction:column;justify-content:center;padding:5px 12px;min-width:0;border-right:1px solid var(--line)}
+.nc .nct1:last-child{border-right:0}
+.nc .nct1 i{font-style:normal;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3)}
+.nc .nct1 b{font-size:13px;font-weight:600} .nc .nct1 small{font-size:11px;color:var(--ink-2)}
+.nc .ncpl span{margin-right:2px}
+.nc[open] .nct1:last-child i::after{content:" ▴"} .nc:not([open]) .nct1:last-child i::after{content:" ▾ compare"}
+.ncsw{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:baseline}
+.nc .ncw{display:flex;flex-wrap:wrap;gap:4px 14px;padding:4px 12px;border-top:1px solid var(--line);font-size:12px;color:var(--warn)}
+.nc .ncbd{padding:6px 10px 8px;border-top:1px solid var(--line)}
+.nc .nchd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+.nc .ncseg button{font-size:11px;padding:1px 7px}
+.nc .ncsc{overflow-x:auto} table.nct{width:100%;min-width:560px} table.nct tr[data-sym]{cursor:pointer} table.nct tr.ncme td{background:var(--up-soft)}
+table.nct td.ncbest{font-weight:700;box-shadow:inset 0 -2px 0 var(--good)} table.nct td.ncx{color:var(--warn);font-weight:600}
+</style>`);
+</script>
