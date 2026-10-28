@@ -13018,6 +13018,515 @@ table.obl tr.on td{font-weight:600} table.obl tr.dim td{opacity:.55}
 .pbcls .pbp{margin-top:10px}
 </style>`);
 </script>
+<script>
+"use strict";
+/* =====================================================================
+   CHART WINDOW FROM A GROUP + FULL PANEL IN THE WINDOW + SCREENS DROPDOWN (28 Oct 2026). Display only.
+   Eugene (chat, 28 Oct): "If I were to click and open the group and see the list of tickers in an industry. Clicking on
+   any ticker in that group would switch to the chart and data panel. Is there a way to have a chart window pop out while
+   having that group page open … When opening a separate chart window pop out. Can that window also include the section
+   on playbooks / history / short score news. Etc. either as a vertical scroll down or a full display" and "Under screens.
+   Preset scans … An option to minimise everything and just have a drop box to select the screen … The explanation for
+   each screen is still immensely useful. I just want toggles to have them minimised".
+   - Group panel (desktop): a "⧉ Chart window" button. Once the window is open, clicking a name in the group shows it in
+     the window and the group stays open (current row marked; ↑ ↓ / ← → step the group; the window's ‹ › step it too).
+     "Keep this group open" (localStorage adrb.popGrp, default on) switches back to the old click = open the ticker panel.
+   - popGrab replaced: with the group panel open it now renders the ticker unseen and puts the group back (the old code
+     left the window's data on the previous ticker while its chart moved on). Every other case works as before.
+   - The window shows the whole ticker panel (adrb.popView): "Panel tabs" (default; the panel's own tabs — Entry Check,
+     History · short score, News, Group, Shakeout, Floor Bounce …; tab in adrb.popTab), "One page" (every tab stacked,
+     scroll down) or "Summary" (the old window, unchanged). Read-only copy: inputs show their value, buttons are dropped.
+     News and Stocktwits fill in as they load. "Open on the board" opens the board's own panel; ← → step in the window.
+   - Screens: "Compact" (default; localStorage adrb.scrView) folds the scan cards into one dropdown (grouped like the
+     cards, count per scan, dimmed scans disabled) with ‹ › and the chosen scan's full description + needs line under it;
+     "Cards" = the old grid. The dropdown is read off the cards themselves, so counts and wording can't drift.
+   Never changes: rows, ranks, states, lists, sizes, scans' rules or results, the feeds, the Decision log, MAP import.
+   Storage NEW: adrb.popGrp, adrb.popView, adrb.popTab, adrb.popNums (RS · numbers fold open), adrb.scrView. Not on the phone edition except the Screens
+   dropdown (works the same there). Test: tools/board-popgroup-test.js.
+   ===================================================================== */
+const popView = () => { const v = store.get("adrb.popView", "tabs"); return v === "scroll" || v === "summary" ? v : "tabs"; };
+const popGrpOn = () => store.get("adrb.popGrp", true) !== false;
+const PG_CSS = `#pSide{min-height:0;display:flex;flex-direction:column;gap:6px;overflow:auto}
+#pTabs{display:none;position:sticky;top:0;z-index:2;background:var(--bg);gap:2px;margin:0;border-bottom:1px solid var(--line);overflow-x:auto}
+#pTabs button{border:0;background:transparent;padding:7px 11px;cursor:pointer;color:var(--ink-2);border-bottom:2px solid transparent;white-space:nowrap;font-weight:550;font-size:13px}
+#pTabs button.on{color:var(--ink);border-bottom-color:var(--accent)} #pTabs button:hover{color:var(--ink)}
+.pbody.pfull:not(.pscroll) #pTabs{display:flex}
+#pData .ppane{display:block} .pbody.pfull:not(.pscroll) #pData .ppane:not(.on){display:none}
+#pData .pph{display:none;margin:14px 0 6px;padding-top:8px;border-top:1px solid var(--line);font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-2)}
+.pbody.pscroll #pData .pph{display:block}
+#pData .ptop{display:flex;flex-direction:column;gap:6px;margin-bottom:6px}
+#pData .tp-ctx{flex-wrap:wrap} #pData .ro{display:inline-block;padding:1px 6px;border:1px solid var(--line);border-radius:6px;color:var(--ink-2);font-size:12px}
+#pData .pnote{font-size:11px;color:var(--ink-3);margin:2px 0 4px}
+@media (min-width:1000px){.pbody.pfull{grid-template-columns:minmax(0,1fr) clamp(400px,40vw,620px);grid-template-rows:minmax(0,1fr)}}
+#pwView button{white-space:nowrap}`;
+// an older window re-linked by this board: add the new controls and the side column in place
+function popUpgrade(w){
+  const d = w.document; if (!d.getElementById("popRoot")) return;
+  if (!d.getElementById("pgCss")) { const s = d.createElement("style"); s.id = "pgCss"; s.textContent = PG_CSS; d.head.appendChild(s); }
+  if (!d.getElementById("pwView")) {
+    d.getElementById("pTv").insertAdjacentHTML("beforebegin", `<span class="seg" id="pwView" title="How much of the ticker panel this window shows">${[["tabs", "Panel tabs"], ["scroll", "One page"], ["summary", "Summary"]].map(([v, l]) => `<button data-v="${v}">${l}</button>`).join("")}</span>
+<button class="btn sm" id="pBoard" title="Open this ticker in the board's own ticker panel">Open on the board</button>`);
+  }
+  if (!d.getElementById("pSide")) { const pd = d.getElementById("pData"), side = d.createElement("div"); side.id = "pSide"; side.innerHTML = `<div class="tp-tabs" id="pTabs"></div>`; pd.before(side); side.appendChild(pd); }
+}
+// read-only copy of panel blocks: values instead of inputs, no buttons, no ids (news / Stocktwits slots stay findable)
+function popClean(root){
+  root.querySelectorAll("#tvbox, #tvInt, #chEng, iframe, canvas, script, .tp-nav, .tp-rsel, [data-tpb], [data-tps]").forEach(x => x.remove());
+  root.querySelectorAll("select").forEach(s => { const o = s.options[s.selectedIndex]; const t = o && o.value !== "" ? o.textContent.trim() : ""; s.replaceWith(Object.assign(document.createElement("span"), {className: "ro", textContent: t || "—"})); });
+  root.querySelectorAll("textarea, input").forEach(i => { const t = i.type === "checkbox" || i.type === "radio" ? (i.checked ? "☑" : "☐") : String(i.value || "").trim(); if (i.type === "hidden" || (!t && i.type !== "checkbox" && i.type !== "radio")) { i.remove(); return; } i.replaceWith(Object.assign(document.createElement("span"), {className: "ro", textContent: t})); });
+  root.querySelectorAll("button, label.tog:empty").forEach(x => x.remove());
+  root.querySelectorAll("[id]").forEach(x => x.removeAttribute("id"));
+  return root;
+}
+// the whole panel (workspace: head extras + left column without the chart + every tab; classic: everything but the chart)
+function popTakeFull(dr){
+  const sec = (k, l, nodes) => { const s = document.createElement("section"); s.className = "ppane"; s.dataset.p = k; s.dataset.l = l; s.innerHTML = `<h3 class="pph">${esc(l)}</h3>`; nodes.forEach(n => s.appendChild(n)); return s; };
+  const out = document.createElement("div");
+  if (dr.classList.contains("tp")) {
+    const head = dr.querySelector(".tp-head"), top = document.createElement("div"); top.className = "ptop";
+    if (head) [...head.children].forEach(el => { if (el.matches("h3, #dx, .tp-nav") || el.querySelector("#dCopy") || (el.matches(".small") && el.previousElementSibling && el.previousElementSibling.matches("h3"))) return; top.appendChild(el.cloneNode(true)); });
+    out.appendChild(popClean(top));
+    const left = dr.querySelector(".tp-left"), L = [];
+    if (left) [...left.children].forEach(el => { if (el.id === "tvbox" || /^(Embedded chart shows|Board chart:)/.test(el.textContent.trim())) return; L.push(el.cloneNode(true)); });
+    const tabs = [...dr.querySelectorAll(".tp-tabs [data-tpt]")].map(b => [b.dataset.tpt, b.textContent.trim()]);
+    // RS by timeframe + the numbers grid sit under the chart in the panel: here they come first, folded on request
+    if (L.length) { const f = document.createElement("details"); f.className = "tp-fold pnums"; f.open = store.get("adrb.popNums", true) !== false; f.innerHTML = `<summary>RS by timeframe · numbers</summary>`; L.forEach(n => f.appendChild(n)); out.appendChild(popClean(f)); }
+    const panes = tabs.map(([k, l]) => { const p = dr.querySelector(`.tp-pane[data-p="${k}"]`); return p ? sec(k, l, [...p.cloneNode(true).childNodes]) : null; }).filter(Boolean);
+    panes.forEach(p => out.appendChild(popClean(p)));
+  } else {
+    const keep = [...dr.children].filter(el => !el.matches("h3, #dx") && !el.querySelector("#dCopy") && el.id !== "tvbox" && !/^(Embedded chart shows|Board chart:)/.test(el.textContent.trim()) && !(el.matches(".small") && el.previousElementSibling && el.previousElementSibling.matches("h3")));
+    out.appendChild(popClean(sec("all", "Ticker panel", keep.map(el => el.cloneNode(true)))));
+  }
+  return `<div class="pnote">Read-only copy of the board's ticker panel — make calls and type stops on the board.</div>` + out.innerHTML;
+}
+// the old window's blocks (same list as before)
+function popTakeSum(dr){
+  const rsH = [...dr.querySelectorAll("h4")].find(h => /^RS by/.test(h.textContent.trim()));
+  const els = [dr.querySelector(".tp-lv"), dr.querySelector(".s61p > h4"), dr.querySelector(".s61p .ecsay"), dr.querySelector(".s61p .ecstrip"), dr.querySelector(".s61p .s61chips"), rsH, dr.querySelector(".rsbars"), dr.querySelector(".kv")].filter(Boolean);
+  return els.map(el => { const c = el.cloneNode(true); c.querySelectorAll("input, select, button, label.tog, .tp-rsel").forEach(x => x.remove()); c.removeAttribute("id"); c.querySelectorAll("[id]").forEach(x => x.removeAttribute("id")); return c.outerHTML; }).join("");
+}
+const pgIsGroup = () => { const dr = $("drawer"); return dr.classList.contains("open") && !!dr.dataset.gview && !dr.querySelector("#tvbox"); };
+popGrab = function(sym){
+  const dr = $("drawer"), open = dr.classList.contains("open"), take = () => popView() === "summary" ? popTakeSum(dr) : popTakeFull(dr);
+  if (open && !pgIsGroup()) return POP.drSym === sym ? take() : null;    // the panel shows a ticker: as before
+  let h = null;
+  if (!open) { POP.inner = true; try { _openDrawerPop(sym); h = take(); } finally { closeDrawer(); POP.inner = false; } return h; }
+  // the group panel is open: render the ticker unseen, then put the group back exactly as it was (nodes, handlers, scroll)
+  const keep = document.createDocumentFragment(); while (dr.firstChild) keep.appendChild(dr.firstChild);
+  const was = {cls: dr.className, ds: {...dr.dataset}, top: dr.scrollTop, hist: WSI.hist.slice(), cur: WSI.cur, list: WSI.list.slice(), tab: WSI.tpTab};
+  POP.inner = true;
+  try { _openDrawerPop(sym); h = take(); }
+  finally {
+    POP.inner = false; dr.innerHTML = ""; dr.className = was.cls;
+    Object.keys(dr.dataset).forEach(k => { if (!(k in was.ds)) delete dr.dataset[k]; }); Object.assign(dr.dataset, was.ds);
+    dr.appendChild(keep); dr.scrollTop = was.top; WSI.hist = was.hist; WSI.cur = was.cur; WSI.list = was.list; WSI.tpTab = was.tab;
+  }
+  return h;
+};
+// the window's tabs / view, after every data write
+function popAfter(){
+  if (!popLive()) return;
+  const d = POP.w.document; popUpgrade(POP.w);
+  const v = popView(), body = d.querySelector(".pbody"), pd = d.getElementById("pData"), tb = d.getElementById("pTabs");
+  body.classList.toggle("pfull", v !== "summary"); body.classList.toggle("pscroll", v === "scroll");
+  d.querySelectorAll("#pwView button").forEach(b => b.classList.toggle("on", b.dataset.v === v));
+  const panes = [...pd.querySelectorAll(":scope > .ppane")], ks = panes.map(p => p.dataset.p);
+  const want = [store.get("adrb.popTab", null), WSI.tpTab].find(k => k && ks.includes(k)) || ks[0];
+  tb.innerHTML = panes.length > 1 ? panes.map(p => `<button data-ptab="${esc(p.dataset.p)}" class="${p.dataset.p === want ? "on" : ""}">${esc(p.dataset.l)}</button>`).join("") : "";
+  panes.forEach(p => p.classList.toggle("on", p.dataset.p === want));
+  const f = pd.querySelector(".pnums"); if (f) f.ontoggle = () => store.set("adrb.popNums", f.open);
+  pgMark();
+}
+function popRefresh(){ if (!popLive() || !POP.sym) return; const h = popGrab(POP.sym); if (h != null) POP.w.document.getElementById("pData").innerHTML = h; popAfter(); }
+const _popWirePG = popWire;
+popWire = function(w){
+  _popWirePG(w); popUpgrade(w);
+  const d = w.document;
+  d.getElementById("pwView").onclick = e => { const b = e.target.closest("[data-v]"); if (!b) return; store.set("adrb.popView", b.dataset.v); popRefresh(); };
+  d.getElementById("pTabs").onclick = e => { const b = e.target.closest("[data-ptab]"); if (!b) return; store.set("adrb.popTab", b.dataset.ptab); popAfter(); const s = d.getElementById("pSide"); if (s) s.scrollTop = 0; };
+  d.getElementById("pBoard").onclick = () => pgToBoard(POP.sym);
+  d.onkeydown = e => { if (e.metaKey || e.ctrlKey || e.altKey || /input|textarea|select/i.test((d.activeElement || {}).tagName || "")) return; if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); popStep(e.key === "ArrowRight" ? 1 : -1); } };
+};
+const _popSkelPG = popSkel;
+popSkel = function(w){ _popSkelPG(w); popUpgrade(w); };
+const _popShowPG = popShow;
+popShow = function(sym){ _popShowPG(sym); popAfter(); };
+const _renderAllPG = renderAll;
+renderAll = function(){ _renderAllPG(); try { popAfter(); } catch (e) {} };
+// news and Stocktwits that arrive after the copy was made
+const _newsChangedPG = newsChanged;
+newsChanged = function(sym){ _newsChangedPG(sym); try { if (popLive()) POP.w.document.querySelectorAll("[data-news-sym]").forEach(el => { if (el.dataset.newsSym === sym) el.innerHTML = newsHTML(sym, el.dataset.newsMode); }); } catch (e) {} };
+const _loadSocialPG = loadSocial;
+loadSocial = async function(sym){
+  const c = NEWS.social.get(sym), fresh = c && Date.now() - c.t < 10 * 60e3;
+  try { return await _loadSocialPG(sym); } finally { if (!fresh && NEWS.social.get(sym) && popLive() && POP.sym === sym && popView() !== "summary" && !POP.inner) setTimeout(popRefresh, 0); }
+};
+// "Open on the board": the board's own panel, even with "ticker clicks only change this window" on
+function pgToBoard(sym){
+  if (!sym || !(S.rowBySym && S.rowBySym.has(sym))) return;
+  const was = popOnly(); store.set("adrb.popOnly", false);
+  try { openDrawer(sym); } finally { store.set("adrb.popOnly", was); }
+  try { window.focus(); } catch (e) {}
+}
+
+/* ---------------- group panel → chart window ---------------- */
+const pgRows = () => [...$("drawer").querySelectorAll("tr[data-sym]")].map(t => t.dataset.sym).filter(s => S.rowBySym && S.rowBySym.has(s));
+const pgLinked = () => !popMob() && pgIsGroup() && popLive() && popGrpOn();
+function pgMark(){ if (!pgIsGroup()) return; $("drawer").querySelectorAll("tr[data-sym]").forEach(t => t.classList.toggle("pcur", popLive() && t.dataset.sym === POP.sym)); }
+function pgBarHTML(){
+  if (popMob()) return "";
+  const live = popLive();
+  return live ? `<div class="pgbar on"><span class="pgdot">●</span><b>Chart window linked</b><label class="tog small" title="On: a click on a name shows it in the chart window and this group stays open. Off: a click opens the ticker panel, as before."><input type="checkbox" id="gKeep" ${popGrpOn() ? "checked" : ""}>Keep this group open — clicks go to the chart window</label><span class="small">${popGrpOn() ? "↑ ↓ step through the group" : ""}</span></div>`
+    : `<div class="pgbar"><button class="btn sm" id="gPop" title="Open a separate chart window, then click through this group — the list stays open here">⧉ Chart window</button><span class="small">Open the chart in its own window, then click through these names without leaving the group.</span></div>`;
+}
+function pgBarPaint(){
+  const dr = $("drawer"); if (!pgIsGroup()) return;
+  const old = dr.querySelector(".pgbar"), at = dr.querySelector("h3 + .small") || dr.querySelector("h3"); if (!at) return;
+  if (old) old.outerHTML = pgBarHTML(); else at.insertAdjacentHTML("afterend", pgBarHTML());
+  const b = dr.querySelector("#gPop"); if (b) b.onclick = () => { const L = pgRows(); if (!L.length) return; WSI.list = L; const s = L.includes(POP.sym) ? POP.sym : L[0]; popOpen(s); pgBarPaint(); pgMark(); };
+  const k = dr.querySelector("#gKeep"); if (k) k.onchange = () => { store.set("adrb.popGrp", k.checked); pgBarPaint(); };
+  pgMark();
+}
+const _groupDrawerPG = groupDrawer;
+groupDrawer = function(name){ const dr = $("drawer"); dr.dataset.gview = name; _groupDrawerPG(name); if (!dr.classList.contains("open")) { delete dr.dataset.gview; return; } pgBarPaint(); };
+const _openDrawerPG = openDrawer;
+openDrawer = function(sym){ const r = _openDrawerPG(sym); const dr = $("drawer"); if (!POP.inner && dr.querySelector("#tvbox")) delete dr.dataset.gview; if (pgIsGroup()) pgBarPaint(); return r; };
+const _closeDrawerPG = closeDrawer;
+closeDrawer = function(){ const r = _closeDrawerPG(); if (!POP.inner) delete $("drawer").dataset.gview; return r; };
+function pgShow(sym){ WSI.list = pgRows(); popShow(sym); pgMark(); const t = [...$("drawer").querySelectorAll("tr[data-sym]")].find(x => x.dataset.sym === sym); if (t) t.scrollIntoView({block: "nearest"}); }
+// a click on a name in the linked group goes to the window (capture: before the panel's own handler)
+document.addEventListener("click", e => {
+  const t = e.target.closest("#drawer tr[data-sym]"); if (!t || e.target.closest("a, button, input") || !pgLinked() || !S.rowBySym.has(t.dataset.sym)) return;
+  e.stopImmediatePropagation(); e.preventDefault(); pgShow(t.dataset.sym);
+}, true);
+document.addEventListener("keydown", e => {
+  if (!/^Arrow(Up|Down|Left|Right)$/.test(e.key) || e.metaKey || e.ctrlKey || e.altKey || /input|textarea|select/i.test(document.activeElement.tagName) || !pgLinked()) return;
+  const L = pgRows(), i = L.indexOf(POP.sym), n = L[i < 0 ? 0 : i + (/Down|Right/.test(e.key) ? 1 : -1)];
+  e.preventDefault(); e.stopImmediatePropagation(); if (n) pgShow(n);
+}, true);
+// the window's ‹ › (and ← →) walk the group while it's linked
+const _popStepPG = popStep;
+popStep = function(k){ if (!pgLinked()) return _popStepPG(k); const L = pgRows(), i = L.indexOf(POP.sym), n = L[i + k]; if (i >= 0 && n) pgShow(n); };
+// the window opened or closed elsewhere: the group bar follows
+setInterval(() => { try { if (!pgIsGroup()) return; const b = $("drawer").querySelector(".pgbar"); if (b && b.classList.contains("on") !== popLive()) pgBarPaint(); } catch (e) {} }, 1500);
+
+/* ---------------- Screens: compact dropdown ---------------- */
+const scrView = () => store.get("adrb.scrView", "compact") === "cards" ? "cards" : "compact";
+function scrBarPaint(){
+  const box = $("screens"); if (!box) return;
+  let bar = $("scrBar"); if (!bar) { box.insertAdjacentHTML("beforebegin", `<div class="card scrbar" id="scrBar"></div>`); bar = $("scrBar"); }
+  const v = scrView(); box.classList.toggle("hidden", v === "compact");
+  const opt = [], on = [];
+  let cat = null, grp = "";
+  [...box.children].forEach(el => {
+    if (el.classList.contains("scrcat")) { if (cat) opt.push(`<optgroup label="${esc(cat)}">${grp}</optgroup>`); cat = el.textContent.trim(); grp = ""; return; }
+    if (!el.dataset.scr) return;
+    const t = el.querySelector(".t > span:first-child"), n = el.querySelector(".t .n"), off = el.classList.contains("off");
+    if (!off) on.push(el.dataset.scr);
+    grp += `<option value="${esc(el.dataset.scr)}" ${el.classList.contains("on") ? "selected" : ""} ${off ? "disabled" : ""}>${esc(t ? t.textContent.trim() : el.dataset.scr)} · ${off ? "needs data" : esc(n ? n.textContent.trim() : "—")}</option>`;
+  });
+  if (cat) opt.push(`<optgroup label="${esc(cat)}">${grp}</optgroup>`);
+  const cur = box.querySelector(".scr.on") || box.querySelector(".scr:not(.off)"), i = cur ? on.indexOf(cur.dataset.scr) : -1;
+  const ds = cur ? [...cur.querySelectorAll(".d")].map(x => `<div class="${x === cur.querySelector(".d") ? "" : "scrneed"}">${x.innerHTML}</div>`).join("") : "";
+  const cn = cur && cur.querySelector(".t .n"), cc = cur ? (() => { let p = cur.previousElementSibling; while (p && !p.classList.contains("scrcat")) p = p.previousElementSibling; return p ? p.textContent.trim() : ""; })() : "";
+  bar.innerHTML = `<div class="scrrow"><span class="lbl">Scan</span>
+    <span class="scrpick"><button class="btn sm" data-scrs="-1" ${i > 0 ? "" : "disabled"} title="Previous scan">‹</button><select id="scrSel" title="Pick a preset scan — dimmed ones need a column your export doesn't have yet">${opt.join("")}</select><button class="btn sm" data-scrs="1" ${i >= 0 && i < on.length - 1 ? "" : "disabled"} title="Next scan">›</button></span>
+    ${cn ? `<span class="scrn"><b>${esc(cn.textContent.trim())}</b> names</span>` : ""}<span class="spacer"></span>
+    <span class="seg" id="scrView" title="Compact = one dropdown, results right below. Cards = every scan as a card with its description."><button data-v="compact" class="${v === "compact" ? "on" : ""}">Compact</button><button data-v="cards" class="${v === "cards" ? "on" : ""}">Cards</button></span></div>
+    ${v === "compact" && cur ? `<div class="scrdesc">${cc ? `<span class="scrc">${esc(cc)}</span>` : ""}${ds}</div>` : ""}`;
+  const go = k => { if (!k || k === S.ui.screen) return; S.ui.screen = k; renderScreens(); };
+  bar.querySelector("#scrSel").onchange = e => go(e.target.value);
+  bar.querySelectorAll("[data-scrs]").forEach(b => b.onclick = () => go(on[i + +b.dataset.scrs]));
+  bar.querySelector("#scrView").onclick = e => { const b = e.target.closest("[data-v]"); if (!b) return; store.set("adrb.scrView", b.dataset.v); scrBarPaint(); };
+}
+const _renderScreensPG = renderScreens;
+renderScreens = function(){ _renderScreensPG(); try { scrBarPaint(); } catch (e) { console.warn("screens dropdown", e); } };
+
+document.head.insertAdjacentHTML("beforeend", `<style>
+${PG_CSS}
+.pgbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:8px 0 6px;padding:6px 10px;border:1px dashed var(--line-strong, var(--line));border-radius:10px;background:var(--surface-2, transparent)}
+.pgbar.on{border-style:solid;border-color:var(--accent)} .pgbar .pgdot{color:var(--up)} .pgbar label.tog{margin:0}
+#drawer tr.pcur td{background:color-mix(in oklab, var(--accent) 16%, transparent)} #drawer tr.pcur td.sym{font-weight:750}
+.scrbar{padding:8px 12px;margin-bottom:12px} .scrbar .scrrow{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px}
+.scrbar .lbl{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+.scrbar .scrpick{display:flex;align-items:center;gap:6px;flex:0 1 520px;min-width:0}
+.scrbar select{min-width:0;flex:1 1 auto;font-size:13.5px;padding:4px 8px}
+html.mob .scrbar .scrpick{flex:1 1 100%}
+.scrbar .scrn{font-size:12.5px;color:var(--ink-2)}
+.scrbar .scrdesc{margin-top:6px;font-size:12.5px;line-height:1.45;color:var(--ink-2);max-width:980px}
+.scrbar .scrdesc .scrc{display:inline-block;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);border:1px solid var(--line);border-radius:6px;padding:0 5px;margin-right:6px}
+.scrbar .scrdesc > div{display:inline} .scrbar .scrdesc .scrneed{display:block;margin-top:3px;color:var(--ink-3)}
+</style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   SYNC BETWEEN DEVICES (28 Oct 2026). Tracking / plumbing only — no number, list rule, size or feed changes.
+   Eugene (chat, 28 Oct): "I would like to have continuity across different devices for deep space board. Across the mobile
+   and desktop versions of the app. Establish the easiest free way to do this." Then: "GitHub repo version for automatic
+   sync vs cloudflare relay. Which is free? Which is more efficient and less lag? I want the one with the least lag."
+   Both are free; Cloudflare is the least lag (Singapore edge, D1 strongly consistent, no commit per save), so: his own
+   Cloudflare Worker + D1 database (tools/sync-worker/worker.js; the board carries a copy — SY_WORKER — for "Copy the
+   worker code"; the test fails on drift). The link and key live only in this browser (Settings), like the news keys.
+   - What travels: the Snapshot (snapshotObj: files, settings, lists, MAP call, filters, watchlist, decision panel,
+     Board log, Entry Check switches, MAP source, ETF list …) gzipped. Never API keys, never price history (each
+     device loads its own from Massive), never this sync link / key.
+   - Save: any change to it (adrb.* storage, settings, Board log, new files) → saved 1.5 s later (6 s at most while you
+     keep clicking) and right away when you leave the page; skipped when nothing in it changed (hash).
+   - Read: on open, every 15 s while the page is in front, and the moment you switch to the page (tab / app / device).
+     A newer save from another device is put in through the Snapshot restore path: files reload only when they differ;
+     lists, settings and filters are replaced; Board log merges (newest edit per name wins); favourites are replaced so
+     a removal travels too. Two devices saving within the same few seconds: the later one takes the other's save first
+     (its Board log edits survive the merge; its other edits in that window give way), then saves the merged board once.
+     A change made while an update is going in is saved right after it (whatever differs from the update is saved).
+     Backstop: at most 12 saves a minute per device, then a minute's pause — two devices can never re-save forever.
+   - One saved board per board: "us"; the Asia board keeps one per market ("asia-hk" …) and its own link / key storage.
+   Storage NEW: adrb.syncUrl, adrb.syncKey, adrb.syncOn, adrb.syncDev (this browser's id), adrb.syncV (last version
+   seen), adrb.syncHash (what that version holds). Test: tools/board-sync-test.js (two browsers, a local copy of the worker).
+   ===================================================================== */
+const SY_WORKER = `// Deep Space Board — sync between devices (28 Oct 2026). Cloudflare Worker + D1 (both free tier).
+// Set-up: D1 database bound as DB, secret SYNC_KEY. The board keeps one saved state per board ("slot": us, asia-hk …).
+// GET /meta?slot=   → {v, dev, name, hash, size}        (cheap: the board asks every 15 s and when you switch device)
+// GET /state?slot=  → {v, dev, name, hash, size, data}  (data = the board's gzip + base64 snapshot)
+// PUT /state?slot=  {base, dev, name, hash, data, force} → {v} · 409 {conflict, v …} when another device saved after "base"
+// Every call needs "Authorization: Bearer <SYNC_KEY>". D1 is strongly consistent: a save is visible to the next read.
+const CORS = {"Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, PUT, OPTIONS", "Access-Control-Allow-Headers": "Authorization, Content-Type", "Access-Control-Max-Age": "86400"};
+const J = (o, status = 200) => new Response(JSON.stringify(o), {status, headers: {...CORS, "content-type": "application/json", "cache-control": "no-store"}});
+const PART = 400000;                         // characters per row (D1 rows stay well under its 2 MB limit)
+let ready = false;
+async function init(db){
+  if (ready) return;
+  await db.batch([
+    db.prepare("CREATE TABLE IF NOT EXISTS meta (slot TEXT PRIMARY KEY, v INTEGER, dev TEXT, name TEXT, hash TEXT, size INTEGER, parts INTEGER)"),
+    db.prepare("CREATE TABLE IF NOT EXISTS part (slot TEXT, i INTEGER, data TEXT, PRIMARY KEY (slot, i))")
+  ]);
+  ready = true;
+}
+function same(a, b){ if (a.length !== b.length) return false; let x = 0; for (let i = 0; i < a.length; i++) x |= a.charCodeAt(i) ^ b.charCodeAt(i); return x === 0; }
+const clip = (s, n) => String(s == null ? "" : s).slice(0, n);
+export default {
+  async fetch(req, env){
+    if (req.method === "OPTIONS") return new Response(null, {status: 204, headers: CORS});
+    const u = new URL(req.url), path = u.pathname.replace(/\\/+$/, "") || "/";
+    if (path === "/") return J({ok: true, app: "deep-space-sync"});
+    if (!env.DB || !env.SYNC_KEY) return J({error: "worker not set up — add the D1 binding DB and the secret SYNC_KEY"}, 500);
+    if (!same(req.headers.get("Authorization") || "", "Bearer " + env.SYNC_KEY)) return J({error: "wrong sync key"}, 401);
+    const slot = clip(u.searchParams.get("slot") || "us", 24).replace(/[^a-z0-9-]/gi, "") || "us";
+    await init(env.DB);
+    const meta = await env.DB.prepare("SELECT v, dev, name, hash, size, parts FROM meta WHERE slot = ?").bind(slot).first();
+    const pub = m => m ? {v: m.v, dev: m.dev, name: m.name, hash: m.hash, size: m.size} : {v: 0};
+    if (path === "/meta" && req.method === "GET") return J(pub(meta));
+    if (path === "/state" && req.method === "GET") {
+      if (!meta) return J({v: 0});
+      const rows = (await env.DB.prepare("SELECT i, data FROM part WHERE slot = ? ORDER BY i").bind(slot).all()).results || [];
+      if (rows.length !== meta.parts) return J({error: "a save is still being written — try again"}, 503);
+      return J({...pub(meta), data: rows.map(r => r.data).join("")});
+    }
+    if (path === "/state" && req.method === "PUT") {
+      let b; try { b = await req.json(); } catch (e) { return J({error: "bad body"}, 400); }
+      if (meta && meta.v > (+b.base || 0) && !b.force) return J({conflict: true, ...pub(meta)}, 409);
+      const data = String(b.data || ""); if (!data) return J({error: "empty"}, 400); if (data.length > 30e6) return J({error: "too big"}, 413);
+      const v = Math.max(Date.now(), meta ? meta.v + 1 : 0), parts = [];
+      for (let i = 0; i * PART < data.length; i++) parts.push(data.slice(i * PART, (i + 1) * PART));
+      // one transaction: the old parts out, the new parts and the version in
+      await env.DB.batch([
+        env.DB.prepare("DELETE FROM part WHERE slot = ?").bind(slot),
+        ...parts.map((p, i) => env.DB.prepare("INSERT INTO part (slot, i, data) VALUES (?, ?, ?)").bind(slot, i, p)),
+        env.DB.prepare("INSERT INTO meta (slot, v, dev, name, hash, size, parts) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(slot) DO UPDATE SET v = excluded.v, dev = excluded.dev, name = excluded.name, hash = excluded.hash, size = excluded.size, parts = excluded.parts")
+          .bind(slot, v, clip(b.dev, 40), clip(b.name, 60), clip(b.hash, 80), data.length, parts.length)
+      ]);
+      return J({v});
+    }
+    return J({error: "not found"}, 404);
+  }
+};
+`;
+const SY = {busy: false, applying: false, t: null, first: 0, timer: null, last: null, err: null, lag: null, chk: 0, started: false, saves: [], hold: 0};
+const syUrl = () => String(store.get("adrb.syncUrl", "") || "").trim().replace(/\/+$/, "");
+const syKey = () => String(store.get("adrb.syncKey", "") || "").trim();
+const syOn = () => !!(store.get("adrb.syncOn", false) && syUrl() && syKey());
+const sySlot = () => (window.ASIA && window.ASIA.k) ? "asia-" + window.ASIA.k : "us";
+function syDev(){ let d = store.get("adrb.syncDev", null); if (!d) { d = Math.random().toString(36).slice(2, 10); store.set("adrb.syncDev", d); } return d; }
+function syName(){
+  const ua = navigator.userAgent || "", b = /Edg\//.test(ua) ? "Edge" : /CriOS|Chrome\//.test(ua) ? "Chrome" : /Firefox|FxiOS/.test(ua) ? "Firefox" : /Safari\//.test(ua) ? "Safari" : "browser";
+  return (document.documentElement.classList.contains("mob") || /iPhone|Android.+Mobile/.test(ua) ? "Phone" : /iPad/.test(ua) ? "iPad" : "Desktop") + " · " + b;
+}
+// cyrb53: fast string hash (no secure-context need, so it works from a local file too)
+function syHash(s){ let h1 = 0xdeadbeef, h2 = 0x41c6ce57; for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); h1 = Math.imul(h1 ^ c, 2654435761); h2 = Math.imul(h2 ^ c, 1597334677); } h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909); h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909); return (h2 >>> 0).toString(16).padStart(8, "0") + (h1 >>> 0).toString(16).padStart(8, "0"); }
+function syLocal(){ const o = snapshotObj(), k = {...o}; delete k.savedAt; delete k.summary; return {o, h: syHash(JSON.stringify(k))}; }
+const syFilesOf = f => f ? [...(f.stock || []), ...(f.etf || []), ...(f.prev || []), ...(f.breadth ? [f.breadth] : [])] : [];
+const syFilesKey = f => syFilesOf(f).map(x => `${x.name}:${(x.text || "").length}:${syHash(x.text || "")}`).join("|");
+async function syPack(s){
+  if (typeof CompressionStream !== "function") return "j:" + s;
+  const buf = new Uint8Array(await new Response(new Blob([s]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer());
+  let bin = ""; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+  return "z:" + btoa(bin);
+}
+async function syUnpack(d){
+  d = String(d || ""); if (d.startsWith("j:")) return d.slice(2);
+  const bin = atob(d.slice(2)), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return await new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream("gzip"))).text();
+}
+async function syFetch(path, opt){
+  const t0 = performance.now();
+  const res = await fetch(`${syUrl()}${path}?slot=${encodeURIComponent(sySlot())}`, {method: "GET", ...(opt || {}), cache: "no-store", headers: {"Authorization": "Bearer " + syKey(), ...(opt && opt.body ? {"Content-Type": "application/json"} : {})}});
+  SY.lag = performance.now() - t0;
+  let j = null; try { j = await res.json(); } catch (e) {}
+  return {status: res.status, j};
+}
+function syErr(r){ SY.err = r.status === 401 ? "wrong sync key" : r.status === 500 && r.j && r.j.error ? r.j.error : `sync link answered ${r.status}`; }
+const syHasFiles = () => syFilesOf(curFiles()).length > 0;
+// a change worth saving
+function sySoon(){
+  if (!syOn()) return;
+  if (SY.applying) return;                               // syPull saves right after an update if anything differs
+  const now = Date.now(); if (!SY.t) SY.first = now;
+  clearTimeout(SY.t); SY.t = setTimeout(() => { SY.t = null; syPush(); }, Math.max(0, Math.min(1500, SY.first + 6000 - now)));
+}
+async function syPush(){
+  if (!syOn() || SY.applying) return;
+  if (SY.busy) { sySoon(); return; }
+  if (!syHasFiles()) return;                             // never overwrite the saved board with an empty one
+  const {o, h} = syLocal(); if (h === store.get("adrb.syncHash", null)) return;
+  // backstop: never more than 12 saves a minute (two devices can't keep re-saving to each other); try again in a minute
+  const now = Date.now(); SY.saves = SY.saves.filter(t => now - t < 60000);
+  if (now < SY.hold) return;
+  if (SY.saves.length >= 12) { SY.hold = now + 60000; SY.err = "paused for a minute (too many saves)"; syPaint(); setTimeout(() => { SY.err = null; sySoon(); }, 60500); return; }
+  SY.saves.push(now);
+  SY.busy = true; let again = false;
+  try {
+    const data = await syPack(JSON.stringify(o));
+    const r = await syFetch("/state", {method: "PUT", body: JSON.stringify({base: store.get("adrb.syncV", 0) || 0, dev: syDev(), name: syName(), hash: h, data})});
+    if (r.status === 200 && r.j && r.j.v) { store.set("adrb.syncV", r.j.v); store.set("adrb.syncHash", h); SY.last = {k: "saved", at: Date.now()}; SY.err = null; }
+    else if (r.status === 409) again = true;
+    else syErr(r);
+  } catch (e) { SY.err = "couldn't reach the sync link"; }
+  finally { SY.busy = false; syPaint(); }
+  if (again) await syPull();                             // another device saved first: take theirs, then save the merge
+}
+async function syCheck(force){
+  if (!syOn() || SY.busy || SY.applying) return;
+  const now = Date.now(); if (!force && now - SY.chk < 2000) return; SY.chk = now;
+  let r; try { r = await syFetch("/meta"); } catch (e) { SY.err = "couldn't reach the sync link"; syPaint(); return; }
+  if (r.status !== 200 || !r.j) { syErr(r); syPaint(); return; }
+  SY.err = null;
+  const v = +r.j.v || 0, mine = +store.get("adrb.syncV", 0) || 0;
+  if (!v || v < mine) { store.set("adrb.syncV", 0); store.set("adrb.syncHash", null); await syPush(); return; }   // nothing saved yet (or a new database)
+  if (v > mine) { if (r.j.hash && r.j.hash === store.get("adrb.syncHash", null)) store.set("adrb.syncV", v); else await syPull(); }
+  else if (SY.t == null && syHasFiles() && syLocal().h !== store.get("adrb.syncHash", null)) await syPush();      // a change made while offline
+  syPaint();
+}
+async function syPull(){
+  if (SY.busy) return; SY.busy = true; let ok = false;
+  try {
+    const r = await syFetch("/state");
+    if (r.status !== 200 || !r.j) { syErr(r); return; }
+    if (!r.j.v || !r.j.data) return;
+    const o = JSON.parse(await syUnpack(r.j.data));
+    if (!o || o.kind !== "deep-space-snapshot") { SY.err = "the saved board isn't a Deep Space snapshot"; return; }
+    await syApply(o, r.j);
+    store.set("adrb.syncV", r.j.v); store.set("adrb.syncHash", r.j.hash || null);
+    SY.last = {k: "got", at: Date.now(), from: r.j.name || "another device"}; SY.err = null; ok = true;
+  } catch (e) { SY.err = "couldn't read the saved board"; console.warn("sync", e); }
+  finally { SY.busy = false; syPaint(); }
+  // the Board log merged both sides, or something changed here meanwhile: save that (syPush lets one through)
+  if (ok) setTimeout(() => { if (syOn() && !SY.applying) syPush(); }, 1200);
+}
+async function syApply(o, m){
+  SY.applying = true; clearTimeout(SY.t); SY.t = null;
+  const rf = restoreFiles, rb = restoreBar, same = syFilesKey(curFiles()) === syFilesKey(o.files), none = !syFilesOf(o.files).length;
+  try {
+    if (o.watch && Array.isArray(o.watch.items)) store.set("adrb.watch", o.watch);   // replaced, so a removed favourite goes everywhere
+    if (same || none) { restoreFiles = () => {}; restoreBar = () => {}; }
+    else restoreBar = () => rb(`Synced from <b>${esc(m.name || "another device")}</b> · saved ${esc(fmtWhen(m.v))} · ${esc(rawNames(o.files).join(" + "))}`);
+    await openSnapshot(new File([JSON.stringify(o)], "deep-space-sync.json", {type: "application/json"}));
+    if (same || none) toast(`Updated from ${m.name || "another device"}`);
+  } finally { restoreFiles = rf; restoreBar = rb; SY.applying = false; }
+}
+function syLoop(){
+  clearInterval(SY.timer); SY.timer = null;
+  if (!syOn()) { syPaint(); return; }
+  SY.timer = setInterval(() => { if (document.visibilityState === "visible") syCheck(); }, 15000);
+  syCheck(true);
+}
+// the moment you come back to the page (another tab, the app, another device), and when you leave it
+document.addEventListener("visibilitychange", () => { if (!syOn()) return; if (document.visibilityState === "visible") syCheck(true); else if (SY.t) { clearTimeout(SY.t); SY.t = null; syPush(); } });
+addEventListener("focus", () => { if (syOn()) syCheck(); });
+addEventListener("online", () => { if (syOn()) syCheck(true); });
+addEventListener("pagehide", () => { if (syOn() && SY.t) { clearTimeout(SY.t); SY.t = null; syPush(); } });
+// what counts as a change
+const _storeSetSY = store.set;
+store.set = function(k, v){ _storeSetSY.call(store, k, v); if (typeof k === "string" && k.startsWith("adrb.") && !k.startsWith("adrb.sync")) sySoon(); };
+const _saveCfgSY = saveCfg; saveCfg = function(){ const r = _saveCfgSY.apply(this, arguments); sySoon(); return r; };
+const _jnSaveSY = jnSave; jnSave = function(){ const r = _jnSaveSY.apply(this, arguments); sySoon(); return r; };
+const _filesSaveSoonSY = filesSaveSoon; filesSaveSoon = function(){ const r = _filesSaveSoonSY.apply(this, arguments); if (!FS.restoring) sySoon(); return r; };
+
+/* ---------------- status chip + Settings ---------------- */
+const syAgo = t => { const s = Math.round((Date.now() - t) / 1000); return s < 5 ? "just now" : s < 60 ? `${s}s ago` : s < 3600 ? `${Math.round(s / 60)} min ago` : fmtWhen(t); };
+function syLine(){
+  if (!syOn()) return "Off — this device keeps its own board";
+  if (SY.err) return `Not synced: ${SY.err}`;
+  const L = SY.last, lag = SY.lag != null ? ` · ${Math.round(SY.lag)} ms` : "";
+  return L ? (L.k === "saved" ? `Saved ${syAgo(L.at)}${lag}` : `Updated from ${L.from} ${syAgo(L.at)}${lag}`) : `On · checking…${lag}`;
+}
+function syPaint(){
+  let c = $("syChip");
+  if (!c) { const fi = $("fileInfo"); if (!fi) return; fi.insertAdjacentHTML("afterend", `<span class="sychip hidden" id="syChip" title="Sync between devices — click to check now (Settings → Sync between devices)"></span>`); c = $("syChip"); c.onclick = () => syCheck(true); }
+  c.classList.toggle("hidden", !syOn()); c.classList.toggle("bad", !!SY.err);
+  c.textContent = "⟳ " + (SY.err ? "Sync: " + SY.err : SY.last ? (SY.last.k === "saved" ? "Synced " : "From " + SY.last.from.split(" · ")[0] + " ") + syAgo(SY.last.at) : "Sync on");
+  const m = $("syMsg"); if (m && syOn()) m.textContent = syLine();
+}
+setInterval(() => { try { if (syOn()) syPaint(); } catch (e) {} }, 10000);
+function syMakeKey(){ const b = new Uint8Array(24); crypto.getRandomValues(b); return btoa(String.fromCharCode(...b)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
+async function syTurnOn(url, key){
+  store.set("adrb.syncUrl", String(url || "").trim()); store.set("adrb.syncKey", String(key || "").trim());
+  if (!syUrl() || !syKey()) { store.set("adrb.syncOn", false); SY.err = null; syLoop(); return "Paste the sync link and the key first"; }
+  let r; try { r = await syFetch("/meta"); } catch (e) { r = null; }
+  if (!r || r.status !== 200 || !r.j) { store.set("adrb.syncOn", false); syLoop(); if (!r) return "Couldn't reach that link — check it (it ends in .workers.dev)"; syErr(r); const e = SY.err; SY.err = null; return "Not turned on: " + e; }
+  store.set("adrb.syncOn", true); store.set("adrb.syncV", 0); store.set("adrb.syncHash", null); SY.err = null;
+  const v = +r.j.v || 0;
+  if (v) { await syPull(); syLoop(); return `On · took the board saved by ${r.j.name || "another device"} (Board log merged)`; }
+  await syPush(); syLoop(); return syHasFiles() ? "On · this device's board is now the saved board" : "On · load your files here and they'll be saved";
+}
+function syOff(){ store.set("adrb.syncOn", false); clearTimeout(SY.t); SY.t = null; syLoop(); }
+const _renderSettingsSY = renderSettings;
+renderSettings = function(){
+  _renderSettingsSY();
+  const reset = $("sReset"); if (!reset) return;
+  const box = document.createElement("div"); box.id = "sySet";
+  box.innerHTML = `<h4>Sync between devices</h4>
+    <div class="small">Keeps your desktop and phone on the same board: files, settings, lists, MAP call, filters, favourites, decisions and the Board log. Not your API keys or the price history (each device loads its own). Uses your own free Cloudflare worker — set it up once, then paste the same link and key on each device.</div>
+    <div class="row"><div>Sync link<div class="d">Your worker's address, like https://dsb-sync.yourname.workers.dev</div></div><div><input type="text" id="syUrl" value="${esc(syUrl())}" placeholder="https://dsb-sync.yourname.workers.dev" autocomplete="off" style="width:220px"></div></div>
+    <div class="row"><div>Sync key<div class="d">The password you gave the worker (SYNC_KEY). Stored only in this browser.</div></div><div><input type="password" id="syKey" value="${esc(syKey())}" placeholder="paste key" autocomplete="off" style="width:160px"> <button class="btn sm" id="syGen" title="Make a long random key — paste the same one into Cloudflare as SYNC_KEY">Make a key</button></div></div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 8px;align-items:center"><button class="btn sm primary" id="sySave">Save &amp; turn on</button><button class="btn sm" id="syNow">Sync now</button><button class="btn sm" id="syOffB">Turn off</button><span class="small" id="syMsg">${esc(syLine())}</span></div>
+    <details class="sydet"><summary>Set it up (about 5 minutes, free)</summary><ol class="small">
+      <li>Cloudflare dashboard → <b>Storage &amp; databases → D1</b> → Create database, name <b>dsb-sync</b>, location <b>Asia-Pacific</b>.</li>
+      <li><b>Workers &amp; Pages</b> → Create → Worker, name <b>dsb-sync</b> → Deploy → Edit code → paste the code (button below) → Deploy.</li>
+      <li>Worker → <b>Bindings</b> → Add → D1 database → variable name <b>DB</b> → database dsb-sync.</li>
+      <li>Worker → <b>Settings → Variables and secrets</b> → Add → type <b>Secret</b>, name <b>SYNC_KEY</b>, value = a long password ("Make a key" above makes one).</li>
+      <li>Copy the worker's address (…workers.dev). On each device: paste link + key here → <b>Save &amp; turn on</b>. Turn it on first on the device whose board you want to keep.</li></ol>
+      <button class="btn sm" id="syCopy">Copy the worker code</button> <span class="small">Free tier: 100,000 calls a day — the board uses a few thousand.</span></details>`;
+  reset.parentElement.before(box);
+  const msg = t => { const m = $("syMsg"); if (m) m.textContent = t; };
+  $("syGen").onclick = () => { const k = syMakeKey(); $("syKey").type = "text"; $("syKey").value = k; copyText(k, "Key copied — paste it into Cloudflare as SYNC_KEY"); };
+  $("sySave").onclick = async () => { msg("Checking…"); const t = await syTurnOn($("syUrl").value, $("syKey").value); syPaint(); msg(t); };
+  $("syNow").onclick = async () => { if (!syOn()) { msg("Sync is off"); return; } msg("Checking…"); if (SY.t) { clearTimeout(SY.t); SY.t = null; await syPush(); } await syCheck(true); syPaint(); };
+  $("syOffB").onclick = () => { syOff(); msg(syLine()); toast("Sync off — this device keeps its own board"); };
+  $("syCopy").onclick = () => copyText(SY_WORKER, "Worker code copied — paste it into the Cloudflare editor");
+};
+// start once the board has put back its own saved files (or found none)
+(function syStart(){
+  let n = 0;
+  const go = () => { if (SY.started) return; if (!S.snap && n++ < 20) { setTimeout(go, 300); return; } SY.started = true; syPaint(); syLoop(); };
+  if (document.readyState === "complete") setTimeout(go, 300); else addEventListener("load", () => setTimeout(go, 300));
+})();
+
+document.head.insertAdjacentHTML("beforeend", `<style>
+.sychip{display:inline-block;margin:4px 0 0;font-size:11px;color:var(--ink-3);cursor:pointer;white-space:nowrap}
+.sychip:hover{color:var(--ink)} .sychip.bad{color:var(--crit)}
+#sySet .sydet{margin:2px 0 10px} #sySet .sydet summary{cursor:pointer;font-size:12.5px;color:var(--ink-2)} #sySet ol{margin:6px 0 8px 18px;padding:0;line-height:1.5}
+</style>`);
+</script>
 
 </body>
 </html>
