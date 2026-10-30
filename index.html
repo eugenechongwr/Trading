@@ -9003,6 +9003,7 @@ async function bcMount(box, r, iv, w){
   chart.subscribeCrosshairMove(p => paint(p && p.time != null ? (typeof p.time === "object" ? `${p.time.year}-${String(p.time.month).padStart(2, "0")}-${String(p.time.day).padStart(2, "0")}` : p.time) : null));
   box.querySelectorAll("[data-bct]").forEach(b => b.onclick = () => { const o = store.get("adrb.bcShow", {}) || {}; o[b.dataset.bct] = !bcShow()[b.dataset.bct]; store.set("adrb.bcShow", o); bcMount(box, r, iv, w); });
   BC.last = {sym: r.sym, iv, own, n, bars: M.bars, ma: M.ma.map(m => ({k: m.k, last: m.last, n: m.data.length})), lines: M.lines, markers: M.markers, rs: M.rs ? M.rs.length : 0, lod: M.lod};
+  if (typeof hookRun === "function") hookRun("chart", {chart, cs, M, r, box, w, own});   // 30 Oct: hook point "chart" (BOARD HOOKS)
 }
 function bcRemount(){
   const sym = POP.drSym || WSI.cur; const dr = $("drawer");
@@ -13283,6 +13284,21 @@ html.mob .scrbar .scrpick{flex:1 1 100%}
    - One saved board per board: "us"; the Asia board keeps one per market ("asia-hk" …) and its own link / key storage.
    Storage NEW: adrb.syncUrl, adrb.syncKey, adrb.syncOn, adrb.syncDev (this browser's id), adrb.syncV (last version
    seen), adrb.syncHash (what that version holds). Test: tools/board-sync-test.js (two browsers, a local copy of the worker).
+   - 30 Oct fix (Eugene: "if I logged in to a deep space board with outdated data/ csv. The cloud will sync it to this
+     latest outdated board instead. How do we manage this issue."). Reproduced: a device that is up to date with the saved
+     board, then given an older CSV (yesterday's file still in Downloads), saved it over the newer board and every other
+     device followed it backwards. Now files are compared by the data they hold before they are saved:
+       · data date = the stock file's New York session + its save time (syStamp: the board's own buildSnap reading, so the
+         Singapore-date rule applies; the ETF file when there is no stock file). Unknown on either side → no guard.
+       · files the saved board hasn't seen (files key ≠ adrb.syncFk) that are OLDER than the saved board's (adrb.syncData)
+         are not saved: a bar asks "Keep the synced board" (takes it back) or "Make these files the synced board" (saves
+         them, once). Lists / settings / log edits wait with them — nothing is saved until you choose.
+       · a device that was behind (another device saved meanwhile) and loads files: newer than the saved board's → its
+         files are kept and everything else is taken from the saved board, then saved; older → the saved board is taken
+         and the same bar offers "Use my older files anyway".
+       · nothing is saved after opening until this device has checked the saved board once (SY.ready).
+     Plumbing only, no worker change. Storage NEW: adrb.syncFk (files key of the saved board this device last saw),
+     adrb.syncData ({asOf, mt} of those files).
    ===================================================================== */
 const SY_WORKER = `// Deep Space Board — sync between devices (28 Oct 2026). Cloudflare Worker + D1 (both free tier).
 // Set-up: D1 database bound as DB, secret SYNC_KEY. The board keeps one saved state per board ("slot": us, asia-hk …).
@@ -13290,7 +13306,11 @@ const SY_WORKER = `// Deep Space Board — sync between devices (28 Oct 2026). C
 // GET /state?slot=  → {v, dev, name, hash, size, data}  (data = the board's gzip + base64 snapshot)
 // PUT /state?slot=  {base, dev, name, hash, data, force} → {v} · 409 {conflict, v …} when another device saved after "base"
 // Every call needs "Authorization: Bearer <SYNC_KEY>". D1 is strongly consistent: a save is visible to the next read.
-const CORS = {"Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, PUT, OPTIONS", "Access-Control-Allow-Headers": "Authorization, Content-Type", "Access-Control-Max-Age": "86400"};
+// 30 Oct · Claude connector (optional; needs a second secret READ_KEY):
+// PUT  /view?slot=&dev=  {name, at, dataAt, hash, data} → {ok}   what one device's board shows (SYNC_KEY; gzip + base64)
+// POST /mcp/<READ_KEY>   MCP (Streamable HTTP, JSON responses): read-only tools board_status · board_lists · board_ticker
+//                        · board_table over the freshest view. Without READ_KEY the connector is off (404).
+const CORS = {"Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, PUT, POST, OPTIONS", "Access-Control-Allow-Headers": "Authorization, Content-Type", "Access-Control-Max-Age": "86400"};
 const J = (o, status = 200) => new Response(JSON.stringify(o), {status, headers: {...CORS, "content-type": "application/json", "cache-control": "no-store"}});
 const PART = 400000;                         // characters per row (D1 rows stay well under its 2 MB limit)
 let ready = false;
@@ -13298,17 +13318,109 @@ async function init(db){
   if (ready) return;
   await db.batch([
     db.prepare("CREATE TABLE IF NOT EXISTS meta (slot TEXT PRIMARY KEY, v INTEGER, dev TEXT, name TEXT, hash TEXT, size INTEGER, parts INTEGER)"),
-    db.prepare("CREATE TABLE IF NOT EXISTS part (slot TEXT, i INTEGER, data TEXT, PRIMARY KEY (slot, i))")
+    db.prepare("CREATE TABLE IF NOT EXISTS part (slot TEXT, i INTEGER, data TEXT, PRIMARY KEY (slot, i))"),
+    db.prepare("CREATE TABLE IF NOT EXISTS view (slot TEXT, dev TEXT, name TEXT, at INTEGER, data_at INTEGER, size INTEGER, data TEXT, PRIMARY KEY (slot, dev))")
   ]);
   ready = true;
 }
 function same(a, b){ if (a.length !== b.length) return false; let x = 0; for (let i = 0; i < a.length; i++) x |= a.charCodeAt(i) ^ b.charCodeAt(i); return x === 0; }
 const clip = (s, n) => String(s == null ? "" : s).slice(0, n);
+// ---------- Claude connector (30 Oct) ----------
+async function unpack(d){
+  d = String(d || ""); if (d.startsWith("j:")) return d.slice(2);
+  const bin = atob(d.slice(2)), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return await new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream("gzip"))).text();
+}
+const PROTO = ["2025-06-18", "2025-03-26", "2024-11-05"];
+const INSTR = "Read-only view of Eugene's Deep Space Board (his US swing-trading scanner) as it was last shown on one of his devices. The board shares what it shows while it is open; nothing here is fetched live. Always say which device and how long ago (shared_at, data_to) when you quote it. Prices are Massive (15 minutes delayed) in Live mode, else the CSV. The board never overrides MAP's call or lists.";
+const BOARD = {type: "string", description: "Which board: us (default), or asia-hk / asia-jp / asia-kr"};
+const DEVICE = {type: "string", description: "Optional: a device name such as Desktop or Phone. Default: the device whose data is newest."};
+const TOOLS = [
+  {name: "board_status", title: "Board status", description: "What the board is showing and how fresh it is: device, when it was shared, the files and their data date, Live mode (Massive data time), MAP's call and the board's tape read, how many names on each Entry Check list, and the other devices' views.", inputSchema: {type: "object", properties: {board: BOARD, device: DEVICE}}, annotations: {readOnlyHint: true}},
+  {name: "board_lists", title: "Board lists", description: "Every list as the board shows it: MAP Focus A / B / On deck-Stalk / Held, the Entry Check lists (Ready to trade, On deck), the Watchlist groups, one line per name (location, list, last, ext hours, planned entry, first resistance, room, next action).", inputSchema: {type: "object", properties: {board: BOARD, device: DEVICE}}, annotations: {readOnlyHint: true}},
+  {name: "board_ticker", title: "One ticker on the board", description: "Everything the board shows for one ticker: price, move, ext hours, RS, group, Entry Check location / list / first failing check / next action, planned entry, buy zone, first resistance, room, 1R, day-low check, earnings, size, stage, and which lists it is on.", inputSchema: {type: "object", properties: {symbol: {type: "string", description: "Ticker, e.g. NVDA"}, board: BOARD, device: DEVICE}, required: ["symbol"]}, annotations: {readOnlyHint: true}},
+  {name: "board_table", title: "Board table", description: "Rows of the board's table, strongest RS first, optionally filtered: list (ready, ondeck, map, watchlist, held, etf, all), group or sector text, minimum RS, location text. Default 40 rows.", inputSchema: {type: "object", properties: {list: {type: "string", enum: ["all", "ready", "ondeck", "map", "watchlist", "held", "etf"]}, group: {type: "string"}, min_rs: {type: "number"}, location: {type: "string"}, limit: {type: "number"}, board: BOARD, device: DEVICE}}, annotations: {readOnlyHint: true}}
+];
+const ago = ms => { const m = Math.round((Date.now() - ms) / 60000); return m < 1 ? "just now" : m < 60 ? m + " min ago" : m < 2880 ? Math.round(m / 60) + " h ago" : Math.round(m / 1440) + " days ago"; };
+async function views(db, slot){
+  const rows = (await db.prepare("SELECT dev, name, at, data_at, size, data FROM view WHERE slot = ? ORDER BY data_at DESC, at DESC").bind(slot).all()).results || [];
+  return rows;
+}
+async function pick(db, slot, device){
+  const rows = await views(db, slot); if (!rows.length) return {err: \`Nothing shared yet for board "\${slot}". Open the board with "Share with Claude" on (Settings → Sync between devices).\`};
+  const d = String(device || "").toLowerCase(), row = d ? rows.find(r => String(r.name || "").toLowerCase().includes(d)) : rows[0];
+  if (!row) return {err: \`No view from a device matching "\${device}". Shared by: \${rows.map(r => r.name).join(", ")}.\`};
+  let V; try { V = JSON.parse(await unpack(row.data)); } catch (e) { return {err: "The shared view couldn't be read."}; }
+  return {V, row, others: rows.filter(r => r !== row).map(r => ({device: r.name, shared_at: new Date(r.at).toISOString(), shared: ago(r.at)}))};
+}
+const lineOf = (s, n) => !n ? \`\${s} · not in the current files\` : [s, n.loc || n.status, n.list, n.last != null ? "last " + n.last : null, n.ext ? \`ext \${n.ext.tag} \${n.ext.price}\${n.ext.chg != null ? " (" + n.ext.chg + "%)" : ""}\` : null, n.entry != null ? "entry " + n.entry : null, n.firstRes != null ? "1st res " + n.firstRes : null, n.room != null ? "room " + n.room : null, n.next ? "next: " + n.next : null].filter(Boolean).join(" · ");
+function head(P){ const V = P.V; return {device: V.device, shared_at: new Date(V.at).toISOString(), shared: ago(V.at), ...V.when}; }
+async function callTool(name, a, env){
+  a = a || {}; const slot = clip(a.board || "us", 24).replace(/[^a-z0-9-]/gi, "") || "us";
+  const P = await pick(env.DB, slot, a.device); if (P.err) return {text: P.err, isError: true};
+  const V = P.V, N = V.names || {};
+  if (name === "board_status") return {text: JSON.stringify({...head(P), market: V.market, list_counts: V.counts, other_devices: P.others}, null, 1)};
+  if (name === "board_lists") {
+    const L = {}; for (const [k, syms] of Object.entries(V.lists || {})) L[k] = syms.map(s => lineOf(s, N[s]));
+    const M = {}; for (const [k, syms] of Object.entries(V.map || {})) M[k] = (syms || []).map(s => lineOf(s, N[s]));
+    const W = (V.watchlist || []).map(g => ({group: g.title, names: g.names.map(e => lineOf(e.s, N[e.s]) + (e.src ? \` [\${e.src}]\` : ""))}));
+    return {text: JSON.stringify({...head(P), map_lists: M, entry_check_lists: L, watchlist: W}, null, 1)};
+  }
+  if (name === "board_ticker") {
+    const s = clip(a.symbol, 16).toUpperCase().trim(), n = N[s];
+    if (!n) return {text: \`\${s} isn't in the board's current files (\${(V.when && V.when.files || []).join(" + ")}).\`, isError: true};
+    const on = [...Object.entries(V.map || {}).filter(([, L]) => (L || []).includes(s)).map(([k]) => "MAP " + k), ...Object.entries(V.lists || {}).filter(([, L]) => L.includes(s)).map(([k]) => k), ...(V.watchlist || []).filter(g => g.names.some(e => e.s === s)).map(g => "Watchlist: " + g.title)];
+    return {text: JSON.stringify({...head(P), symbol: s, on_lists: on, ...n}, null, 1)};
+  }
+  if (name === "board_table") {
+    const want = String(a.list || "all"), set = new Set();
+    const add = L => (L || []).forEach(s => set.add(s));
+    if (want === "ready") add((V.lists || {})["Ready to trade"]);
+    else if (want === "ondeck") Object.entries(V.lists || {}).filter(([k]) => /^On deck/.test(k)).forEach(([, L]) => add(L));
+    else if (want === "map") ["A", "B", "stalk"].forEach(k => add((V.map || {})[k]));
+    else if (want === "held") add((V.map || {}).held);
+    else if (want === "watchlist") (V.watchlist || []).forEach(g => add(g.names.map(e => e.s)));
+    let rows = Object.entries(N).filter(([s, n]) => (want === "all" ? !n.etf : want === "etf" ? n.etf : set.has(s)));
+    if (a.group) { const g = String(a.group).toLowerCase(); rows = rows.filter(([, n]) => \`\${n.group || ""} \${n.sector || ""}\`.toLowerCase().includes(g)); }
+    if (a.min_rs != null) rows = rows.filter(([, n]) => (n.rs ?? -1) >= +a.min_rs);
+    if (a.location) { const l = String(a.location).toLowerCase(); rows = rows.filter(([, n]) => String(n.loc || "").toLowerCase().includes(l)); }
+    rows.sort((x, y) => (y[1].rs ?? -1) - (x[1].rs ?? -1));
+    const lim = Math.max(1, Math.min(200, +a.limit || 40));
+    return {text: JSON.stringify({...head(P), matched: rows.length, shown: Math.min(lim, rows.length), rows: rows.slice(0, lim).map(([s, n]) => ({symbol: s, ...n}))}, null, 1)};
+  }
+  return {text: "Unknown tool " + name, isError: true};
+}
+async function rpc(m, env){
+  if (!m || typeof m !== "object" || m.id === undefined || m.id === null) return null;        // a notification: nothing to answer
+  const ok = result => ({jsonrpc: "2.0", id: m.id, result}), no = (code, message) => ({jsonrpc: "2.0", id: m.id, error: {code, message}});
+  if (m.method === "initialize") { const v = m.params && m.params.protocolVersion; return ok({protocolVersion: PROTO.includes(v) ? v : PROTO[0], capabilities: {tools: {listChanged: false}}, serverInfo: {name: "deep-space-board", title: "Deep Space Board", version: "1.0.0"}, instructions: INSTR}); }
+  if (m.method === "ping") return ok({});
+  if (m.method === "tools/list") return ok({tools: TOOLS});
+  if (m.method === "tools/call") {
+    const p = m.params || {}; if (!TOOLS.some(t => t.name === p.name)) return no(-32602, "Unknown tool " + p.name);
+    try { const r = await callTool(p.name, p.arguments, env); return ok({content: [{type: "text", text: r.text}], isError: !!r.isError}); }
+    catch (e) { return ok({content: [{type: "text", text: "The board view couldn't be read: " + (e && e.message || e)}], isError: true}); }
+  }
+  return no(-32601, "Method not found: " + m.method);
+}
+async function mcp(req, env){
+  if (req.method !== "POST") return new Response(null, {status: 405, headers: {...CORS, Allow: "POST"}});
+  let m; try { m = await req.json(); } catch (e) { return J({jsonrpc: "2.0", id: null, error: {code: -32700, message: "Parse error"}}, 400); }
+  await init(env.DB);
+  if (Array.isArray(m)) { const out = []; for (const x of m) { const r = await rpc(x, env); if (r) out.push(r); } return out.length ? J(out) : new Response(null, {status: 202, headers: CORS}); }
+  const r = await rpc(m, env); return r ? J(r) : new Response(null, {status: 202, headers: CORS});
+}
 export default {
   async fetch(req, env){
     if (req.method === "OPTIONS") return new Response(null, {status: 204, headers: CORS});
     const u = new URL(req.url), path = u.pathname.replace(/\\/+$/, "") || "/";
     if (path === "/") return J({ok: true, app: "deep-space-sync"});
+    if (path.startsWith("/mcp/") || path === "/mcp") {           // the Claude connector: its own read-only key, in the address
+      if (!env.READ_KEY || !env.DB) return J({error: "connector not set up — add the secret READ_KEY"}, 404);
+      const k = path.slice(5), bearer = (req.headers.get("Authorization") || "").replace(/^Bearer /, "");
+      if (!same(k, env.READ_KEY) && !same(bearer, env.READ_KEY)) return J({error: "not found"}, 404);
+      return mcp(req, env);
+    }
     if (!env.DB || !env.SYNC_KEY) return J({error: "worker not set up — add the D1 binding DB and the secret SYNC_KEY"}, 500);
     if (!same(req.headers.get("Authorization") || "", "Bearer " + env.SYNC_KEY)) return J({error: "wrong sync key"}, 401);
     const slot = clip(u.searchParams.get("slot") || "us", 24).replace(/[^a-z0-9-]/gi, "") || "us";
@@ -13321,6 +13433,17 @@ export default {
       const rows = (await env.DB.prepare("SELECT i, data FROM part WHERE slot = ? ORDER BY i").bind(slot).all()).results || [];
       if (rows.length !== meta.parts) return J({error: "a save is still being written — try again"}, 503);
       return J({...pub(meta), data: rows.map(r => r.data).join("")});
+    }
+    if (path === "/view" && req.method === "PUT") {
+      let b; try { b = await req.json(); } catch (e) { return J({error: "bad body"}, 400); }
+      const data = String(b.data || ""), dev = clip(u.searchParams.get("dev") || b.dev || "", 40); if (!data || !dev) return J({error: "empty"}, 400); if (data.length > 1.9e6) return J({error: "too big"}, 413);
+      const at = Date.now();
+      await env.DB.batch([
+        env.DB.prepare("INSERT INTO view (slot, dev, name, at, data_at, size, data) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(slot, dev) DO UPDATE SET name = excluded.name, at = excluded.at, data_at = excluded.data_at, size = excluded.size, data = excluded.data")
+          .bind(slot, dev, clip(b.name, 60), at, +b.dataAt || 0, data.length, data),
+        env.DB.prepare("DELETE FROM view WHERE slot = ? AND at < ?").bind(slot, at - 14 * 864e5)
+      ]);
+      return J({ok: true, at});
     }
     if (path === "/state" && req.method === "PUT") {
       let b; try { b = await req.json(); } catch (e) { return J({error: "bad body"}, 400); }
@@ -13341,7 +13464,7 @@ export default {
   }
 };
 `;
-const SY = {busy: false, applying: false, t: null, first: 0, timer: null, last: null, err: null, lag: null, chk: 0, started: false, saves: [], hold: 0};
+const SY = {busy: false, applying: false, t: null, first: 0, timer: null, last: null, err: null, lag: null, chk: 0, started: false, saves: [], hold: 0, ready: false, held: null, okOld: null, savedBy: "", stc: new Map()};
 const syUrl = () => String(store.get("adrb.syncUrl", "") || "").trim().replace(/\/+$/, "");
 const syKey = () => String(store.get("adrb.syncKey", "") || "").trim();
 const syOn = () => !!(store.get("adrb.syncOn", false) && syUrl() && syKey());
@@ -13376,6 +13499,44 @@ async function syFetch(path, opt){
 }
 function syErr(r){ SY.err = r.status === 401 ? "wrong sync key" : r.status === 500 && r.j && r.j.error ? r.j.error : `sync link answered ${r.status}`; }
 const syHasFiles = () => syFilesOf(curFiles()).length > 0;
+// 30 Oct: the data a set of files holds — the stock file's New York session + save time, read the way the board reads it
+function syStamp(f){
+  const L = f && f.stock && f.stock.length ? f.stock : f && f.etf && f.etf.length ? f.etf : null; if (!L) return null;
+  const k = syFilesKey({stock: L}); if (SY.stc.has(k)) return SY.stc.get(k);
+  let t = null; try { const s = buildSnap(L.map(x => ({name: x.name, text: x.text || "", mtime: x.mtime || null}))); if (s && s.asOf) t = {asOf: s.asOf, mt: s.mtime || 0}; } catch (e) {}
+  if (SY.stc.size > 8) SY.stc.clear(); SY.stc.set(k, t); return t;
+}
+const syOlder = (a, b) => !!(a && b && (a.asOf < b.asOf || (a.asOf === b.asOf && a.mt && b.mt && a.mt < b.mt)));
+const syStampTxt = t => !t ? "unknown" : `${jnDay(t.asOf)}${t.mt ? ` · file saved ${fmtWhen(t.mt)}` : ""}`;
+const syMark = (fk, stamp) => { store.set("adrb.syncFk", fk); store.set("adrb.syncData", stamp || null); };
+// the bar that asks before older files replace the synced board (and says so when the synced board replaced older files here)
+function syHeldPaint(){
+  let b = $("syHold");
+  if (!SY.held) { if (b) b.classList.add("hidden"); return; }
+  if (!b) { const rb = $("restoreBar"); if (!rb) return; rb.insertAdjacentHTML("afterend", `<div id="syHold" class="hidden"></div>`); b = $("syHold");
+    b.onclick = e => { const x = e.target.closest("[data-syh]"); if (x) syHeldPick(x.dataset.syh); }; }
+  const H = SY.held, from = H.from ? ` (saved by ${esc(H.from)})` : "";
+  b.innerHTML = H.kept
+    ? `<span>⟳ The files you loaded hold data to <b>${esc(syStampTxt(H.mine))}</b>. The synced board${from} is newer — data to <b>${esc(syStampTxt(H.saved))}</b> — so it was kept.</span><span class="spacer"></span><button class="btn sm" data-syh="mine">Use my older files anyway</button><button class="btn sm" data-syh="x" title="Hide this note">✕</button>`
+    : `<span>⟳ <b>Not synced.</b> These files hold data to <b>${esc(syStampTxt(H.mine))}</b>, older than the synced board${from} — data to <b>${esc(syStampTxt(H.saved))}</b>. Nothing from this device is saved until you choose.</span><span class="spacer"></span><button class="btn sm primary" data-syh="keep">Keep the synced board</button><button class="btn sm" data-syh="mine">Make these files the synced board</button>`;
+  b.classList.remove("hidden");
+}
+async function syHeldPick(k){
+  const H = SY.held; if (!H) return;
+  SY.held = null; syHeldPaint();
+  if (k === "x") return;
+  if (k === "keep") { await syPull(true); return; }
+  // "mine": these older files become the synced board (this once)
+  if (H.kept && H.files) { restoreFiles(H.files); filesSaveSoon(); }
+  SY.okOld = syFilesKey(H.kept && H.files ? H.files : curFiles());
+  clearTimeout(SY.t); SY.t = null; await syPush();
+}
+// the saved board's data date when this device doesn't know it yet (a device synced before 30 Oct)
+async function syLearn(){
+  try { const r = await syFetch("/state"); if (r.status !== 200 || !r.j || !r.j.data) return;
+    const o = JSON.parse(await syUnpack(r.j.data)); if (!o || !o.files) return;
+    if (+r.j.v === (+store.get("adrb.syncV", 0) || 0)) syMark(syFilesKey(o.files), syStamp(o.files)); } catch (e) {}
+}
 // a change worth saving
 function sySoon(){
   if (!syOn()) return;
@@ -13387,7 +13548,18 @@ async function syPush(){
   if (!syOn() || SY.applying) return;
   if (SY.busy) { sySoon(); return; }
   if (!syHasFiles()) return;                             // never overwrite the saved board with an empty one
+  if (!SY.ready) return;                                 // 30 Oct: not before this device has checked the saved board since it opened
   const {o, h} = syLocal(); if (h === store.get("adrb.syncHash", null)) return;
+  // 30 Oct: files the saved board hasn't seen, holding OLDER data than it → ask first (nothing is saved meanwhile)
+  const fk = syFilesKey(o.files), newFiles = fk !== store.get("adrb.syncFk", null) && fk !== SY.okOld;
+  if (newFiles && store.get("adrb.syncV", 0) && store.get("adrb.syncFk", null) == null) await syLearn();
+  if (newFiles) { const mine = syStamp(o.files), saved = store.get("adrb.syncData", null);
+    if (syOlder(mine, saved)) {
+      // another device may have saved since: then take that board (syPull weighs these files against it)
+      let m = null; try { m = await syFetch("/meta"); } catch (e) {}
+      if (m && m.status === 200 && m.j && +m.j.v > (+store.get("adrb.syncV", 0) || 0)) { await syPull(); return; }
+      if (!SY.held || SY.held.kept) { SY.held = {mine, saved, from: SY.savedBy}; syHeldPaint(); } return; } }
+  if (SY.held && !SY.held.kept) { SY.held = null; syHeldPaint(); }
   // backstop: never more than 12 saves a minute (two devices can't keep re-saving to each other); try again in a minute
   const now = Date.now(); SY.saves = SY.saves.filter(t => now - t < 60000);
   if (now < SY.hold) return;
@@ -13397,7 +13569,7 @@ async function syPush(){
   try {
     const data = await syPack(JSON.stringify(o));
     const r = await syFetch("/state", {method: "PUT", body: JSON.stringify({base: store.get("adrb.syncV", 0) || 0, dev: syDev(), name: syName(), hash: h, data})});
-    if (r.status === 200 && r.j && r.j.v) { store.set("adrb.syncV", r.j.v); store.set("adrb.syncHash", h); SY.last = {k: "saved", at: Date.now()}; SY.err = null; }
+    if (r.status === 200 && r.j && r.j.v) { store.set("adrb.syncV", r.j.v); store.set("adrb.syncHash", h); if (fk !== store.get("adrb.syncFk", null)) syMark(fk, syStamp(o.files)); if (fk === SY.okOld) SY.okOld = null; SY.savedBy = syName(); SY.last = {k: "saved", at: Date.now()}; SY.err = null; }
     else if (r.status === 409) again = true;
     else syErr(r);
   } catch (e) { SY.err = "couldn't reach the sync link"; }
@@ -13409,23 +13581,36 @@ async function syCheck(force){
   const now = Date.now(); if (!force && now - SY.chk < 2000) return; SY.chk = now;
   let r; try { r = await syFetch("/meta"); } catch (e) { SY.err = "couldn't reach the sync link"; syPaint(); return; }
   if (r.status !== 200 || !r.j) { syErr(r); syPaint(); return; }
-  SY.err = null;
+  SY.err = null; SY.ready = true; if (r.j.name) SY.savedBy = r.j.name;
   const v = +r.j.v || 0, mine = +store.get("adrb.syncV", 0) || 0;
+  // 30 Oct: a device synced before this fix and in step with the saved board — its files are the saved board's
+  if (v && v === mine && store.get("adrb.syncFk", null) == null && syHasFiles() && syLocal().h === store.get("adrb.syncHash", null)) syMark(syFilesKey(curFiles()), syStamp(curFiles()));
   if (!v || v < mine) { store.set("adrb.syncV", 0); store.set("adrb.syncHash", null); await syPush(); return; }   // nothing saved yet (or a new database)
   if (v > mine) { if (r.j.hash && r.j.hash === store.get("adrb.syncHash", null)) store.set("adrb.syncV", v); else await syPull(); }
   else if (SY.t == null && syHasFiles() && syLocal().h !== store.get("adrb.syncHash", null)) await syPush();      // a change made while offline
   syPaint();
 }
-async function syPull(){
+async function syPull(keep){
   if (SY.busy) return; SY.busy = true; let ok = false;
   try {
     const r = await syFetch("/state");
     if (r.status !== 200 || !r.j) { syErr(r); return; }
     if (!r.j.v || !r.j.data) return;
-    const o = JSON.parse(await syUnpack(r.j.data));
+    let o = JSON.parse(await syUnpack(r.j.data));
     if (!o || o.kind !== "deep-space-snapshot") { SY.err = "the saved board isn't a Deep Space snapshot"; return; }
+    // 30 Oct: files loaded here that the saved board hasn't seen — kept when they hold newer data than the saved board's;
+    // when older, the saved board wins and the bar offers them back. keep = "Keep the synced board" (always take it)
+    const lf = curFiles(), lfk = syFilesKey(lf), rfk = syFilesKey(o.files), sfk = store.get("adrb.syncFk", null), rs = syStamp(o.files);
+    let held = null;
+    if (!keep && syHasFiles() && syFilesOf(o.files).length && lfk !== rfk && sfk != null && lfk !== sfk) {
+      const ls = syStamp(lf);
+      if (syOlder(rs, ls)) o = {...o, files: lf};
+      else if (syOlder(ls, rs)) held = {kept: true, files: lf, mine: ls, saved: rs, from: r.j.name || ""};
+    }
     await syApply(o, r.j);
-    store.set("adrb.syncV", r.j.v); store.set("adrb.syncHash", r.j.hash || null);
+    store.set("adrb.syncV", r.j.v); store.set("adrb.syncHash", r.j.hash || null); syMark(rfk, rs);
+    if (r.j.name) SY.savedBy = r.j.name;
+    SY.held = held; syHeldPaint();
     SY.last = {k: "got", at: Date.now(), from: r.j.name || "another device"}; SY.err = null; ok = true;
   } catch (e) { SY.err = "couldn't read the saved board"; console.warn("sync", e); }
   finally { SY.busy = false; syPaint(); }
@@ -13483,7 +13668,7 @@ async function syTurnOn(url, key){
   if (!syUrl() || !syKey()) { store.set("adrb.syncOn", false); SY.err = null; syLoop(); return "Paste the sync link and the key first"; }
   let r; try { r = await syFetch("/meta"); } catch (e) { r = null; }
   if (!r || r.status !== 200 || !r.j) { store.set("adrb.syncOn", false); syLoop(); if (!r) return "Couldn't reach that link — check it (it ends in .workers.dev)"; syErr(r); const e = SY.err; SY.err = null; return "Not turned on: " + e; }
-  store.set("adrb.syncOn", true); store.set("adrb.syncV", 0); store.set("adrb.syncHash", null); SY.err = null;
+  store.set("adrb.syncOn", true); store.set("adrb.syncV", 0); store.set("adrb.syncHash", null); syMark(null, null); SY.err = null; SY.ready = true;
   const v = +r.j.v || 0;
   if (v) { await syPull(); syLoop(); return `On · took the board saved by ${r.j.name || "another device"} (Board log merged)`; }
   await syPush(); syLoop(); return syHasFiles() ? "On · this device's board is now the saved board" : "On · load your files here and they'll be saved";
@@ -13505,8 +13690,9 @@ renderSettings = function(){
       <li>Worker → <b>Bindings</b> → Add → D1 database → variable name <b>DB</b> → database dsb-sync.</li>
       <li>Worker → <b>Settings → Variables and secrets</b> → Add → type <b>Secret</b>, name <b>SYNC_KEY</b>, value = a long password ("Make a key" above makes one).</li>
       <li>Copy the worker's address (…workers.dev). On each device: paste link + key here → <b>Save &amp; turn on</b>. Turn it on first on the device whose board you want to keep.</li></ol>
-      <button class="btn sm" id="syCopy">Copy the worker code</button> <span class="small">Free tier: 100,000 calls a day — the board uses a few thousand.</span></details>`;
+      <button class="btn sm" id="syCopy">Copy the worker code</button> <span class="small">Free tier: 100,000 calls a day — the board uses a few thousand.</span></details>${typeof dvSetHTML === "function" ? dvSetHTML() : ""}`;
   reset.parentElement.before(box);
+  if (typeof dvSetWire === "function") dvSetWire();                                       // 30 Oct: Claude connector (last script)
   const msg = t => { const m = $("syMsg"); if (m) m.textContent = t; };
   $("syGen").onclick = () => { const k = syMakeKey(); $("syKey").type = "text"; $("syKey").value = k; copyText(k, "Key copied — paste it into Cloudflare as SYNC_KEY"); };
   $("sySave").onclick = async () => { msg("Checking…"); const t = await syTurnOn($("syUrl").value, $("syKey").value); syPaint(); msg(t); };
@@ -13524,6 +13710,8 @@ renderSettings = function(){
 document.head.insertAdjacentHTML("beforeend", `<style>
 .sychip{display:inline-block;margin:4px 0 0;font-size:11px;color:var(--ink-3);cursor:pointer;white-space:nowrap}
 .sychip:hover{color:var(--ink)} .sychip.bad{color:var(--crit)}
+#syHold{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--warn-soft);border:1px solid var(--line);border-radius:10px;padding:6px 10px;margin:0 0 10px;font-size:12px}
+#syHold.hidden{display:none}
 #sySet .sydet{margin:2px 0 10px} #sySet .sydet summary{cursor:pointer;font-size:12.5px;color:var(--ink-2)} #sySet ol{margin:6px 0 8px 18px;padding:0;line-height:1.5}
 </style>`);
 </script>
@@ -13604,13 +13792,16 @@ openSnapshot = async function(file){
      hookOn("panel", name, (r, dr, ws) => …)  after the ticker panel is fully built (workspace: tpBuild; classic: openDrawer),
                                               also when the chart window renders a name unseen (workspace layout)
      hookOn("tab", name, t => …)              after renderTab(t) has drawn a page
+     hookOn("chart", name, c => …)            after the board chart is drawn (30 Oct; c = {chart, cs, M, r, box, w, own}:
+                                              the Lightweight chart, its candle series, the model, the row, the box and
+                                              the window that owns it). Called in place at the end of bcMount — no wrapper.
    Each hook runs in its own try/catch (a broken card logs an error and the panel still opens). A section that needs a point
    that isn't here adds it in this script — one wrapper per point, here and nowhere else.
    Ratchet: tools/board-hooks-test.js counts the function overrides in index.html and fails if the count grows past the
    number in that test (lower it as old wrappers are retired; never raise it without Eugene's ok).
    Storage: none.
    ===================================================================== */
-const HOOK = {panel: [], tab: []};
+const HOOK = {panel: [], tab: [], chart: []};
 function hookOn(point, name, fn){ if (!HOOK[point]) throw new Error("No hook point " + point); HOOK[point] = HOOK[point].filter(h => h.name !== name); HOOK[point].push({name, fn}); }
 function hookRun(point, ...a){ for (const h of HOOK[point] || []) { try { h.fn(...a); } catch (e) { console.error(`hook ${point}/${h.name}:`, e); } } }
 if (WS) {
@@ -13771,4 +13962,225 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 .nc .ncsc{overflow-x:auto} table.nct{width:100%;min-width:560px} table.nct tr[data-sym]{cursor:pointer} table.nct tr.ncme td{background:var(--up-soft)}
 table.nct td.ncbest{font-weight:700;box-shadow:inset 0 -2px 0 var(--good)} table.nct td.ncx{color:var(--warn);font-weight:600}
 </style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   EXTENDED HOURS (30 Oct 2026). Display only — no zone, stop, target, state, RS, list, size, feed or log value changes;
+   the price never goes into a row (r.last / r.price stay as before).
+   Eugene (chat, 30 Oct): "Can deep space board display premarket and overnight prices for each ticker. Specifically one
+   more column for each table." · "Can the chart also have a premarket price on regular hours chart during premarket hours
+   when on live mode. With an orange dotted line across the chart similar to the default in tradingview." On the column:
+   "ext hours and switch" (one "Ext. hours" column that reads premarket or after-hours by the time of day).
+   - Source: Massive's snapshot (Live mode) — the latest minute bar when it falls outside 09:30–16:00 New York: before
+     09:30 = PM (vs the previous close), from 16:00 = AH (vs today's regular close, the snapshot's day bar). 15 minutes
+     delayed. Overnight (20:00–04:00 New York) Massive has no trades: the 20:00 after-hours close stays, marked "AH close".
+     Live mode's own refresh stops at 16:25, so this section fetches the snapshot itself 16:25–20:20 on weekdays, at Live
+     mode's interval (prices only; never the rows). Without Live: a premarket file's own premarket price (TradingView).
+     Regular hours: "—" (Last is the price). Not on the Asia board (no US extended hours there).
+   - Column: "Ext. hours" right after every table's "Last" column (the main tables, plan tables, held, inverse ETFs …);
+     in the Entry Check list and Watchlist tables right after "Entry", so Last stays next to Entry (23 Oct layout), added after each render by a MutationObserver like the Last price column (data-eh on
+     the table). Not sortable, not in Copy table / CSV.
+   - Chart: on the board chart (any interval), with Live mode on and a premarket print for the name, an orange dotted line
+     across the chart at that price with the price on the right axis, like TradingView's pre-market line. Kept up to date
+     after each refresh; gone at the open. Hook point "chart" (BOARD HOOKS). Not on the embedded TradingView chart.
+   Storage: none.
+   ===================================================================== */
+const EH = {snaps: new Map(), at: 0, busy: false};
+const EH_ORANGE = "#ff9800";
+// one name's extended-hours price: {p, chg, ref, tag "PM" | "AH" | "AH close", t, day, src "live" | "file"} · {rth: true} · null
+function ehOf(sym){
+  if (LV.cfg.on) {
+    const c = [LV.snaps && LV.snaps.get(sym), EH.snaps.get(sym)].filter(x => x && x.min && x.min.t && posN(x.min.c)).sort((a, b) => b.min.t - a.min.t)[0];
+    if (c) {
+      const t = c.min.t, m = etMin(t), d = dET(t), now = Date.now(), today = dET(now), nm = etMin(now);
+      if (m >= 9 * 60 + 30 && m < 16 * 60) return {rth: true, src: "live"};                // US regular hours, spelled out so the Asia generator leaves them alone
+      const pm = m < 9 * 60 + 30, ref = pm ? posN(c.prevDay && c.prevDay.c) : posN(c.day && c.day.c), p = c.min.c;
+      const closed = !pm && (d !== today || nm >= 20 * 60 || nm < 4 * 60);
+      return {p, ref, chg: ref ? (p / ref - 1) * 100 : null, tag: pm ? "PM" : closed ? "AH close" : "AH", t: t + 60e3, day: d !== today ? d : "", src: "live"};
+    }
+  }
+  const r = S.rowBySym && S.rowBySym.get(sym);
+  if (S.mode === "pm" && r && fin(r.pmp)) return {p: r.pmp, ref: r.prevClose ?? null, chg: fin(r.pmPct) ? r.pmPct : null, tag: "PM", t: null, day: "", src: "file"};
+  return null;
+}
+function ehCell(sym){
+  const e = ehOf(sym);
+  if (!e) return `<span class="dim" title="${LV.cfg.on ? "No premarket or after-hours trade from Massive for this name yet" : "Premarket / after-hours prices come from Live mode (Massive) or a premarket file"}">—</span>`;
+  if (e.rth) return `<span class="dim" title="Regular hours — the Last column is the price">—</span>`;
+  const when = e.t ? `${hhmm(etMin(e.t - 1) + 1)} ET${e.day ? " · " + NYW.format(new Date(e.t)) : ""}` : "file";
+  const tip = `${e.tag === "PM" ? "Premarket" : e.tag === "AH" ? "After-hours" : "After-hours close (8 pm New York; no overnight trades on Massive)"} price · ${e.src === "live" ? "Massive, 15 minutes delayed" : "from the premarket file"}${e.ref ? ` · vs ${e.tag === "PM" ? "the previous close" : "today's regular close"} ${f2(e.ref)}` : ""}`;
+  return `<span title="${esc(tip)}"><b>${f2(e.p)}</b>${e.chg != null ? ` <span class="${e.chg >= 0 ? "pos" : "neg"}">${e.chg >= 0 ? "+" : "−"}${Math.abs(e.chg).toFixed(1)}%</span>` : ""}<div class="small dim">${esc(e.tag)} · ${esc(when)}</div></span>`;
+}
+const ehLastIdx = hs => hs.findIndex(h => h.dataset.k === "last" || (h.firstChild && h.firstChild.nodeType === 3 ? h.firstChild.textContent.trim() : h.textContent.trim()) === "Last");
+function ehPaint(){
+  if (window.ASIA) return;                                                                   // Asia board: no US extended hours
+  document.querySelectorAll("table:not([data-eh])").forEach(t => {
+    if ((t.classList.contains("s61t") || t.classList.contains("wlt")) && !t.dataset.lc) return;      // the Last column goes in first
+    const hs = [...t.querySelectorAll(":scope > thead > tr > th")]; if (!hs.length) return;
+    // Entry Check list + Watchlist tables keep Last right before Entry (23 Oct layout): Ext. hours goes after Entry there
+    const ec = t.classList.contains("s61t") || t.classList.contains("wlt"), li = ehLastIdx(hs), i = ec && li >= 0 && hs[li + 1] && /^Entry/.test(hs[li + 1].textContent.trim()) ? li + 1 : li;
+    if (i < 0 || !t.querySelector(":scope > tbody > tr[data-sym]")) return;
+    t.dataset.eh = 1;
+    hs[i].insertAdjacentHTML("afterend", `<th class="ehh" title="Ext. hours: premarket (before 09:30 New York) or after-hours (from 16:00) price and move — Massive in Live mode, 15 minutes delayed; a premarket file's own premarket price. Overnight (20:00–04:00) there are no trades on Massive: the 8 pm after-hours close stays.">Ext. hours<span class="h">PM / AH</span></th>`);
+    t.querySelectorAll(":scope > tbody > tr").forEach(tr => {
+      if (!tr.dataset.sym) { const cs = tr.children.length === 1 && tr.querySelector(":scope > td[colspan]"); if (cs) cs.colSpan = cs.colSpan + 1; return; }
+      const cs = tr.querySelector(":scope > td[colspan]"); if (cs) { cs.colSpan = cs.colSpan + 1; return; }
+      if (tr.children.length !== hs.length) return;
+      tr.children[i].insertAdjacentHTML("afterend", `<td class="eh" data-ehs="${esc(tr.dataset.sym)}">${ehCell(tr.dataset.sym)}</td>`);
+    });
+  });
+}
+// new prices: cells in place, chart lines moved
+function ehRefresh(){ document.querySelectorAll("td.eh[data-ehs]").forEach(td => { td.innerHTML = ehCell(td.dataset.ehs); }); ehCharts(); }
+// the board chart's pre-market line (live premarket only)
+function ehLineSync(box){
+  const c = box && box._ehc; if (!c) return;
+  const e = ehOf(c.sym), want = e && e.src === "live" && e.tag === "PM" ? e.p : null;
+  try {
+    if (want == null) { if (c.pl) { c.cs.removePriceLine(c.pl); c.pl = null; } }
+    else if (c.pl) c.pl.applyOptions(c.w.JSON.parse(JSON.stringify({price: want})));
+    else c.pl = c.cs.createPriceLine(c.w.JSON.parse(JSON.stringify({price: want, color: EH_ORANGE, lineWidth: 1, lineStyle: 1, axisLabelVisible: true, axisLabelColor: EH_ORANGE, title: "Pre-market"})));
+  } catch (e) { box._ehc = null; return; }
+  if (BC.last && BC.last.sym === c.sym && BC.last.own === c.own) BC.last.eh = want == null ? null : {price: want, color: EH_ORANGE, style: "dotted"};
+}
+function ehCharts(){
+  ehLineSync($("tvbox"));
+  try { if (typeof popLive === "function" && popLive()) ehLineSync(POP.w.document.getElementById("pTvBox")); } catch (e) {}
+}
+hookOn("chart", "ehline", c => { c.box._ehc = {cs: c.cs, w: c.w, sym: c.r.sym, own: c.own, pl: null}; ehLineSync(c.box); });
+{ let tm = null; new MutationObserver(() => { clearTimeout(tm); tm = setTimeout(() => { try { ehPaint(); ehCharts(); } catch (e) { console.warn("ext hours", e); } }, 40); }).observe(document.body, {childList: true, subtree: true}); }
+// after-hours: Live mode's refresh stops at 16:25 New York; keep the snapshot coming until 20:20 (prices only)
+async function ehFetch(){
+  if (EH.busy || !LV.cfg.on || !newsKey()) return;
+  const syms = liveUniverse(); if (!syms.length) return;
+  EH.busy = true;
+  try {
+    const got = new Map(), chunks = [];
+    for (let i = 0; i < syms.length; i += 200) chunks.push(syms.slice(i, i + 200));
+    await pool(chunks, 3, async ch => { const j = await mGet("/v2/snapshot/locale/us/markets/stocks/tickers", {tickers: ch.join(",")}); for (const x of (j.tickers || [])) got.set(x.ticker, x); });
+    if (got.size) { EH.snaps = got; EH.at = Date.now(); ehRefresh(); }
+  } catch (e) { console.warn("ext hours fetch", e && e.msg || e); }
+  finally { EH.busy = false; }
+}
+function ehTick(){
+  if (!LV.cfg.on || LV.busy || document.hidden) return;
+  const now = Date.now(), wd = NYW.format(new Date(now)), m = etMin(now);
+  if (wd === "Sat" || wd === "Sun" || m < 16 * 60 + 25 || m > 20 * 60 + 20) return;
+  if (now - EH.at >= (LV.cfg.every || 15) * 60e3) ehFetch();
+}
+setInterval(ehTick, 30e3);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) ehTick(); });
+document.head.insertAdjacentHTML("beforeend", `<style>td.eh{white-space:nowrap} td.eh .small{font-size:10.5px;line-height:1.2}</style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   CLAUDE CONNECTOR (30 Oct 2026). Display / plumbing only — reads what the board already shows; changes no number, list,
+   size, feed, log or record, and writes nothing to Notion.
+   Eugene (chat, 30 Oct): "Is it possible for you to be connected to deep space board. So that you are aware of
+   calculations. Something like an mcp or api from deep space board. The live board with my data. … So that if I were to
+   ask you at any point in time. You can tell me exactly what is being displayed live in the board." Then "ok proceed".
+   - While the board is open, with sync on and "Share with Claude" on (adrb.dvOn), it sends a summary of what it shows to
+     his own sync worker (PUT /view, same link + SYNC_KEY; gzip + base64): the files and their data date, Live mode's data
+     time, MAP's call and the tape read, MAP's lists, the Entry Check lists, the Watchlist groups, and per name the numbers
+     on screen (last, move, ext hours, RS, AS, group, location, list, first failing check, next action, planned entry, buy
+     zone, first resistance, room, 1R, day-low check, earnings, size, stage, RMV) — the board's own functions, not a copy.
+     One view per device; sent 4 s after a page is drawn when it changed, and every 5 minutes while the page is in front.
+   - The worker answers Claude through an MCP connector at <sync link>/mcp/<READ_KEY> (READ_KEY = a second secret, read
+     only; the address works like a password). Tools: board_status, board_lists, board_ticker, board_table — always with the
+     device and the time it was shared. Nothing is fetched live by Claude: it reads what the board last showed.
+   - Settings → Sync between devices → "Claude connector": the switch, "Make a read key" (kept in this browser only to show
+     the address), the address to paste into claude.ai (Settings → Connectors → Add custom connector) and the steps.
+   Storage NEW: adrb.dvOn (0/1), adrb.dvKey (the read key, this browser only). The worker gains a "view" table (same D1).
+   ===================================================================== */
+const DV = {t: null, h: null, at: 0, busy: false, err: null, size: 0, last: 0};
+const dvOn = () => !!(store.get("adrb.dvOn", false) && syOn());
+const dvKey = () => String(store.get("adrb.dvKey", "") || "").trim();
+const dvAddr = () => syUrl() && dvKey() ? `${syUrl()}/mcp/${dvKey()}` : "";
+const dvN = x => x == null || !isFinite(x) ? null : +(+x).toFixed(2);
+// one name as the board shows it
+function dvRec(r){
+  const o = {name: r.desc || null, sector: r.sector || null, group: r.group || null, groupState: r.gState && r.gState !== "—" ? r.gState : null,
+    rs: r.rs ?? null, as: dvN(r.as), last: r4(r.last), chgPct: dvN(S.mode === "pm" ? r.pmPct : r.dayPct), adrPct: dvN(r.adr)};
+  if (r.etf) o.etf = true;
+  try { const e = typeof ehOf === "function" ? ehOf(r.sym) : null; if (e && !e.rth) o.ext = {tag: e.tag, price: r4(e.p), chg: dvN(e.chg), time: e.t ? `${hhmm(etMin(e.t - 1) + 1)} ET${e.day ? " " + e.day : ""}` : "premarket file"}; } catch (e) {}
+  let s = null; try { s = !r.etf && S.has.hist ? s61Of(r) : null; } catch (e) {}
+  if (s) {
+    const x = s.x, D = x.D;
+    o.loc = ecLoc(x); o.list = LIST61[s.list] ? LIST61[s.list].n : s.list; o.firstFail = s.ffTxt ? ecPlain(s.ffTxt) : null;
+    try { o.next = nextAction(r, LISTS.held.has(r.sym)); } catch (e) {}
+    o.entry = fin(x.entry) ? r4(x.entry) : null;
+    o.buyZone = fin(x.bandTop) && fin(D) ? [r4(x.bandTop), r4(x.bandTop + S61.above * D)] : null;
+    o.firstRes = !fin(x.entry) ? null : x.nh ? "NH (new highs)" : r4(x.fr);
+    o.room = !fin(x.entry) ? null : x.nh ? "NH" : dvN(x.room) + "R";
+    o.oneR = fin(D) ? r4(S61.risk * D) : null;
+    if (s.live) o.dayLow = {low: r4(s.live.lo), adrAboveLow: dvN(s.live.lodA), withinCap: !!s.live.ok};
+    o.earnings = s.er.n == null ? "unknown" : {sessions: s.er.n, exitBy: s.er.exitBy || null};
+    if (s.size && s.size.final) o.size = {grade: s.size.final[0], riskPct: s.size.final[1], shares: s.size.shares, regime: s.size.reg || null};
+    o.stage = s.stage ? s.stage.lab : null; o.rmv = fin(s.rmv) ? Math.round(s.rmv) : null;
+  } else { try { o.status = statusOf(r).t; } catch (e) {} }
+  return o;
+}
+function dvBuild(){
+  if (!S.snap) return null;
+  const live = S.snap.live ? S.snap.live : null, ny = etParts(Date.now()), L = S.has.hist ? s61Lists(true) : null;
+  const lists = {}, counts = {};
+  if (L) for (const k of Object.keys(L)) { const n = LIST61[k] ? LIST61[k].n : k; counts[n] = L[k].length; if (k !== "Background" && k !== "Out") lists[n] = L[k].map(s => s.r.sym); }
+  const names = {}; for (const r of [...S.stocks, ...S.etfs]) { try { names[r.sym] = dvRec(r); } catch (e) {} }
+  let wl = []; try { wl = wlGroups().map(([title, G]) => ({title, names: G.map(e => ({s: e.s, src: WL_SRC[e.src] || e.src}))})); } catch (e) {}
+  const tp = S.tape, rg = (() => { try { return s61Reg(); } catch (e) { return {}; } })();
+  return {kind: "deep-space-view", v: 1, at: Date.now(), device: syName(), board: sySlot(),
+    when: {new_york_now: `${ny.d} ${hhmm(ny.m)} ET`, files: rawNames(curFiles()), file_data_to: S.snap.asOf || null, session_mode: S.mode === "pm" ? "premarket" : "regular session",
+      live: live ? {data_to: `${live.date} ${hhmm(etMin(live.dataMs - 1) + 1)} ET`, phase: live.mode === "pm" ? "premarket" : "regular session", source: "Massive, 15 minutes delayed"} : null,
+      price_history_to: S.has.hist && HIST.nD ? HIST.dates[HIST.nD - 1] : null, entry_check: L ? "on" : "needs the price history (Data check → Load price history)"},
+    market: {map_call: mapRegime().v || null, board_tape_read: tp ? {read: tp.bucket, score: tp.score} : null, size_regime: rg.v ? `${rg.v} (${rg.src === "map" ? "MAP" : rg.src === "tape" ? "tape read" : "default"})` : null},
+    map: {A: [...LISTS.focus], B: typeof MAPL !== "undefined" ? [...MAPL.b] : [], stalk: typeof MAPL !== "undefined" ? [...MAPL.stalk] : [], held: [...LISTS.held]},
+    lists, counts, watchlist: wl, names};
+}
+function dvDataAt(){ const v = S.snap; return v ? (v.live ? v.live.dataMs : v.mtime || 0) || 0 : 0; }
+function dvSoon(){ if (!dvOn()) return; clearTimeout(DV.t); DV.t = setTimeout(dvPush, 4000); }
+async function dvPush(force){
+  DV.t = null; if (!dvOn() || DV.busy || !S.snap) return;
+  let V; try { V = dvBuild(); } catch (e) { DV.err = "couldn't build the summary"; console.warn("connector", e); return; }
+  if (!V) return;
+  const k = {...V}; delete k.at; delete k.when; const body = JSON.stringify(V), h = syHash(JSON.stringify(k) + JSON.stringify(V.when.live) + V.when.files.join());
+  if (!force && h === DV.h && Date.now() - DV.at < 5 * 60e3) return;
+  DV.busy = true;
+  try {
+    const data = await syPack(body);
+    const res = await fetch(`${syUrl()}/view?slot=${encodeURIComponent(sySlot())}&dev=${encodeURIComponent(syDev())}`, {method: "PUT", cache: "no-store", headers: {"Authorization": "Bearer " + syKey(), "Content-Type": "application/json"}, body: JSON.stringify({name: syName(), dataAt: dvDataAt(), data})});
+    if (res.ok) { DV.h = h; DV.at = Date.now(); DV.size = data.length; DV.err = null; }
+    else DV.err = res.status === 404 ? "the worker needs the new code (Copy the worker code → paste in Cloudflare → Deploy)" : res.status === 401 ? "wrong sync key" : `the worker answered ${res.status}`;
+  } catch (e) { DV.err = "couldn't reach the sync link"; }
+  finally { DV.busy = false; const m = $("dvMsg"); if (m) m.textContent = dvLine(); }
+}
+hookOn("tab", "connector", () => dvSoon());
+setInterval(() => { if (dvOn() && document.visibilityState === "visible") dvPush(); }, 60e3);
+document.addEventListener("visibilitychange", () => { if (dvOn() && document.visibilityState === "visible") dvSoon(); });
+const dvLine = () => !syOn() ? "Turn on sync above first — the connector uses the same worker." : !store.get("adrb.dvOn", false) ? "Off — Claude sees nothing from this device."
+  : DV.err ? `Not shared: ${DV.err}` : DV.at ? `Shared ${syAgo(DV.at)} · ${Math.round(DV.size / 1024)} KB` : "On · shares when the board next draws";
+// Settings (inside the Sync between devices block)
+function dvSetHTML(){
+  const on = !!store.get("adrb.dvOn", false), a = dvAddr();
+  return `<h4 style="margin-top:12px">Claude connector</h4>
+    <div class="small">Lets Claude read what this board shows — the lists, every name's numbers, MAP's call, the data time — through your own sync worker. Claude reads what the board last showed while it was open (it says which device and when); nothing is fetched by Claude, nothing is written back.</div>
+    <div class="row"><div>Share with Claude<div class="d">From this device. Turn it on on each device you use.</div></div><div><span class="seg" id="dvSeg"><button data-dv="0" class="${on ? "" : "on"}">Off</button><button data-dv="1" class="${on ? "on" : ""}">On</button></span></div></div>
+    <div class="row"><div>Read key<div class="d">A second password, read only. Stored in this browser only to show the address below.</div></div><div><input type="password" id="dvKeyIn" value="${esc(dvKey())}" placeholder="paste or make one" autocomplete="off" style="width:160px"> <button class="btn sm" id="dvGen">Make a read key</button></div></div>
+    <div class="row"><div>Connector address<div class="d">Works like a password — anyone with it can read your board. A new read key cuts the old address off.</div></div><div><button class="btn sm" id="dvCopy" ${a ? "" : "disabled"}>Copy the address</button></div></div>
+    <div class="small" id="dvMsg">${esc(dvLine())}</div>
+    <details class="sydet"><summary>Set it up (about 5 minutes, once)</summary><ol class="small">
+      <li><b>Copy the worker code</b> (button above) → Cloudflare → Workers &amp; Pages → dsb-sync → Edit code → paste → <b>Deploy</b>. Sync keeps working as before.</li>
+      <li>Here: <b>Make a read key</b>. In Cloudflare: Worker → <b>Settings → Variables and secrets</b> → Add → type <b>Secret</b>, name <b>READ_KEY</b>, value = that key → Deploy.</li>
+      <li>Turn <b>Share with Claude</b> on (on each device you use).</li>
+      <li>claude.ai → <b>Settings → Connectors → Add custom connector</b> → name <b>Deep Space Board</b>, URL = <b>Copy the address</b> above → Add. Then ask Claude "what's the board showing?"</li></ol></details>`;
+}
+function dvSetWire(){
+  const sg = $("dvSeg"); if (!sg) return;
+  const msg = () => { const m = $("dvMsg"); if (m) m.textContent = dvLine(); const c = $("dvCopy"); if (c) c.disabled = !dvAddr(); };
+  sg.onclick = e => { const b = e.target.closest("[data-dv]"); if (!b) return; store.set("adrb.dvOn", b.dataset.dv === "1"); sg.querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); DV.h = null; if (dvOn()) dvPush(true); msg(); };
+  $("dvKeyIn").onchange = e => { store.set("adrb.dvKey", e.target.value.trim()); msg(); };
+  $("dvGen").onclick = () => { const k = syMakeKey(); store.set("adrb.dvKey", k); $("dvKeyIn").type = "text"; $("dvKeyIn").value = k; copyText(k, "Read key copied — paste it into Cloudflare as READ_KEY"); msg(); };
+  $("dvCopy").onclick = () => { const a = dvAddr(); if (a) copyText(a, "Connector address copied — paste it into claude.ai → Settings → Connectors → Add custom connector"); };
+}
 </script>
