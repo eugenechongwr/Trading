@@ -1533,10 +1533,35 @@ function refreshStates(){
 refreshStates();
 
 /* ---------------- your lists (MAP focus + held) — kept in this browser only ---------------- */
+// 31 Oct (OPTIMISATION — speed / reliability only, no number changes): the Entry Check cache keys read the same few
+// settings ~150,000 times in one sweep of the pages. A read is now remembered until the current piece of work ends (one
+// click, one file load — the memory is dropped in a microtask), and any store.set / store.del drops that key at once, so a
+// change is always seen. Objects / arrays are still parsed fresh for every caller (same copies as before); only strings,
+// numbers, true / false / null are reused. A save that fails because the browser storage is full now says so (once per
+// page load, naming the setting) instead of being lost silently; set returns false when it failed.
 const store = {
-  get(k, d){ try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
-  set(k, v){ try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  _c: new Map(), _q: false, _full: false,
+  _raw(k){
+    if (this._c.has(k)) return this._c.get(k);
+    const raw = localStorage.getItem(k); let o = {raw};
+    if (raw != null) { const v = JSON.parse(raw); if (v === null || typeof v !== "object") o = {raw, v, prim: true}; }
+    this._c.set(k, o);
+    if (!this._q) { this._q = true; queueMicrotask(() => { this._c.clear(); this._q = false; }); }
+    return o;
+  },
+  get(k, d){ try { const o = this._raw(k); return o.raw == null ? d : o.prim ? o.v : JSON.parse(o.raw); } catch (e) { return d; } },
+  set(k, v){
+    this._c.delete(k);
+    try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); return true; }
+    catch (e) {
+      if (!this._full && /quota/i.test((e && (e.name + " " + e.message)) || "")) { this._full = true; setTimeout(() => { try { toast(`Browser storage is full — "${k}" wasn't saved. Data check → Snapshot keeps a copy; clearing old price history frees room.`); } catch (e2) {} }, 0); }
+      return false;
+    }
+  }
 };
+// any direct localStorage write (older code, a pasted snapshot, another tab's change) drops the remembered reads at once
+for (const m of ["setItem", "removeItem", "clear"]) { const f = Storage.prototype[m]; Storage.prototype[m] = function(...a){ try { store._c.clear(); } catch (e) {} return f.apply(this, a); }; }
+window.addEventListener("storage", () => store._c.clear());
 const parseTickers = s => [...new Set(String(s || "").toUpperCase().split(/[\s,;|]+/).map(t => t.includes(":") ? t.split(":").pop() : t).map(t => t.replace(/[^A-Z0-9.\-]/g, "")).filter(Boolean))];
 const LISTS = {focus: new Set(), held: new Set(), focusTxt: "", heldTxt: ""};
 function setLists(focusTxt, heldTxt){
@@ -2055,6 +2080,8 @@ function COLS(){
   // structure
   C.push(
     {k: "trend", l: "Trend", h: "9/21/50", g: "struct", cls: "l", v: r => ({Lead: 3, Mediocre: 2, Lag: 1})[r.trend] || 0, f: r => trendHTML(r.trend)},
+    // 31 Oct (display only): Structure = Lead / Repairing / Cooling / Lag from the stored daily bars + since when (STRUCTURE LABELS script)
+    {k: "lml", l: "Structure", h: "9/21/50 · since", g: "struct", cls: "l", v: r => typeof lmlSortV === "function" ? lmlSortV(r) : 0, f: r => typeof lmlCellHTML === "function" ? lmlCellHTML(r) : "—"},
     {k: "zx", l: "vs 9/21 band", h: "ADR from the top of the daily 9/21 band (Entry Check) · buy zone 0 to +0.5", g: "struct", v: r => ecX(r) ? ecX(r).dB : null, f: r => { const x = ecX(r); if (!x || !isFinite(x.dB)) return "—"; const iz = x.loc === "L1"; return `<span class="${iz ? "pos" : ""}" style="font-weight:${iz ? 650 : 400}">${sg(x.dB)}</span>`; }},
     {k: "extU", l: "From 50", h: "ADR", g: "struct", v: r => r.extU, f: r => r.extU == null ? "—" : `<span class="${r.extU > CFG.extCap ? "neg" : ""}" style="font-weight:${r.extU > CFG.extCap ? 650 : 400}">${sg(r.extU, 1)}</span>`},
     {k: "smaStep", l: "SMA gate", h: "grade step", g: "struct", v: r => r.smaStep, f: r => r.smaStep ? `<span class="neg">−${r.smaStep}</span>` : `<span class="dim">0</span>`},
@@ -2099,6 +2126,7 @@ function COLS(){
     {k: "eOpen", l: "From open", h: "%", g: "etf", etfOnly: true, v: r => pm ? null : r.openPct, f: r => pm ? "—" : `<span class="${cls(r.openPct)}">${pc(r.openPct)}</span>`},
     {k: "eRv", l: "RVOL", h: "at time", g: "etf", etfOnly: true, v: r => r.rvat ?? r.rvol, f: r => { const v = r.rvat ?? r.rvol; return v == null ? "—" : `<span style="font-weight:${v >= 1.5 ? 650 : 400}">${v.toFixed(2)}</span>`; }},
     {k: "eTrend", l: "Trend", h: "9/21/50", g: "etf", etfOnly: true, cls: "l", v: r => ({Lead: 3, Mediocre: 2, Lag: 1})[r.trend] || 0, f: r => trendHTML(r.trend)},
+    {k: "eLml", l: "Structure", h: "9/21/50 · since", g: "etf", etfOnly: true, cls: "l", v: r => typeof lmlSortV === "function" ? lmlSortV(r) : 0, f: r => typeof lmlCellHTML === "function" ? lmlCellHTML(r) : "—"},
     {k: "p21", l: "vs 21 EMA", h: "%", g: "etf", etfOnly: true, v: r => r.p21, f: r => `<span class="${cls(r.p21)}">${pc(r.p21, 1)}</span>`},
     {k: "p50", l: "vs 50 SMA", h: "%", g: "etf", etfOnly: true, v: r => r.p50, f: r => `<span class="${cls(r.p50)}">${pc(r.p50, 1)}</span>`},
     {k: "p200", l: "vs 200 SMA", h: "%", g: "etf", etfOnly: true, v: r => r.p200, f: r => `<span class="${cls(r.p200)}">${pc(r.p200, 1)}</span>`},
@@ -2182,7 +2210,7 @@ class Table {
       ${this.o.filters ? `<div class="tablehd" style="padding-top:0">${fHTML}<button class="btn sm" data-act="clear">Clear filters</button></div>` : ""}
       <div class="tablehd colgroups" style="padding-top:0"><span class="lbl">Columns</span>${COL_GROUPS.filter(([g]) => avail.has(g)).map(([g, l]) => `<label class="tog"><input type="checkbox" data-cg="${g}" ${this.groups.has(g) ? "checked" : ""}>${l}</label>`).join("")}</div>
       <div class="tscroll"><table><thead><tr>${C.map(c => `<th class="${c.cls || ""} ${c.k === this.sort.k ? "sorted" : ""}" data-k="${c.k}">${c.l}${c.k === this.sort.k ? (d < 0 ? " ↓" : " ↑") : ""}<span class="h">${c.h || "&nbsp;"}</span></th>`).join("")}</tr></thead>
-      <tbody>${rows.length ? rows.map(r => `<tr data-sym="${esc(r.sym)}" class="${r.thin && r.inPlay ? "thin" : ""}">${C.map(c => `<td class="${c.cls || ""}">${c.f(r)}</td>`).join("")}</tr>`).join("") : `<tr><td colspan="${C.length}" class="empty l">No names match.</td></tr>`}</tbody></table></div>`;
+      <tbody>${rows.length ? rows.map(r => `<tr data-sym="${esc(r.sym)}" class="${r.thin && r.inPlay ? "thin" : ""}">${C.map(c => `<td class="${c.cls || ""}">${tblCell(c, r)}</td>`).join("")}</tr>`).join("") : `<tr><td colspan="${C.length}" class="empty l">No names match.</td></tr>`}</tbody></table></div>`;
     this.wire();
   }
   wire(){
@@ -2216,6 +2244,9 @@ function copyRows(rows, cols, title){
   const head = `${title} · ${S.snap.files.map(f => f.name).join(" + ")} · ${S.mode === "pm" ? "Premarket" : "Regular session"} · bench ${S.bench.sym} · ${zoneStamp()}`;
   copyText([head, C.map(c => c.l + (c.h ? ` (${c.h})` : "")).join("\t"), ...rows.map(r => C.map(c => stripHTML(c.f(r))).join("\t"))].join("\n"), `Copied ${rows.length} rows`);
 }
+// 31 Oct (reliability only): a cell whose formatter throws shows "⚠" (error logged once per column) instead of blanking the table
+const TBL_ERR = new Set();
+function tblCell(c, r){ try { return c.f(r); } catch (e) { const k = (c.k || c.l || "?"); if (!TBL_ERR.has(k)) { TBL_ERR.add(k); console.error(`table column ${k}:`, e); } return `<span class="dim" title="This value couldn't be shown (error logged)">⚠</span>`; } }
 function download(name, text, type){ const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], {type})); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); }
 function downloadCSV(rows, cols, title){
   const C = cols.filter(c => c.k !== "_i");
@@ -2416,16 +2447,36 @@ function prefetchNews(force){
   const have = new Set(S.rows.map(r => r.sym));
   [...syms].filter(s => have.has(s)).forEach(s => getNews(s, force));
 }
+// 31 Oct (display only; Eugene: "Why is it moving. Split this into bullish moves (positive change)/ bearish moves
+// (negative change) … right now this just puts up and down moves based on ADRs its confusing"): two columns, Up and Down,
+// each biggest first, up to the list size each (gappers count as up — the gap read is an up-gap). "One list" switch
+// (localStorage adrb.mvSplit = 0) brings back the old single list, biggest first either way. Same names, same numbers.
 function renderMovers(){
   const pm = S.mode === "pm", mv = r => pm ? r.pmU : r.dayU;
-  const L = moversList();
+  const split = store.get("adrb.mvSplit", 1) !== 0;
   const on = SOURCES.filter(s => s.on()).map(s => s.label);
-  $("moversSub").textContent = `${L.length} stocks moving ${CFG.moversMin}+ ADR ${pm ? "premarket" : "today"} or gapping · biggest first · last ${CFG.newsDays} trading days${on.length ? " · " + on.join(", ") : ""}`;
-  if (!L.length) { $("movers").innerHTML = `<div class="empty">Nothing is moving ${CFG.moversMin}+ ADR in this file.</div>`; return; }
-  $("movers").innerHTML = (anyNews() ? "" : `<div class="note">Add a Massive or Finnhub key, or your relay link, in Settings to see the headlines behind these moves. The links under each name work without setup.</div>`) +
-    L.map(r => `<div class="mv"><div class="who"><b data-sym="${esc(r.sym)}">${esc(r.sym)}</b> <span class="${cls(mv(r))}" style="font-weight:650">${sg(mv(r))} ADR</span><div class="small">${esc(r.group)}</div><div class="small">${ecsHTML(r)}</div><div>${flagsHTML(r)}</div></div><div>${newsSlot(r.sym, "line2")}<div class="small" style="margin-top:3px">${newsLinks(r.sym)}</div></div></div>`).join("");
+  const one = r => `<div class="mv"><div class="who"><b data-sym="${esc(r.sym)}">${esc(r.sym)}</b> <span class="${cls(mv(r))}" style="font-weight:650">${sg(mv(r))} ADR</span><div class="small">${esc(r.group)}</div><div class="small">${ecsHTML(r)}</div><div>${flagsHTML(r)}</div></div><div>${newsSlot(r.sym, "line2")}<div class="small" style="margin-top:3px">${newsLinks(r.sym)}</div></div></div>`;
+  const sw = `<span class="seg mvsw" title="Split the movers into up and down, or one list by size (the old view)"><button data-mvsplit="1" class="${split ? "on" : ""}">Up / Down</button><button data-mvsplit="0" class="${split ? "" : "on"}">One list</button></span>`;
+  const note = anyNews() ? "" : `<div class="note">Add a Massive or Finnhub key, or your relay link, in Settings to see the headlines behind these moves. The links under each name work without setup.</div>`;
+  if (!split) {
+    const L = moversList();
+    $("moversSub").innerHTML = `${L.length} stocks moving ${CFG.moversMin}+ ADR ${pm ? "premarket" : "today"} or gapping · biggest first · last ${CFG.newsDays} trading days${on.length ? " · " + esc(on.join(", ")) : ""} ${sw}`;
+    if (!L.length) { $("movers").innerHTML = `<div class="empty">Nothing is moving ${CFG.moversMin}+ ADR in this file.</div>`; return; }
+    $("movers").innerHTML = note + L.map(one).join("");
+    hydrateNews($("movers")); return;
+  }
+  const N = CFG.moversN || 20, dir = r => { const m = mv(r); return m != null && m !== 0 ? Math.sign(m) : r.gapper ? 1 : 0; };
+  const base = S.stocks.filter(r => { const m = mv(r); return (m != null && Math.abs(m) >= CFG.moversMin) || r.gapper; });
+  const up = base.filter(r => dir(r) > 0).sort((a, b) => (mv(b) ?? 0) - (mv(a) ?? 0)).slice(0, N), dn = base.filter(r => dir(r) < 0).sort((a, b) => (mv(a) ?? 0) - (mv(b) ?? 0)).slice(0, N);
+  const nUp = base.filter(r => dir(r) > 0).length, nDn = base.filter(r => dir(r) < 0).length;
+  $("moversSub").innerHTML = `${nUp} up · ${nDn} down, ${CFG.moversMin}+ ADR ${pm ? "premarket" : "today"} (gappers count as up) · biggest first, up to ${N} each · last ${CFG.newsDays} trading days${on.length ? " · " + esc(on.join(", ")) : ""} ${sw}`;
+  if (!up.length && !dn.length) { $("movers").innerHTML = `<div class="empty">Nothing is moving ${CFG.moversMin}+ ADR in this file.</div>`; return; }
+  const col = (t, c, L, n) => `<div class="mvcol"><div class="mvh ${c}"><b>${t}</b> <span class="small">${L.length < n ? `${L.length}` : `top ${L.length} of ${n}`}</span></div>${L.length ? L.map(one).join("") : `<div class="empty small">None.</div>`}</div>`;
+  $("movers").innerHTML = note + `<div class="mvcols">${col("Up — bullish moves", "pos", up, nUp)}${col("Down — bearish moves", "neg", dn, nDn)}</div>`;
   hydrateNews($("movers"));
 }
+document.addEventListener("click", e => { const b = e.target.closest("[data-mvsplit]"); if (!b) return; store.set("adrb.mvSplit", +b.dataset.mvsplit); if (S.snap) renderMovers(); });
+document.head.insertAdjacentHTML("beforeend", `<style>.mvcols{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px}.mvcol .mvh{padding:4px 0;border-bottom:2px solid var(--line);margin-bottom:4px}.mvcol .mvh.pos{border-color:var(--up)}.mvcol .mvh.neg{border-color:var(--down)}.mvsw{margin-left:8px;vertical-align:middle}.mvsw button{font-size:11px;padding:1px 7px}</style>`);
 // your real stop: the 30-min pullback low, checked against the half-ADR ceiling
 function stopCalc(r){
   const out = $("dStopOut"); if (!out) return;
@@ -3603,7 +3654,7 @@ document.addEventListener("keydown", e => { if (e.key === "Escape") { closeDrawe
   [fi, hi].forEach(i => i.addEventListener("input", () => { clearTimeout(t); t = setTimeout(apply, 350); }));
   $("listsClear").onclick = () => { fi.value = ""; hi.value = ""; apply(); };
 })();
-$("moversRefresh").onclick = () => { if (!anyNews()) { toast("Set up a news source in Settings first"); return; } moversList().forEach(r => getNews(r.sym, true)); };
+$("moversRefresh").onclick = () => { if (!anyNews()) { toast("Set up a news source in Settings first"); return; } const box = $("movers"); new Set([...moversList().map(r => r.sym), ...[...(box ? box.querySelectorAll(".mv b[data-sym]") : [])].map(x => x.dataset.sym)]).forEach(s => getNews(s, true)); };
 window.DSB_DEBUG = {S, HIST, get CFG(){ return CFG; }, applyHist, computeHL};   // read-only hooks for outside testing
 histBoot();
 addEventListener("resize", () => { clearTimeout(window._rz); window._rz = setTimeout(() => { if (S.snap) renderTab(S.ui.tab); }, 200); });
@@ -3684,7 +3735,7 @@ function barSyms(){
 (function(){ const h = store.get("adrb.live.hist", null); if (h && h.d && h.m) for (const s in h.m) { const a = h.m[s]; LV.hist.set(s, {d: h.d, e9: a[0], e21: a[1], lastC: a[2], prof: (a[3] || []).map(p => p.map(v => v * 100))}); } })();
 function saveHist(d){
   const m = {}; for (const [s, h] of LV.hist) if (h.d === d) m[s] = [h.e9 == null ? null : +h.e9.toFixed(4), h.e21 == null ? null : +h.e21.toFixed(4), h.lastC, h.prof.map(p => p.map(v => Math.round(v / 100)))];
-  try { localStorage.setItem("adrb.live.hist", JSON.stringify({d, m})); } catch (e) { try { localStorage.removeItem("adrb.live.hist"); } catch (e2) {} }
+  store._c.delete("adrb.live.hist"); try { localStorage.setItem("adrb.live.hist", JSON.stringify({d, m})); } catch (e) { try { localStorage.removeItem("adrb.live.hist"); } catch (e2) {} }
 }
 function histCalc(bars){
   let e9 = null, e21 = null, lastC = null; const byD = new Map();
@@ -4488,7 +4539,7 @@ function planTable(list, key){
   const col = C.find(c => c.k === so.k) || C[0];
   const rows = [...list].sort((a, b) => { const va = col.v(a), vb = col.v(b); if (va == null && vb == null) return 0; if (va == null) return 1; if (vb == null) return -1; return typeof va === "string" ? so.d * va.localeCompare(vb) : so.d * (va - vb); });
   return `<div class="tscroll ptab" data-pkey="${esc(key)}" style="max-height:none"><table><thead><tr>${C.map(c => `<th class="${c.cls || ""} ${c.k === so.k ? "sorted" : ""}" ${c.nosort ? "" : `data-pk="${c.k}"`} title="${esc(c.h || "")}">${c.l}${c.k === so.k ? (so.d < 0 ? " ↓" : " ↑") : ""}</th>`).join("")}</tr></thead><tbody>
-    ${rows.map(r => { const open = S.ui.pOpen.has(key + ":" + r.sym); return `<tr data-psym="${esc(r.sym)}" class="${open ? "popen" : ""}">${C.map(c => `<td class="${c.cls || ""}">${c.f(r)}</td>`).join("")}</tr>${open ? `<tr class="pxrow"><td colspan="${C.length}"><div class="plan">${planRow(r)}</div></td></tr>` : ""}`; }).join("")}</tbody></table></div>`;
+    ${rows.map(r => { const open = S.ui.pOpen.has(key + ":" + r.sym); return `<tr data-psym="${esc(r.sym)}" class="${open ? "popen" : ""}">${C.map(c => `<td class="${c.cls || ""}">${tblCell(c, r)}</td>`).join("")}</tr>${open ? `<tr class="pxrow"><td colspan="${C.length}"><div class="plan">${planRow(r)}</div></td></tr>` : ""}`; }).join("")}</tbody></table></div>`;
 }
 function planList(list, key, wrap){
   if (S.ui.planView === "rows") return planTable(list, key);
@@ -6059,7 +6110,7 @@ function scReport(R){
 function renderSelfCheck(){
   let box = $("scBox");
   if (!box) { $("tab-data").querySelector(".lede").insertAdjacentHTML("afterend", `<div class="card g1" id="scBox"></div>`); box = $("scBox"); }
-  const R = SC.res = selfCheck(), ok = !R.fails.length, chg = R.spec.filter(s => !s.ok);
+  const R = SC.res = selfCheck(), ok = !R.fails.length, chg = R.spec.filter(s => !s.ok); SC.at = performance.now();
   box.innerHTML = `<div class="hd"><h2>Self-check</h2><span class="sub">a separate second pass over the numbers on every load — if this is red, don't trust the levels until it's fixed</span><span class="spacer"></span><button class="btn sm" id="scCopy">Copy report</button><button class="btn sm" id="scRun">Run again</button></div>
     <div class="bd"><div class="scv ${ok ? "ok" : "no"}"><b>${ok ? "✓ All " + R.n.toLocaleString() + " checks passed" : "✗ " + R.fails.length + " problem" + (R.fails.length > 1 ? "s" : "") + " found"}</b>
       <span>Recomputed for all ${S.rows.length.toLocaleString()} tickers from the CSV inputs with a short separate copy of your rules: one ADR in dollars, buy-zone line and zone, entry, widest stop, 2R, state and the SMA size step. Then checked that the plan and on-deck lists obey their filters (RS, list size, group cap, earnings, liquidity) and that no qualifying name was left off.</span></div>
@@ -6073,13 +6124,22 @@ function renderSelfCheck(){
 }
 const SC = {res: null};
 const _navBadges1 = navBadges;
+// 31 Oct (OPTIMISATION — speed only): the full self-check (~0.6 s on test files, more on real ones) ran inside every redraw.
+// It now runs once, just after the page has drawn; several redraws in a row share one run, and a fresh run made by the
+// Data check card since then is reused. Same checks, same result — the ✓ / ✗ badge appears a moment after the page.
 navBadges = function(){
   _navBadges1();
   if (!S.snap) return;
-  try { SC.res = selfCheck(); } catch (e) { SC.res = {n: 0, fails: [{sym: "—", what: "Self-check crashed: " + e.message, board: "", mine: ""}], spec: [], warn: [], at: new Date()}; }
+  const asked = performance.now();
+  clearTimeout(SC.t);
+  SC.t = setTimeout(() => { SC.t = null; if (!S.snap) return; navBadgeSC(asked); }, 30);
+};
+function navBadgeSC(asked){
+  if (!(SC.res && SC.at > asked)) { try { SC.res = selfCheck(); SC.at = performance.now(); } catch (e) { SC.res = {n: 0, fails: [{sym: "—", what: "Self-check crashed: " + e.message, board: "", mine: ""}], spec: [], warn: [], at: new Date()}; } }
+  document.querySelectorAll('#tabs button[data-tab="data"] .nb').forEach(x => x.remove());
   const b = document.querySelector('#tabs button[data-tab="data"]'), n = SC.res.fails.length;
   if (b) b.insertAdjacentHTML("beforeend", `<span class="nb ${n ? "r" : "g"}" title="${n ? n + " self-check problems — open Data check" : "Self-check: all " + SC.res.n + " checks passed"}">${n ? "✗ " + n : "✓"}</span>`);
-};
+}
 const _renderTab2 = renderTab;
 renderTab = function(t){ if (t === "data" && S.snap) renderSelfCheck(); _renderTab2(t); };   // card first, so the jump list sees it
 </script>
@@ -13827,7 +13887,7 @@ addEventListener("online", () => { if (syOn()) syCheck(true); });
 addEventListener("pagehide", () => { if (syOn() && SY.t) { clearTimeout(SY.t); SY.t = null; syPush(); } });
 // what counts as a change
 const _storeSetSY = store.set;
-store.set = function(k, v){ _storeSetSY.call(store, k, v); if (typeof k === "string" && k.startsWith("adrb.") && !k.startsWith("adrb.sync")) sySoon(); };
+store.set = function(k, v){ const ok = _storeSetSY.call(store, k, v); if (typeof k === "string" && k.startsWith("adrb.") && !k.startsWith("adrb.sync")) sySoon(); return ok; };   // 31 Oct: passes on whether the save worked
 const _saveCfgSY = saveCfg; saveCfg = function(){ const r = _saveCfgSY.apply(this, arguments); sySoon(); return r; };
 const _jnSaveSY = jnSave; jnSave = function(){ const r = _jnSaveSY.apply(this, arguments); sySoon(); return r; };
 const _filesSaveSoonSY = filesSaveSoon; filesSaveSoon = function(){ const r = _filesSaveSoonSY.apply(this, arguments); if (!FS.restoring) sySoon(); return r; };
@@ -14197,6 +14257,7 @@ mSync();
      hookOn("panel", name, (r, dr, ws) => …)  after the ticker panel is fully built (workspace: tpBuild; classic: openDrawer),
                                               also when the chart window renders a name unseen (workspace layout)
      hookOn("tab", name, t => …)              after renderTab(t) has drawn a page
+     pageOn(t, draw)                          a page of its own: renderTab(t) calls draw() (31 Oct, Universe page)
      hookOn("chart", name, c => …)            after the board chart is drawn (30 Oct; c = {chart, cs, M, r, box, w, own}:
                                               the Lightweight chart, its candle series, the model, the row, the box and
                                               the window that owns it). Called in place at the end of bcMount — no wrapper.
@@ -14209,15 +14270,28 @@ mSync();
 const HOOK = {panel: [], tab: [], chart: []};
 function hookOn(point, name, fn){ if (!HOOK[point]) throw new Error("No hook point " + point); HOOK[point] = HOOK[point].filter(h => h.name !== name); HOOK[point].push({name, fn}); }
 function hookRun(point, ...a){ for (const h of HOOK[point] || []) { try { h.fn(...a); } catch (e) { console.error(`hook ${point}/${h.name}:`, e); } } }
+// 31 Oct (reliability only — no number changes): a page or ticker panel that throws while drawing now shows a one-line
+// notice (error in the console) instead of staying blank or half drawn; the next good draw removes it.
+function hookErr(where, e){
+  console.error(`${where}:`, e);
+  const msg = `<b>Part of this ${where.startsWith("page") ? "page" : "panel"} couldn't be drawn</b> (${esc(String((e && e.message) || e).slice(0, 140))}). The rest of the board is fine — reload, or tell Claude what you were doing.`;
+  if (where.startsWith("page")) { const sec = document.getElementById("tab-" + where.slice(5)); if (!sec) return; let n = sec.querySelector(":scope > .hookerr");
+    if (!n) { sec.insertAdjacentHTML("afterbegin", `<div class="note hookerr" style="border-color:var(--crit)"></div>`); n = sec.querySelector(":scope > .hookerr"); } n.innerHTML = msg; }
+  else { try { toast(stripHTML(msg)); } catch (e2) {} }
+}
+const hookOK = t => { const sec = document.getElementById("tab-" + t), n = sec && sec.querySelector(":scope > .hookerr"); if (n) n.remove(); };
 if (WS) {
   const _tpBuildHK = tpBuild;
-  tpBuild = function(r){ const out = _tpBuildHK(r); const dr = $("drawer"); if (r && dr.classList.contains("open") && dr.classList.contains("tp")) hookRun("panel", r, dr, true); return out; };
+  tpBuild = function(r){ let out; try { out = _tpBuildHK(r); } catch (e) { hookErr("panel " + (r && r.sym), e); } const dr = $("drawer"); if (r && dr.classList.contains("open") && dr.classList.contains("tp")) hookRun("panel", r, dr, true); return out; };
 } else {
   const _openDrawerHK = openDrawer;
-  openDrawer = function(sym){ const out = _openDrawerHK(sym); const r = S.rowBySym && S.rowBySym.get(sym), dr = $("drawer"); if (r && dr.classList.contains("open") && !dr.classList.contains("invp")) hookRun("panel", r, dr, false); return out; };
+  openDrawer = function(sym){ let out; try { out = _openDrawerHK(sym); } catch (e) { hookErr("panel " + sym, e); } const r = S.rowBySym && S.rowBySym.get(sym), dr = $("drawer"); if (r && dr.classList.contains("open") && !dr.classList.contains("invp")) hookRun("panel", r, dr, false); return out; };
 }
 const _renderTabHK = renderTab;
-renderTab = function(t){ const out = _renderTabHK(t); hookRun("tab", t); return out; };
+// 31 Oct: hook point "page" — a page of its own (pageOn(t, draw)); renderTab draws it instead of the old page switch
+const PAGES = {};
+function pageOn(t, draw){ PAGES[t] = draw; }
+renderTab = function(t){ let out; try { out = PAGES[t] ? PAGES[t]() : _renderTabHK(t); hookOK(t); } catch (e) { hookErr("page " + t, e); } hookRun("tab", t); return out; };
 </script>
 <script>
 "use strict";
@@ -14588,4 +14662,794 @@ function dvSetWire(){
   $("dvGen").onclick = () => { const k = syMakeKey(); store.set("adrb.dvKey", k); $("dvKeyIn").type = "text"; $("dvKeyIn").value = k; copyText(k, "Read key copied — paste it into Cloudflare as READ_KEY"); msg(); };
   $("dvCopy").onclick = () => { const a = dvAddr(); if (a) copyText(a, "Connector address copied — paste it into claude.ai → Settings → Connectors → Add custom connector"); };
 }
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   TRADINGVIEW LISTS (31 Oct 2026). Display / tracking only — reads the lists the board already computes (Entry Check lists,
+   MAP's lists, Shakeout Reclaim, Floor Bounce, ETF setups, the short watch, the Screens) and writes them out for TradingView.
+   Changes no number, rank, state, list, size, plan, feed, Board log record or MAP import; adds no trading rule.
+   Eugene (chat, 31 Oct), on "Deep Space research → TradingView watchlists" (handover rev 2, Notion "Board-first Screening"):
+   "Deep Space Board is my research/screening tool. TradingView remains my default charting application. The build must make
+   populating TradingView watchlists simple." Then, on the plan: "add ability to select multiple Tradingview lists cards …, so
+   the output is combined" · "agree on build daily list" · "agree on the three buttons" · "agree existing buttons" (the old
+   Copy / Export TradingView buttons stay as they are) · "i will go with Option b" (one fixed TradingView list, cleared and
+   refilled each day) · "Txt layout with the playbook headings preferred" · "ETFS are also a very important part of the
+   watchlist. so be sure to build a section for this one as well for each playbook". Held back by Eugene: whole-market rows,
+   the 32 vendor screens, a new MAP packet (the feed CSV and MAP import are untouched).
+   - Watchlist page, first card "TradingView lists": tick any lists — Held · Leader Pullback (stocks / ETFs) · Shakeout Reclaim
+     (stocks; no ETF version on the board, said so) · Floor Bounce (stocks / ETFs) · Short research (stocks / ETFs) · campaigns
+     carried · favourites · any Screen · the research pool. "DS Daily" = the default ticks. Output = one combined list in a
+     fixed order, de-duplicated (a name sits under the first heading it reaches; the CSV keeps every tag).
+   - Scope: Full list (default; the whole computed list, filter bar ignored) · Filtered view (passes the filter bar; held and
+     campaigns always stay) · Selected rows (ticked in the preview).
+   - Build daily lists freezes the combined list with its session, data time and files (adrb.tvlBuild). Copy / TXT / CSV use
+     the build; when the data or the ticks have changed they build first. A build that would lose a section because data is
+     missing (no price history) never replaces the last good build of the same selection — it is kept and labelled.
+     Refresh data = the board's own price-history Update (+ Live refresh when Live mode is on). Refresh & build = both.
+   - Copy for TradingView and Download TradingView TXT carry the same text: TradingView's own list format
+     (###HEADING,EXCH:SYM,… — the format of Eugene's own exported ETF list, docs/etf-list-tradingview-2026-10-24.txt);
+     headings on by default, "Symbols only" switch. Download CSV = research / audit file, not the TradingView import.
+   - TradingView ids: set by Eugene (adrb.tvlMap) → the file's Exchange column (NASDAQ · NYSE · AMEX · CBOE · OTC; NYSE Arca
+     = AMEX as the board's tvSym) → TVL_KNOWN (Eugene's TradingView ETF list + 67 leveraged / inverse wrappers checked one by
+     one in TradingView's symbol search, 31 Oct) → unresolved: left out of the copy / TXT, listed with a box to set it. Never
+     guessed. Class-share punctuation is kept (BRK.B → NYSE:BRK.B, checked in TradingView 31 Oct).
+   - Campaigns (adrb.tvlCamp): a Shakeout Reclaim reset / arm and a Floor Bounce test or watch are remembered from the first
+     build that sees them, and stay while the board's own state says they're alive. A name missing from the day's data is
+     carried (flagged "not in today's data"), never dropped. Closed only when the rules end it (R1: expired / handed to
+     Playbook 1 / no campaign; OB: bounced away, too far, no level, no drop, liquidity). Open + the last 200 closed kept.
+   - Preview: session, each section's data status, unique names, overlaps removed, unresolved ids, held / campaigns, added /
+     dropped since the last export of the same selection (adrb.tvlLog, last 30). Messages say copied / saved — never "synced".
+   Storage NEW: adrb.tvlSel, adrb.tvlBuild, adrb.tvlLog, adrb.tvlMap, adrb.tvlCamp. Hook point "tab" (BOARD HOOKS); no override.
+   ===================================================================== */
+const TVL = {busy: false, msg: "", fb: null, pick: new Set(), pickId: null, scrOpen: false, prevOpen: false};
+const TVL_KNOWN = new Map(`AMEX:AGQ NASDAQ:AIPO NASDAQ:AIQ NASDAQ:AIRR AMEX:AMLP CBOE:ARKG CBOE:ARKK CBOE:ARKQ CBOE:ARKX AMEX:ARTY AMEX:ASHR AMEX:BITI AMEX:BITU CBOE:BITX AMEX:BLOK AMEX:BNO AMEX:BOIL NASDAQ:BOTZ AMEX:BSOL NASDAQ:BUG AMEX:BWET AMEX:CHAT NASDAQ:CIBR AMEX:COPX AMEX:CQQQ AMEX:CRAK AMEX:DBA AMEX:DBC AMEX:DIA AMEX:DOG AMEX:DPST CBOE:DRAM AMEX:DRIP AMEX:DRV NASDAQ:DTCR AMEX:DUG AMEX:DUST AMEX:DXD AMEX:EEM AMEX:EFA AMEX:EFZ AMEX:EMLP NASDAQ:EMXC AMEX:ERX AMEX:ERY NASDAQ:ETHA CBOE:ETHU AMEX:EUM CBOE:EUV AMEX:EWA AMEX:EWC AMEX:EWG AMEX:EWH AMEX:EWJ AMEX:EWS AMEX:EWT AMEX:EWU AMEX:EWW AMEX:EWY AMEX:EWZ CBOE:EZU AMEX:FAS AMEX:FAZ AMEX:FCG AMEX:FDN AMEX:FEZ AMEX:FXI AMEX:FXP AMEX:GDX AMEX:GDXJ AMEX:GLD AMEX:GLL NASDAQ:GRID AMEX:GUSH AMEX:HACK AMEX:HIBS CBOE:HUMN AMEX:HYG AMEX:IAI AMEX:IAT AMEX:IAU NASDAQ:IBB NASDAQ:IBIT NASDAQ:ICLN CBOE:IEO CBOE:IFRA CBOE:IGV AMEX:IHAK AMEX:IHE AMEX:IHF AMEX:IHI AMEX:ILF CBOE:INDA CBOE:ITA CBOE:ITB AMEX:IWM CBOE:IYT AMEX:JETS AMEX:JNUG AMEX:KBE NASDAQ:KBWB AMEX:KIE AMEX:KOLD AMEX:KORU AMEX:KRE AMEX:KWEB AMEX:LABD AMEX:LABU AMEX:LIT CBOE:LYTE CBOE:MAGS NASDAQ:MCHI AMEX:MDY AMEX:MLPX AMEX:MOO AMEX:MSOS CBOE:MTUM AMEX:NAIL AMEX:NASA AMEX:NLR AMEX:NUGT AMEX:OIH NASDAQ:OZEM CBOE:PAVE CBOE:PICK AMEX:PPA NASDAQ:PPH AMEX:PPLT AMEX:PSI AMEX:PSQ AMEX:QID NASDAQ:QQQ NASDAQ:QQQE NASDAQ:QTUM CBOE:RAM AMEX:REMX AMEX:REW NASDAQ:RING AMEX:ROBO AMEX:RSP AMEX:RWM NASDAQ:SARK AMEX:SBIT AMEX:SCO AMEX:SDOW AMEX:SDS AMEX:SH AMEX:SHLD AMEX:SIL AMEX:SILJ AMEX:SKF NASDAQ:SKYY AMEX:SLV AMEX:SLX NASDAQ:SMH NASDAQ:SOLT AMEX:SOXL AMEX:SOXS NASDAQ:SOXX AMEX:SPDN AMEX:SPHB AMEX:SPLV AMEX:SPXL AMEX:SPXS AMEX:SPXU AMEX:SPY NASDAQ:SQQQ AMEX:SRS AMEX:SRTY AMEX:TAN AMEX:TECL AMEX:TECS NASDAQ:TLT AMEX:TNA NASDAQ:TQQQ AMEX:TWM AMEX:TZA AMEX:UCO AMEX:UDOW NASDAQ:UFO AMEX:UGL AMEX:UNG AMEX:UPRO AMEX:URA AMEX:URNM AMEX:USD AMEX:USO AMEX:UUP AMEX:VGK NASDAQ:WCLD AMEX:WEBS NASDAQ:WGMI AMEX:XAR AMEX:XBI AMEX:XHB AMEX:XHS AMEX:XLB AMEX:XLC AMEX:XLE AMEX:XLF AMEX:XLI AMEX:XLK AMEX:XLP AMEX:XLRE AMEX:XLU AMEX:XLV AMEX:XLY AMEX:XME AMEX:XOP AMEX:XRT AMEX:XSD AMEX:XSW AMEX:XTL AMEX:YANG AMEX:YINN AMEX:ZSL`.trim().split(/\s+/).map(x => { const i = x.indexOf(":"); return [x.slice(i + 1), x.slice(0, i)]; }));
+const TVL_EX = {NASDAQ: "NASDAQ", NYSE: "NYSE", AMEX: "AMEX", NYSEARCA: "AMEX", NYSEAMERICAN: "AMEX", CBOE: "CBOE", OTC: "OTC"};
+const tvlEx = raw => TVL_EX[String(raw || "").toUpperCase().replace(/[^A-Z]/g, "")] || "";
+const tvlMap = () => { const o = store.get("adrb.tvlMap", {}); return o && typeof o === "object" ? o : {}; };
+const tvlRow = s => (S.rowBySym && S.rowBySym.get(s)) || null;
+const tvlSess = () => !S.snap ? null : S.snap.live && S.snap.live.date ? S.snap.live.date : S.snap.asOf || null;
+function tvlId(s){
+  const m = tvlMap()[s]; if (m && tvlEx(m)) return {tv: tvlEx(m) + ":" + s, src: "set by you"};
+  const r = tvlRow(s);
+  if (r && r.exch) { const e = tvlEx(r.exch); if (e) return {tv: e + ":" + s, src: "file"}; }
+  const k = TVL_KNOWN.get(s); if (k) return {tv: k + ":" + s, src: "TradingView list"};
+  return {tv: null, why: r && r.exch ? `the file says "${r.exch}" — not a TradingView exchange` : r ? "the file has no exchange" : "not in today's files"};
+}
+function tvlEtf(s){ const r = tvlRow(s); if (r) return !!r.etf; return (typeof ETFU !== "undefined" && ETFU.has(s)) || TVL_KNOWN.has(s) || (typeof INV !== "undefined" && INV.core.includes(s)); }
+const tvlHist = () => !!(S.has && S.has.hist && HIST.nD);
+
+/* ---------------- the lists: sections × items, in TXT order ---------------- */
+const tvlE = (s, why, st) => ({s, why, st: st || ""});
+const tvlS61 = (C, k, n) => () => { if (!C.L) C.L = s61Lists(true); return C.L[k].map(x => tvlE(x.r.sym, n, LIST61[k].n)); };
+const tvlMapList = (set, n, etf) => () => [...set].filter(s => tvlEtf(s) === etf).map(s => tvlE(s, n));
+function tvlES(C){ if (C.es === undefined) C.es = esRun(); return C.es; }
+const tvlESItems = (C, side, ready) => () => { const R = tvlES(C); if (!R) return null; return R.rows.filter(r => r.j.status !== "Out" && r.j.side === side && (ready ? r.j.status === "Ready" : r.j.status !== "Ready"))
+  .map(r => tvlE(r.sym, `ETF setup · ${r.j.status} · ${side}${r.rank ? ` · board top 3 #${r.rank}` : ""}`, r.j.status)); };
+const tvlESWraps = (C, side) => () => { const R = tvlES(C); if (!R) return null; const out = []; R.rows.filter(r => r.j.status !== "Out" && r.j.side === side && r.veh).forEach(r => (r.veh.wraps || []).forEach(w => out.push(tvlE(w, `${side === "long" ? "leveraged" : "inverse"} wrapper for ${r.sym} (${r.j.status})`)))); return out; };
+const tvlMapE = (side) => () => { const E = typeof esMapE === "function" ? esMapE() : null; return (E || []).filter(e => side === "short" ? e.side === "short" : e.side !== "short").map(e => tvlE(e.t, `MAP ETF list${e.side ? " · " + e.side : ""}`)); };
+function tvlOB(C){ if (C.ob === undefined) C.ob = obRun(); return C.ob; }
+const tvlOBItems = (C, etf, set, n) => () => { const R = tvlOB(C); if (!R) return null; return R.rows.filter(o => !!o.etf === etf && set.has(o.x.st)).map(o => tvlE(o.sym, `Floor Bounce · ${OB_ST[o.x.st].n}`, OB_ST[o.x.st].n)); };
+const tvlR1 = (C, st) => () => { const R = r1Rows(); if (!R) return null; return R.filter(o => o.x.state === st).map(o => tvlE(o.r.sym, st === 3 ? `Shakeout Reclaim · Armed (${o.x.armType === 1 ? "U&R" : "CAP"}) · ${o.x.daysLeft} left` : `Shakeout Reclaim · ${R1_ST[st]}${o.x.campDate ? " · since " + o.x.campDate : ""}`, R1_ST[st])); };
+function TVL_SECS(C){
+  const H = "hist", mapl = typeof MAPL !== "undefined" ? MAPL : {b: new Set(), stalk: new Set()};
+  const S2 = k => new Set([k]);
+  const secs = [
+    {k: "held", h: "HELD", n: "Held", perm: "your positions", items: [
+      {k: "held", n: "Held positions", def: 1, f: () => [...LISTS.held].map(s => tvlE(s, "Held"))}]},
+    {k: "p1", h: "LEADER PULLBACK", n: "Leader Pullback · stocks", perm: "Entry Check lists · MAP's lists", items: [
+      {k: "p1mA", n: "MAP Focus A", def: 1, f: tvlMapList(LISTS.focus, "MAP Focus A", false)},
+      {k: "p1mB", n: "MAP Focus B", def: 1, f: tvlMapList(mapl.b, "MAP Focus B", false)},
+      {k: "p1A", n: "Ready to trade", def: 1, need: H, f: tvlS61(C, "A-eligible", "Ready to trade")},
+      {k: "p1L2", n: "On deck · just under", def: 1, need: H, f: tvlS61(C, "OnDeck-L2", "On deck · just under")},
+      {k: "p1B1", n: "On deck · one thing missing", def: 1, need: H, f: tvlS61(C, "OnDeck-1blocker", "On deck · one thing missing")},
+      {k: "p1L3", n: "On deck · deep under", def: 1, need: H, f: tvlS61(C, "OnDeck-L3", "On deck · deep under")},
+      {k: "p1mS", n: "MAP On deck / Stalk", def: 1, f: tvlMapList(mapl.stalk, "MAP On deck / Stalk", false)},
+      {k: "p1Bg", n: "Not yet", def: 0, need: H, f: tvlS61(C, "Background", "Not yet")}]},
+    {k: "p1e", h: "LEADER PULLBACK ETFS", n: "Leader Pullback · ETFs", etf: 1, perm: "ETF setups (long side) · MAP's ETF list", items: [
+      {k: "p1eM", n: "MAP lists · ETFs", def: 1, f: () => [...tvlMapList(LISTS.focus, "MAP Focus A", true)(), ...tvlMapList(mapl.b, "MAP Focus B", true)(), ...tvlMapList(mapl.stalk, "MAP On deck / Stalk", true)()]},
+      {k: "p1eE", n: "MAP ETF list · long", def: 1, f: tvlMapE("long")},
+      {k: "p1eR", n: "ETF setups · Ready (long)", def: 1, need: H, f: tvlESItems(C, "long", true)},
+      {k: "p1eW", n: "ETF setups · Reclaim watch (long)", def: 1, need: H, f: tvlESItems(C, "long", false)},
+      {k: "p1eX", n: "Their leveraged wrappers", def: 0, need: H, f: tvlESWraps(C, "long")}]},
+    {k: "r1", h: "SHAKEOUT RECLAIM", n: "Shakeout Reclaim · stocks", perm: "experimental live · 0.10% NLV", items: [
+      {k: "r1A", n: "Armed", def: 1, need: H, f: tvlR1(C, 3)},
+      {k: "r1R", n: "Reset — watch", def: 1, need: H, f: tvlR1(C, 2)},
+      {k: "r1X", n: "Expired (armed, no trigger)", def: 0, need: H, f: tvlR1(C, 4)}]},
+    {k: "r1e", h: "SHAKEOUT RECLAIM ETFS", n: "Shakeout Reclaim · ETFs", etf: 1, perm: "", none: "The board runs Shakeout Reclaim on stocks only (former leaders) — there's no ETF version to list.", items: []},
+    {k: "ob", h: "FLOOR BOUNCE", n: "Floor Bounce · stocks", perm: "paper / watch only · never sized", items: [
+      {k: "obM", n: "MAP Floor Bounce watch", def: 1, f: () => { const O = typeof obMapO === "function" ? obMapO() : null; return (O || []).filter(o => !tvlEtf(o.t)).map(o => tvlE(o.t, "MAP Floor Bounce watch")); }},
+      {k: "obU", n: "Undercut & reclaim", def: 1, need: H, f: tvlOBItems(C, false, S2("ur"))},
+      {k: "obT", n: "First test", def: 1, need: H, f: tvlOBItems(C, false, S2("t1"))},
+      {k: "obP", n: "Approaching", def: 1, need: H, f: tvlOBItems(C, false, S2("ap"))},
+      {k: "obW", n: "Second test / tested — watch only", def: 0, need: H, f: tvlOBItems(C, false, OB_WATCH)}]},
+    {k: "obe", h: "FLOOR BOUNCE ETFS", n: "Floor Bounce · ETFs", etf: 1, perm: "paper / watch only · never sized", items: [
+      {k: "obeM", n: "MAP Floor Bounce watch · ETFs", def: 1, f: () => { const O = typeof obMapO === "function" ? obMapO() : null; return (O || []).filter(o => tvlEtf(o.t)).map(o => tvlE(o.t, "MAP Floor Bounce watch")); }},
+      {k: "obeU", n: "Undercut & reclaim", def: 1, need: H, f: tvlOBItems(C, true, S2("ur"))},
+      {k: "obeT", n: "First test", def: 1, need: H, f: tvlOBItems(C, true, S2("t1"))},
+      {k: "obeP", n: "Approaching", def: 1, need: H, f: tvlOBItems(C, true, S2("ap"))},
+      {k: "obeW", n: "Second test / tested — watch only", def: 0, need: H, f: tvlOBItems(C, true, OB_WATCH)}]},
+    {k: "sh", h: "SHORT RESEARCH", n: "Short research · stocks", perm: "watch only · no live stock shorts", items: [
+      {k: "shF", n: "At a failed bounce, no blocker", def: 0, need: H, f: () => shortList().filter(r => r.sLoc && !r.sBlock.length).sort((a, b) => (b.ss.n - a.ss.n) || ((a.rs ?? 99) - (b.rs ?? 99))).map(r => tvlE(r.sym, `Short watch · ${r.sLoc} · weakness ${r.ss.n}/7`))},
+      {k: "shM", n: "Rebounding — kept in short research memory", def: 0, need: H, f: () => tvlCampOpen(["SH"]).filter(c => c.reb || c.miss).map(c => tvlE(c.s, `Short research memory · since ${c.since} · ${c.st}${c.miss ? ` · not in today's data (last on the watch ${c.seen})` : ` · ${c.off} session${c.off === 1 ? "" : "s"} off the watch`}`, c.st))},
+      {k: "shFR", n: "Failed rally · rejection confirmed", def: 0, need: H, f: () => typeof frRows === "function" ? frRows().filter(o => o.x.st === "rej").map(o => tvlE(o.r.sym, `Failed rally research · Rejection confirmed · ${o.x.kind} ${frP(o.x.lv)}`, "Rejection confirmed")) : null},
+      {k: "shFT", n: "Failed rally · testing resistance", def: 0, need: H, f: () => typeof frRows === "function" ? frRows().filter(o => o.x.st === "test").map(o => tvlE(o.r.sym, `Failed rally research · Testing ${o.x.kind} ${frP(o.x.lv)}`, "Testing resistance")) : null},
+      {k: "shFB", n: "Failed rally · rebounding toward resistance", def: 0, need: H, f: () => typeof frRows === "function" ? frRows().filter(o => o.x.st === "reb").map(o => tvlE(o.r.sym, `Failed rally research · Rebounding toward ${o.x.kind} ${frP(o.x.lv)}`, "Rebounding toward resistance")) : null},
+      {k: "shA", n: `Weakness score ${CFG.shortMin}+ of 7 (all)`, def: 0, need: H, f: () => shortList().sort((a, b) => ((!!a.sBlock.length) - (!!b.sBlock.length)) || (b.ss.n - a.ss.n) || ((a.rs ?? 99) - (b.rs ?? 99))).map(r => tvlE(r.sym, `Short watch · weakness ${r.ss.n}/7${r.sBlock.length ? " · blocked" : ""}`))}]},
+    {k: "she", h: "SHORT RESEARCH ETFS", n: "Short research · ETFs", etf: 1, perm: "ETF setups short side · experiment", items: [
+      {k: "sheE", n: "MAP ETF list · short", def: 1, f: tvlMapE("short")},
+      {k: "sheR", n: "ETF setups · Ready (short)", def: 1, need: H, f: tvlESItems(C, "short", true)},
+      {k: "sheW", n: "ETF setups · Reclaim watch (short)", def: 1, need: H, f: tvlESItems(C, "short", false)},
+      {k: "sheX", n: "Their inverse wrappers", def: 0, need: H, f: tvlESWraps(C, "short")}]},
+    {k: "camp", h: "CAMPAIGNS CARRIED", n: "Campaigns", perm: "Shakeout Reclaim / Floor Bounce campaigns the board is tracking", items: [
+      {k: "campO", n: "Open campaigns", def: 1, f: () => tvlCampOpen().map(c => tvlE(c.s, `${c.pb === "R1" ? "Shakeout Reclaim" : "Floor Bounce"} campaign since ${c.since} · ${c.st}${c.miss ? ` · not in today's data (last seen ${c.seen})` : ""}`, c.st))}]},
+    {k: "fav", h: "FAVOURITES", n: "My favourites", perm: "", items: [
+      {k: "fav", n: "Favourites (☆)", def: 0, f: () => wlAll().items.map(x => tvlE(x.s, "Favourite"))}]},
+    {k: "scr", h: "SCREENS", n: "Screens", perm: "screen hits — context, not a readiness check", screens: 1, items: (typeof SCREENS !== "undefined" ? SCREENS : []).map(sc => ({k: "scr:" + sc.k, n: sc.t, def: 0, sc, f: () => { const miss = sc.need.filter(k => !S.has[k]); if (miss.length) return null; return (CFG.inclETF ? S.rows : S.stocks).filter(sc.f).map(r => tvlE(r.sym, "Screen · " + sc.t)); }}))},
+    {k: "pool", h: "RESEARCH POOL", n: "Research pool", perm: "for broad chart scanning — not today's attention list", items: [
+      {k: "poolM", n: "MAP source universe (Deep Space Screener export)", def: 0, f: () => { const m = msrcCur(); return m ? [...m.set].sort().map(s => tvlE(s, `MAP source universe ${m.date}`)) : null; }},
+      {k: "poolS", n: "Whole stock file", def: 0, f: () => S.stocks.map(r => r.sym).sort().map(s => tvlE(s, "Stock file"))},
+      {k: "poolE", n: "Whole ETF file", def: 0, f: () => S.etfs.map(r => r.sym).sort().map(s => tvlE(s, "ETF file"))}]}];
+  return secs;
+}
+// presets: DS Daily = every item's default; a playbook preset = that playbook's stock + ETF defaults (shorts: all their items)
+const TVL_PRE = {"DS Daily": null, "Leader Pullback": ["p1", "p1e"], "Shakeout Reclaim": ["r1"], "Floor Bounce": ["ob", "obe"], "Short research": ["sh", "she"], "Held & campaigns": ["held", "camp"], "Research pool": ["pool"]};
+function tvlPreset(name){
+  const on = {}, secs = TVL_SECS({}), P = TVL_PRE[name];
+  for (const s of secs) for (const it of s.items) { if (s.screens) continue; on[it.k] = P ? (P.includes(s.k) && (it.def || s.k === "sh" || s.k === "pool" && it.k === "poolM") ? 1 : 0) : it.def ? 1 : 0; }
+  return on;
+}
+function tvlSel(){
+  let o = store.get("adrb.tvlSel", null);
+  if (!o || typeof o !== "object" || !o.on) o = {on: tvlPreset("DS Daily"), scope: "full", head: 1};
+  if (!["full", "filtered", "picked"].includes(o.scope)) o.scope = "full";
+  if (o.head == null) o.head = 1;
+  return o;
+}
+const tvlSelSave = o => store.set("adrb.tvlSel", o);
+const tvlSame = (a, b) => { const ks = new Set([...Object.keys(a), ...Object.keys(b)]); for (const k of ks) if (!!a[k] !== !!b[k]) return false; return true; };
+function tvlLabel(on){ for (const n of Object.keys(TVL_PRE)) if (tvlSame(on, tvlPreset(n))) return n; return "Custom"; }
+const tvlFileTag = n => "DS_" + n.replace(/^DS\s+/, "").replace(/&/g, "and").replace(/[^A-Za-z0-9]+/g, "_").replace(/_+$/, "");
+
+/* ---------------- campaigns ---------------- */
+function tvlCampAll(){ const o = store.get("adrb.tvlCamp", null); return o && typeof o === "object" && o.open ? o : {open: {}, closed: [], last: ""}; }
+const TVL_SHMEM = 10;   // sessions a name stays in short research memory after it leaves the short watch (tracking, not a rule)
+function tvlCampOpen(pbs = ["R1", "OB"]){ const o = tvlCampAll(); return Object.values(o.open).filter(c => pbs.includes(c.pb)).sort((a, b) => (a.since < b.since ? -1 : a.since > b.since ? 1 : a.s < b.s ? -1 : 1)); }
+// R1 alive = reset (2) / armed (3); OB alive = a candidate or a watch status. Only from the board's own state; only forward in time.
+function tvlCampSync(){
+  const sess = tvlSess(); if (!sess || !tvlHist()) return null;
+  const o = tvlCampAll(); if (o.last && sess < o.last) return o;
+  const R = r1Rows() || [], OB = obRun(), alive = new Map(), seenSym = new Set();
+  for (const r of S.stocks) seenSym.add(r.sym);
+  for (const q of R) if (q.x.state === 2 || q.x.state === 3) alive.set("R1:" + q.r.sym, {pb: "R1", s: q.r.sym, st: R1_ST[q.x.state], since: q.x.campDate || sess});
+  const r1Known = new Map(R.map(q => [q.r.sym, q.x.state]));
+  const obKnown = new Map();
+  if (OB) for (const q of OB.rows) { obKnown.set(q.sym, q.x.st); if (OB_CAND.has(q.x.st) || OB_WATCH.has(q.x.st)) alive.set("OB:" + q.sym, {pb: "OB", s: q.sym, st: OB_ST[q.x.st].n, since: sess}); if (q.etf) seenSym.add(q.sym); }
+  // short research memory (31 Oct, Eugene: "go"): on the short watch (weakness score ≥ the Shorts setting, liquid) = alive.
+  // A name that leaves it is kept as "rebounding" for TVL_SHMEM sessions — the rebound is when a failed-rally short needs it.
+  let shL = []; try { shL = shortList(); } catch (e) {}
+  for (const r of shL) alive.set("SH:" + r.sym, {pb: "SH", s: r.sym, st: `weakness ${r.ss.n}/7${r.sLoc ? " · " + r.sLoc : ""}`, since: sess});
+  for (const [k, a] of alive) { const c = o.open[k]; o.open[k] = c ? {...c, st: a.st, seen: sess, miss: false, reb: false, off: 0} : {...a, seen: sess, miss: false, at: Date.now()}; }
+  for (const k of Object.keys(o.open)) {
+    if (alive.has(k)) continue;
+    const c = o.open[k];
+    if (c.pb === "SH") {
+      const r = S.rowBySym && S.rowBySym.get(c.s);
+      if (!r || !r.ss) { c.miss = true; continue; }
+      let n = 0, d = c.seen; while (d && d < sess && n < 60) { d = nextSess(d); n++; }
+      if (n > TVL_SHMEM) { o.closed.push({...c, end: sess, endWhy: `off the short watch for ${n} sessions`}); delete o.open[k]; continue; }
+      Object.assign(c, {miss: false, reb: true, off: n, st: `rebounding — weakness now ${r.ss.n}/7${r.sLoc ? " · " + r.sLoc : ""}`});
+      continue;
+    }
+    // the board read the name today and its state is not alive → the rule ended it; not read → carried
+    const read = c.pb === "R1" ? seenSym.has(c.s) && HIST.idx && HIST.idx.has(c.s) : obKnown.has(c.s) && obKnown.get(c.s) !== "err";
+    if (read) {
+      const st = c.pb === "R1" ? (r1Known.has(c.s) ? R1_ST[r1Known.get(c.s)] : "no campaign") : OB_ST[obKnown.get(c.s)].n;
+      o.closed.push({...c, end: sess, endWhy: st}); delete o.open[k];
+    } else c.miss = true;
+  }
+  if (o.closed.length > 200) o.closed = o.closed.slice(-200);
+  o.last = sess; const js = JSON.stringify(o); if (js !== TVL.campJs) { TVL.campJs = js; store.set("adrb.tvlCamp", o); } return o;
+}
+
+/* ---------------- the model and the build ---------------- */
+function tvlStatus(need){
+  if (need === "hist") {
+    if (!tvlHist()) return {st: "na", why: "needs the price history (Load price history)"};
+    const st = feedStale(); if (st) return {st: "partial", why: `price history ends ${st.last}, should run to ${st.want}`};
+  }
+  return {st: "ok", why: ""};
+}
+function tvlModel(sel, opt = {}){
+  const C = {}, secs = TVL_SECS(C), on = sel.on, bySym = new Map(), order = [];
+  let hits = 0;
+  const outSecs = secs.map(sec => {
+    const so = {k: sec.k, h: sec.h, n: sec.n, perm: sec.perm, etf: !!sec.etf, none: sec.none || "", screens: !!sec.screens, st: "ok", why: [], wm: {}, items: [], hits: 0, n1: 0};
+    for (const it of sec.items) {
+      const tick = !!on[it.k];
+      const io = {k: it.k, n: it.n, on: tick, def: !!it.def, st: "ok", why: "", count: null};
+      // screen counts only when ticked or the Screens fold is open (they're the heaviest)
+      if (sec.screens && !tick && !opt.allScreens) { so.items.push(io); continue; }
+      const s0 = it.need ? tvlStatus(it.need) : {st: "ok", why: ""};
+      let L = null;
+      if (s0.st !== "na") { try { L = it.f(); } catch (e) { console.error("TradingView lists", it.k, e); io.st = "na"; io.why = "couldn't be read (error logged)"; } }
+      if (L === null && io.st === "ok") { io.st = "na"; io.why = s0.st === "na" ? s0.why : it.sc ? `needs ${it.sc.need.filter(k => !S.has[k]).join(", ")}` : "not available (nothing saved / imported)"; }
+      else if (L && s0.st === "partial") { io.st = "partial"; io.why = s0.why; }
+      if (L) io.count = L.length;
+      if (tick) {
+        if (io.st !== "ok") { so.st = so.st === "na" || io.st === "na" ? "na" : "partial"; (so.wm[io.why] = so.wm[io.why] || []).push(it.n); }
+        for (const e of L || []) {
+          hits++; so.hits++;
+          let x = bySym.get(e.s);
+          if (!x) { x = {s: e.s, sec: sec.k, h: sec.h, tags: [], whys: [], sts: [], etf: tvlEtf(e.s)}; bySym.set(e.s, x); order.push(x); so.n1++; }
+          const tag = sec.n + " › " + it.n; if (!x.tags.includes(tag)) { x.tags.push(tag); x.whys.push(e.why); if (e.st) x.sts.push(e.st); }
+        }
+      }
+      so.items.push(io);
+    }
+    // one line per reason; the item names only when the reason isn't shared by every ticked item
+    const nOn = so.items.filter(i => i.on).length;
+    so.why = Object.entries(so.wm).map(([w, ns]) => ns.length === nOn ? w : `${ns.join(", ")}: ${w}`); delete so.wm;
+    return so;
+  });
+  const held = LISTS.held, camp = new Map(tvlCampOpen().map(c => [c.s, c]));
+  for (const x of order) {
+    const r = tvlRow(x.s), id = tvlId(x.s);
+    x.tv = id.tv; x.tvSrc = id.src || ""; x.unres = id.tv ? "" : id.why;
+    x.held = held.has(x.s); const c = camp.get(x.s); x.camp = c ? `${c.pb} since ${c.since}` : "";
+    x.f = r ? !!gOK(r) : null;
+    x.name = r ? r.desc || "" : ""; x.exch = r ? r.exch || "" : ""; x.sector = r ? r.sector || "" : ""; x.group = r ? r.group || "" : "";
+    x.last = r ? r4(r.last) : null; x.chg = r ? r4(S.mode === "pm" ? r.pmPct : r.dayPct) : null; x.rs = r && r.rs != null ? r.rs : null; x.adr = r ? r4(r.adr) : null;
+    x.inMap = typeof inMapSrc === "function" ? inMapSrc(x.s) : null;
+    x.data = !r ? (x.etf ? "stored bars / lists only — no file row" : "not in today's files") : "file row";
+    // 31 Oct: structure label (STRUCTURE LABELS script) — research context in the CSV only
+    const sl = r && typeof lmlOf === "function" ? lmlOf(r) : null; x.lml = sl ? LML_N[sl.lab] : ""; x.lmlSince = sl && sl.since || ""; x.lastLead = sl && sl.lastLead || "";
+  }
+  return {secs: outSecs, entries: order, hits};
+}
+function tvlKey(sel){
+  const v = S.snap;
+  return JSON.stringify([sel.on, v ? v.asOf : "", S.mode, v && v.live ? v.live.dataMs : 0, v ? rawNames(curFiles()) : [], HIST.nD, HIST.nD ? HIST.dates[HIST.nD - 1] : "",
+    LISTS.focusTxt, LISTS.heldTxt, typeof MAPL !== "undefined" ? [MAPL.bTxt, MAPL.stalkTxt] : "", JSON.stringify(typeof esMapE === "function" ? esMapE() : null), JSON.stringify(typeof obMapO === "function" ? obMapO() : null),
+    Object.keys(tvlCampAll().open).length, JSON.stringify(tvlMap()), wlAll().items.length, typeof GFV !== "undefined" ? GFV : 0]);
+}
+const tvlBuildGet = () => { const b = store.get("adrb.tvlBuild", null); return b && b.v === 1 && Array.isArray(b.entries) ? b : null; };
+function tvlBuildNow(quiet){
+  if (!S.snap) { toast("Load your files first"); return null; }
+  const sel = tvlSel();
+  try { tvlCampSync(); } catch (e) { console.error("campaigns", e); }
+  let M; try { M = tvlModel(sel); } catch (e) { console.error("TradingView lists", e); TVL.msg = "Couldn't build the lists — the last build is kept."; if (!quiet) toast(TVL.msg); return tvlBuildGet(); }
+  const label = tvlLabel(sel.on), prev = tvlBuildGet(), na = M.secs.filter(s => s.st === "na" && s.items.some(i => i.on));
+  const B = {v: 1, id: "tvl-" + Date.now(), at: Date.now(), session: tvlSess(), mode: S.mode, live: S.snap.live ? S.snap.live.dataMs : null, files: rawNames(curFiles()),
+    histTo: HIST.nD ? HIST.dates[HIST.nD - 1] : null, label, key: tvlKey(sel), on: sel.on, hits: M.hits,
+    secs: M.secs.map(s => ({k: s.k, h: s.h, n: s.n, etf: s.etf, st: s.st, why: s.why, hits: s.hits, n1: s.n1, items: s.items.filter(i => i.on).map(i => ({k: i.k, n: i.n, st: i.st, why: i.why, count: i.count}))})),
+    entries: M.entries};
+  // never let missing data replace a good build of the same selection with a thinner one
+  if (na.length && prev && prev.label === label && prev.secs.filter(s => s.st === "na" && s.items.length).length < na.length) {
+    TVL.msg = `Kept the build from ${tvlWhen(prev.at)} (session ${prev.session}): ${na.map(s => s.n).join(", ")} can't be read right now — ${na[0].why[0] || "data missing"}.`;
+    if (!quiet) toast("Kept the last good build — " + na[0].n + " can't be read right now");
+    return prev;
+  }
+  store.set("adrb.tvlBuild", B); TVL.msg = ""; TVL.pick = new Set(B.entries.filter(e => e.tv).map(e => e.s)); TVL.pickId = B.id;
+  if (!quiet) toast(`Built ${label} · ${B.entries.length} names · session ${B.session || "—"}`);
+  return B;
+}
+// the build to export: the stored one when it matches today's data and ticks, else a fresh build
+function tvlForExport(){
+  const b = tvlBuildGet(), sel = tvlSel();
+  if (b && b.key === tvlKey(sel)) return b;
+  if (!S.snap) return b;
+  return tvlBuildNow(true);
+}
+function tvlScoped(B, scope){
+  const L = B.entries;
+  if (scope === "filtered") return L.filter(e => e.held || e.camp || e.f !== false);
+  if (scope === "picked") { const P = TVL.pickId === B.id ? TVL.pick : new Set(L.filter(e => e.tv).map(e => e.s)); return L.filter(e => P.has(e.s)); }
+  return L;
+}
+function tvlText(L, head){
+  const parts = []; let cur = null;
+  for (const e of L) { if (!e.tv) continue; if (head && e.h !== cur) { parts.push("###" + e.h); cur = e.h; } parts.push(e.tv); }
+  return parts.join(",");
+}
+const tvlWhen = ms => { try { return new Date(ms).toLocaleString("en-SG", {timeZone: "Asia/Singapore", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false}) + " SGT"; } catch (e) { return new Date(ms).toISOString(); } };
+const tvlPartial = B => B.secs.some(s => s.items.length && s.st !== "ok");
+function tvlName(B, ext, extra = ""){ return `${tvlFileTag(B.label)}_${B.session || "no-session"}${tvlPartial(B) ? "_partial" : ""}${extra}.${ext}`; }
+function tvlLog(){ const L = store.get("adrb.tvlLog", []); return Array.isArray(L) ? L : []; }
+function tvlLogAdd(B, L, how){
+  const log = tvlLog(); log.push({at: Date.now(), label: B.label, session: B.session, how, syms: L.filter(e => e.tv).map(e => e.s)});
+  store.set("adrb.tvlLog", log.slice(-30));
+}
+function tvlDiff(B, L){
+  const log = tvlLog(); let p = null;
+  for (let i = log.length - 1; i >= 0; i--) if (log[i].label === B.label) { p = log[i]; break; }
+  if (!p) return null;
+  const now = new Set(L.filter(e => e.tv).map(e => e.s)), was = new Set(p.syms);
+  return {p, add: [...now].filter(s => !was.has(s)), drop: [...was].filter(s => !now.has(s))};
+}
+function tvlExport(kind){
+  const B = tvlForExport(); if (!B) { toast("Nothing built yet — load your files first"); return; }
+  const sel = tvlSel(), L = tvlScoped(B, sel.scope), ok = L.filter(e => e.tv), un = L.length - ok.length;
+  if (!L.length) { toast("The selection is empty — tick a list first"); return; }
+  const scopeTxt = {full: "full list", filtered: "filtered view", picked: "selected rows"}[sel.scope];
+  if (kind === "csv") { download(tvlName(B, "csv", "_research"), tvlCSV(B, L, sel.scope), "text/csv"); toast(`CSV saved · ${L.length} names (${scopeTxt}) — research file, not the TradingView import`); return; }
+  if (!ok.length) { toast("None of these names has a TradingView id yet — set the exchange in the warning box"); return; }
+  const txt = tvlText(L, !!sel.head), msg = `${ok.length} symbols${un ? ` (${un} unresolved left out)` : ""} · ${B.label} · ${scopeTxt} · session ${B.session || "—"}`;
+  tvlLogAdd(B, L, kind);
+  if (kind === "txt") { download(tvlName(B, "txt"), txt, "text/plain;charset=utf-8"); toast("TXT saved — " + msg); }
+  else tvlCopy(txt, "Copied for TradingView — " + msg);
+  TVL.fb = null; tvlPaint();
+}
+function tvlCopy(txt, msg){
+  const fail = () => { TVL.fb = txt; tvlPaint(); toast("Couldn't reach the clipboard — the text is in the box on the card: select it and copy"); };
+  const fallback = () => { const ta = document.createElement("textarea"); ta.value = txt; ta.style.position = "fixed"; ta.style.opacity = "0"; document.body.appendChild(ta); ta.select(); let ok = false; try { ok = document.execCommand("copy"); } catch (e) {} ta.remove(); if (ok) toast(msg); else fail(); };
+  try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(() => toast(msg), fallback); else fallback(); } catch (e) { fallback(); }
+}
+const TVL_CSV_H = ["session", "generated_at", "built_at", "source_mode", "data_to", "files", "export_scope", "selection", "order", "symbol", "tradingview_symbol", "tradingview_id_source", "unresolved_reason",
+  "name", "exchange", "asset", "heading", "playbook_tags", "route_states", "attention_reason", "held", "campaign", "in_map_source", "passes_filter_bar", "data_status", "section_status", "trade_status",
+  "last", "change_pct", "rs_1_99", "adr_pct", "group", "sector", "structure", "structure_since", "last_lead"];
+const TVL_PERM_TXT = {held: "your position", p1: "Entry Check list — rules v6.1", p1e: "ETF setups experiment / MAP list", r1: "experimental live · 0.10% NLV", r1e: "", ob: "paper / watch only · never sized", obe: "paper / watch only · never sized",
+  sh: "research / watch only — no live stock shorts", she: "ETF setups experiment (short side)", camp: "campaign tracking", fav: "favourite", scr: "screen hit — context only", pool: "research pool — not an attention list"};
+function tvlCSV(B, L, scope){
+  const q = v => { const s = v == null ? "" : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const sst = new Map(B.secs.map(s => [s.k, s.st === "ok" ? "complete" : s.st === "partial" ? "partial: " + s.why.join("; ") : "unavailable: " + s.why.join("; ")]));
+  const gen = new Date().toISOString(), built = new Date(B.at).toISOString(), mode = B.live ? "live (Massive, 15 min delayed)" : B.mode === "pm" ? "premarket file" : "regular-session file";
+  const dataTo = B.live ? new Date(B.live).toISOString() : B.session || "";
+  const rows = L.map((e, i) => [B.session, gen, built, mode, dataTo, B.files.join(" + "), scope, B.label, i + 1, e.s, e.tv || "", e.tvSrc, e.unres, e.name, e.exch, e.etf ? "ETF" : "stock", e.h,
+    e.tags.join("; "), e.sts.join("; "), e.whys.join("; "), e.held ? "yes" : "", e.camp, e.inMap == null ? "" : e.inMap ? "yes" : "no", e.f == null ? "" : e.f ? "yes" : "no", e.data, sst.get(e.sec) || "",
+    TVL_PERM_TXT[e.sec] || "", e.last, e.chg, e.rs, e.adr, e.group, e.sector, e.lml || "", e.lmlSince || "", e.lastLead || ""].map(q).join(","));
+  return [TVL_CSV_H.join(","), ...rows].join("\n");
+}
+
+/* ---------------- refresh ---------------- */
+async function tvlRefresh(build){
+  if (TVL.busy) return; if (!S.snap) { toast("Load your files first"); return; }
+  TVL.busy = true; TVL.msg = "Refreshing…"; tvlPaint();
+  try {
+    if (S.snap.live && typeof liveRefresh === "function") await liveRefresh();
+    if (typeof histUpdate === "function") await histUpdate(!HIST.nD, true);
+    TVL.msg = HIST.msg ? "Price history: " + HIST.msg : "";
+  } catch (e) { TVL.msg = "Refresh failed — the last data and build are kept (" + (e.message || e) + ")"; }
+  TVL.busy = false;
+  if (build) tvlBuildNow(false);
+  tvlPaint();
+}
+
+/* ---------------- the card ---------------- */
+const tvlPill = st => st === "ok" ? `<span class="pill go">complete</span>` : st === "partial" ? `<span class="pill wait">partial</span>` : `<span class="pill bad">unavailable</span>`;
+function tvlCardHTML(){
+  const sel = tvlSel(), M = tvlModel(sel, {allScreens: TVL.scrOpen}), label = tvlLabel(sel.on), B = tvlBuildGet(), fresh = B && B.key === tvlKey(sel);
+  const L = M.entries, ok = L.filter(e => e.tv), un = L.filter(e => !e.tv), sess = tvlSess();
+  const preset = `<span class="seg tvl-pre">${Object.keys(TVL_PRE).map(n => `<button data-tvlpre="${esc(n)}" class="${n === label ? "on" : ""}">${esc(n)}</button>`).join("")}<button data-tvlpre="">Clear</button></span>`;
+  const secBox = s => {
+    if (s.screens) return "";
+    const items = s.items.map(i => `<label class="tvl-it ${i.st === "na" && i.on ? "dim" : ""}" title="${esc(i.why || "")}"><input type="checkbox" data-tvlit="${esc(i.k)}" ${i.on ? "checked" : ""}> ${esc(i.n)} <span class="small dim">${i.count == null ? (i.st === "na" ? "—" : "") : i.count}</span></label>`).join("");
+    const live = s.items.some(i => i.on);
+    return `<div class="tvl-sec ${s.etf ? "etf" : ""}"><div class="tvl-sh"><b>${esc(s.n)}</b>${live ? " " + tvlPill(s.st) : ""}</div>${s.perm ? `<div class="small dim">${esc(s.perm)}</div>` : ""}${s.none ? `<div class="small">${esc(s.none)}</div>` : items}${live && s.st === "na" ? `<div class="small tvl-why">${esc(s.why.join(" · "))}</div>` : ""}${live ? `<div class="small">${s.n1} name${s.n1 === 1 ? "" : "s"} under “${esc(s.h)}”${s.hits > s.n1 ? ` · ${s.hits - s.n1} already higher up` : ""}</div>` : ""}</div>`;
+  };
+  const scr = M.secs.find(s => s.screens), scrOn = scr.items.filter(i => i.on);
+  const scrBox = `<details class="tvl-scr" ${TVL.scrOpen ? "open" : ""} data-tvlscr><summary><b>Screens</b> — any scan on the Screens tab, whole file${scrOn.length ? ` · ${scrOn.length} ticked ${tvlPill(scr.st)}` : ""}</summary><div class="tvl-scrs">${scr.items.map(i => `<label class="tvl-it ${i.st !== "ok" ? "dim" : ""}" title="${esc(i.why || "")}"><input type="checkbox" data-tvlit="${esc(i.k)}" ${i.on ? "checked" : ""}> ${esc(i.n)} <span class="small dim">${i.count == null ? (i.st === "na" ? "—" : "") : i.count}</span></label>`).join("")}</div></details>`;
+  const scope = `<span class="seg" title="Full list = the whole computed list, whatever the filter bar hides. Filtered view = only names passing the filter bar (held + campaigns always stay). Selected rows = the rows ticked in the preview.">${[["full", "Full list"], ["filtered", "Filtered view"], ["picked", "Selected rows"]].map(([k, n]) => `<button data-tvlscope="${k}" class="${sel.scope === k ? "on" : ""}">${n}</button>`).join("")}</span>`;
+  const head = `<span class="seg" title="Playbook headings become sections in your TradingView list (TradingView's own list format)."><button data-tvlhead="1" class="${sel.head ? "on" : ""}">Playbook headings</button><button data-tvlhead="0" class="${sel.head ? "" : "on"}">Symbols only</button></span>`;
+  const shownB = fresh ? B : null, Ls = shownB ? tvlScoped(shownB, sel.scope) : sel.scope === "filtered" ? L.filter(e => e.held || e.camp || e.f !== false) : L;
+  const d = tvlDiff({label}, Ls), nOk = Ls.filter(e => e.tv).length, nUn = Ls.length - nOk;
+  const partial = M.secs.filter(s => s.items.some(i => i.on) && s.st !== "ok");
+  const bLine = !B ? `Not built yet — Copy / Download build first.` : fresh ? `Built ${esc(tvlWhen(B.at))} · session ${esc(B.session || "—")}` : `Last build ${esc(tvlWhen(B.at))} (session ${esc(B.session || "—")}, ${esc(B.label)}) is out of date — the data or your ticks changed; Copy / Download build again.`;
+  const sum = `<div class="tvl-sum"><b>${esc(label)}</b> · session <b>${esc(sess || "—")}</b>${S.snap && S.snap.live ? " (Live, Massive 15 min delayed)" : ""} · <b>${nOk}</b> symbol${nOk === 1 ? "" : "s"} to TradingView${nUn ? ` · <b class="neg">${nUn} unresolved</b> left out` : ""} · ${M.hits} list hits, ${M.hits - L.length} overlaps removed · ${LISTS.held.size} held · ${tvlCampOpen().length} open campaign${tvlCampOpen().length === 1 ? "" : "s"}${partial.length ? ` · <b class="neg">partial</b>` : ""}<br><span class="small">${bLine}</span>${d ? `<br><span class="small">Since your last ${esc(label)} export (${esc(tvlWhen(d.p.at))}): ${d.add.length ? `<b>+${d.add.length} new</b> ${esc(d.add.slice(0, 15).join(" "))}${d.add.length > 15 ? " …" : ""}` : "no new names"} · ${d.drop.length ? `<b>−${d.drop.length} dropped</b> ${esc(d.drop.slice(0, 15).join(" "))}${d.drop.length > 15 ? " …" : ""}` : "none dropped"}</span>` : ""}</div>`;
+  const btns = `<div class="tvl-btns"><button class="btn sm" data-tvlact="refresh" ${TVL.busy ? "disabled" : ""} title="The board's price-history Update (and Live refresh when Live mode is on). Keeps the last data if it fails.">Refresh data</button><button class="btn sm" data-tvlact="build" title="Freeze today's combined list with its session and data time">Build daily lists</button><button class="btn sm" data-tvlact="rb" ${TVL.busy ? "disabled" : ""}>Refresh &amp; build</button>
+    <span class="tvl-gap"></span><button class="btn sm primary" data-tvlact="copy">Copy for TradingView</button><button class="btn sm primary" data-tvlact="txt">Download TradingView TXT</button><button class="btn sm" data-tvlact="csv" title="Every name with why it's there, its tags and data status — research / audit, not the TradingView import">Download CSV</button></div>`;
+  const warn = [];
+  if (TVL.msg) warn.push(esc(TVL.msg));
+  // one line for the shared reason (price history behind), then each unavailable section
+  const stl = tvlHist() ? feedStale() : null, na = partial.filter(s => s.st === "na");
+  if (stl && partial.some(s => s.st === "partial")) warn.push(`<b>Partial:</b> the price history ends ${esc(stl.last)} but should run to ${esc(stl.want)} — press <b>Refresh data</b>. Until then the playbook lists are read from the last stored day.`);
+  if (na.length) warn.push(`<b>Unavailable:</b> ${na.map(s => `${esc(s.n)} — ${esc(s.why.join("; "))}`).join(" · ")}. The list still copies without them; missing is never counted as empty.`);
+  if (un.length) warn.push(`<b>${un.length} name${un.length === 1 ? "" : "s"} without a TradingView id</b> (left out of the copy / TXT, kept in the CSV). Set the exchange once and the board remembers it:<div class="tvl-un">${un.slice(0, 40).map(e => `<span class="tvl-ue"><span class="tvl-us">${esc(e.s)}</span> <span class="small dim">${esc(e.unres)}</span> <select data-tvlex="${esc(e.s)}"><option value="">exchange…</option>${["NASDAQ", "NYSE", "AMEX", "CBOE", "OTC"].map(x => `<option>${x}</option>`).join("")}</select></span>`).join("")}${un.length > 40 ? ` <span class="small">… and ${un.length - 40} more (all in the CSV)</span>` : ""}</div>`);
+  const fb = TVL.fb ? `<div class="tvl-fb"><div class="small"><b>Select all and copy this</b> (the clipboard was blocked):</div><textarea readonly rows="3" onclick="this.select()">${esc(TVL.fb)}</textarea><button class="btn sm" data-tvlact="fbx">Close</button></div>` : "";
+  const P = shownB && TVL.pickId === shownB.id ? TVL.pick : null, LP = shownB ? shownB.entries : L;
+  const prev = `<details class="tvl-prev" ${TVL.prevOpen ? "open" : ""} data-tvlprev><summary><b>Preview</b> — every name in order, why it's there${sel.scope === "picked" ? " · tick the rows to export" : ""}</summary>
+    ${sel.scope === "picked" && !shownB ? `<div class="small">Press <b>Build daily lists</b> to pick rows.</div>` : ""}
+    <div class="tscroll" style="max-height:460px"><table class="mini"><thead><tr>${sel.scope === "picked" && shownB ? `<th><input type="checkbox" data-tvlpickall ${P && P.size ? "checked" : ""}></th>` : ""}<th>#</th><th class="l">Ticker</th><th class="l">TradingView</th><th class="l">Heading</th><th class="l">Why it's on the list</th><th class="l">Data</th></tr></thead><tbody>
+    ${(TVL.prevOpen ? LP : LP.slice(0, 0)).slice(0, 600).map((e, i) => `<tr data-tvlsym="${esc(e.s)}" class="${sel.scope === "filtered" && e.f === false && !e.held && !e.camp ? "thin" : ""}">${sel.scope === "picked" && shownB ? `<td><input type="checkbox" data-tvlpick="${esc(e.s)}" ${P && P.has(e.s) ? "checked" : ""} ${e.tv ? "" : "disabled"}></td>` : ""}<td>${i + 1}</td><td class="l tvl-us">${esc(e.s)}${e.held ? ` <span class="pill">held</span>` : ""}${e.camp ? ` <span class="pill zone">campaign</span>` : ""}</td><td class="l">${e.tv ? esc(e.tv) : `<span class="neg">unresolved</span>`}</td><td class="l small">${esc(e.h)}</td><td class="l small">${esc(e.whys.join(" · "))}</td><td class="l small dim">${esc(e.data)}</td></tr>`).join("")}</tbody></table></div>${LP.length > 600 ? `<div class="small">First 600 of ${LP.length} shown — the copy, TXT and CSV carry all of them.</div>` : ""}</details>`;
+  const how = `<details class="tvl-how"><summary><b>How to refresh your TradingView list</b> (one fixed list, cleared each day)</summary><ol class="small">
+    <li>Here: tick the lists (or press <b>DS Daily</b>), press <b>Refresh &amp; build</b> (or just <b>Build daily lists</b> on the loaded data), check the session, the count and any warning.</li>
+    <li>Press <b>Copy for TradingView</b>.</li>
+    <li>TradingView: open your fixed list (e.g. “DS Daily”). Clear it: click the first symbol, Shift-click the last, press Delete (the headings go with them).</li>
+    <li>Click the list's <b>+</b> (Add symbol), paste, press Enter. TradingView adds every symbol in one go.</li>
+    <li>Chart from the list. The board's copy never changes TradingView by itself — the list only changes when you paste.</li></ol>
+    <div class="small">Alternative: <b>Download TradingView TXT</b> → TradingView list menu → <b>Upload list…</b> creates a <i>new</i> list from the file (named after it) — then delete yesterday's list. Use either way; both carry the same symbols in the same order.</div></details>`;
+  return `<div class="hd"><h2>TradingView lists</h2><span class="sub">the board builds the list · TradingView charts it · copy / download only — nothing is sent to TradingView</span></div><div class="bd">
+    <div class="tvl-row">${preset}</div>
+    <div class="tvl-grid">${M.secs.map(secBox).join("")}</div>${scrBox}
+    <div class="tvl-row">${scope}${head}</div>${sum}${btns}${warn.length ? `<div class="note tvl-warn">${warn.join("<br>")}</div>` : ""}${fb}${prev}${how}</div>`;
+}
+function tvlPaint(){
+  const box = $("tvlBox"); if (!box) return;
+  if (!S.snap) { box.innerHTML = `<div class="hd"><h2>TradingView lists</h2></div><div class="bd"><div class="empty">Load your files to build the lists.${tvlBuildGet() ? ` Last build: ${esc(tvlBuildGet().label)}, session ${esc(tvlBuildGet().session || "—")}, ${esc(tvlWhen(tvlBuildGet().at))}.` : ""}</div></div>`; return; }
+  if (box.contains(document.activeElement) && document.activeElement.tagName === "SELECT") return;
+  try { box.innerHTML = tvlCardHTML(); } catch (e) { console.error("TradingView lists card", e); box.innerHTML = `<div class="hd"><h2>TradingView lists</h2></div><div class="bd"><div class="empty">The card couldn't be drawn (error logged). The rest of the board is unaffected.</div></div>`; }
+}
+document.head.insertAdjacentHTML("beforeend", `<style>
+#tvlBox .tvl-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:4px 0 8px}
+#tvlBox .tvl-pre{flex-wrap:wrap}
+#tvlBox .tvl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px;margin-bottom:8px}
+#tvlBox .tvl-sec{border:1px solid var(--line);border-radius:10px;padding:6px 8px;background:var(--surface-2)}
+#tvlBox .tvl-sec.etf{border-style:dashed}
+#tvlBox .tvl-sh{display:flex;gap:6px;align-items:center;justify-content:space-between;margin-bottom:2px}
+#tvlBox .tvl-it{display:block;font-size:12.5px;line-height:1.55;cursor:pointer}
+#tvlBox .tvl-it.dim{opacity:.6}
+#tvlBox .tvl-why{color:var(--crit)}
+#tvlBox .tvl-scr summary,#tvlBox .tvl-prev summary,#tvlBox .tvl-how summary{cursor:pointer;margin:6px 0}
+#tvlBox .tvl-scrs{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:2px 10px}
+#tvlBox .tvl-sum{margin:6px 0;line-height:1.5}
+#tvlBox .tvl-btns{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+#tvlBox .tvl-gap{flex:1}
+#tvlBox .tvl-warn{margin:6px 0}
+#tvlBox .tvl-un{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:4px}
+#tvlBox .tvl-us{font-weight:700;font-family:var(--mono)}
+#tvlBox tr[data-tvlsym]{cursor:pointer}
+#tvlBox .tvl-fb textarea{width:100%;font-family:var(--mono);font-size:12px}
+</style>`);
+// the card sits first on the Watchlist page, outside #watchBody (renderWatch redraws that), painted after each draw
+hookOn("tab", "tvlists", t => {
+  if (t !== "watch") return;
+  const tab = $("tab-watch"); if (!tab) return;
+  let box = $("tvlBox");
+  if (!box) { const at = tab.querySelector(".lede"); (at || tab.firstElementChild).insertAdjacentHTML(at ? "afterend" : "beforebegin", `<div class="card g1" id="tvlBox"></div>`); box = $("tvlBox"); }
+  tvlPaint();
+});
+document.addEventListener("click", e => {
+  const box = e.target.closest("#tvlBox"); if (!box) return;
+  const pre = e.target.closest("[data-tvlpre]");
+  if (pre) { const o = tvlSel(); o.on = pre.dataset.tvlpre ? tvlPreset(pre.dataset.tvlpre) : {}; tvlSelSave(o); tvlPaint(); return; }
+  const sc = e.target.closest("[data-tvlscope]"); if (sc) { const o = tvlSel(); o.scope = sc.dataset.tvlscope; tvlSelSave(o); tvlPaint(); return; }
+  const hd = e.target.closest("[data-tvlhead]"); if (hd) { const o = tvlSel(); o.head = +hd.dataset.tvlhead; tvlSelSave(o); tvlPaint(); return; }
+  const a = e.target.closest("[data-tvlact]");
+  if (a) { const k = a.dataset.tvlact;
+    if (k === "refresh") tvlRefresh(false); else if (k === "rb") tvlRefresh(true); else if (k === "build") { tvlBuildNow(false); tvlPaint(); }
+    else if (k === "copy") tvlExport("copy"); else if (k === "txt") tvlExport("txt"); else if (k === "csv") tvlExport("csv"); else if (k === "fbx") { TVL.fb = null; tvlPaint(); }
+    return; }
+  const tr = e.target.closest("#tvlBox tr[data-tvlsym]"); if (tr && !e.target.closest("input, select, button, a") && S.rowBySym && S.rowBySym.has(tr.dataset.tvlsym)) openDrawer(tr.dataset.tvlsym);
+});
+document.addEventListener("change", e => {
+  if (!e.target.closest("#tvlBox")) return;
+  const it = e.target.closest("[data-tvlit]"); if (it) { const o = tvlSel(); o.on = {...o.on, [it.dataset.tvlit]: it.checked ? 1 : 0}; tvlSelSave(o); tvlPaint(); return; }
+  const ex = e.target.closest("[data-tvlex]"); if (ex && ex.value) { const m = tvlMap(); m[ex.dataset.tvlex] = ex.value; store.set("adrb.tvlMap", m); ex.blur(); toast(`${ex.dataset.tvlex} → ${ex.value}:${ex.dataset.tvlex} (saved in this browser)`); tvlPaint(); return; }
+  const pk = e.target.closest("[data-tvlpick]"); if (pk) { if (TVL.pickId !== (tvlBuildGet() || {}).id) { const b = tvlBuildGet(); TVL.pick = new Set(b ? b.entries.filter(x => x.tv).map(x => x.s) : []); TVL.pickId = b ? b.id : null; } pk.checked ? TVL.pick.add(pk.dataset.tvlpick) : TVL.pick.delete(pk.dataset.tvlpick); tvlPaint(); return; }
+  if (e.target.closest("[data-tvlpickall]")) { const b = tvlBuildGet(); TVL.pickId = b ? b.id : null; TVL.pick = new Set(e.target.checked && b ? b.entries.filter(x => x.tv).map(x => x.s) : []); tvlPaint(); }
+});
+document.addEventListener("toggle", e => {
+  const d = e.target; if (!(d instanceof HTMLElement) || !d.closest || !d.closest("#tvlBox")) return;
+  if (d.matches("[data-tvlscr]")) { if (TVL.scrOpen !== d.open) { TVL.scrOpen = d.open; tvlPaint(); } }
+  else if (d.matches("[data-tvlprev]")) { if (TVL.prevOpen !== d.open) { TVL.prevOpen = d.open; tvlPaint(); } }
+}, true);
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   UNIVERSE PAGE (31 Oct 2026). Display only — the board's own ranking tables on a page of their own; changes no number,
+   rank, list, filter result, feed or record.
+   Eugene (chat, 31 Oct): "right now for me to access a clean stock universe watchlist its going to Discovery: Ranked
+   Universe for Stocks. (which is stuck all the way to the bottom of a long scroll in section 2. a clean etf universe
+   watchlist. its going to ETFs/ ETFS Ranking. … should there also be a page to just have it sit as a standalone for fast
+   searching?" Then "go".
+   - New page "Universe", first under Discover (sidebar; phone: More menu): Stocks | ETFs, the board's Table class (same
+     columns, sort, column groups, filters incl. "Search ticker / name…", Copy table, Copy for TradingView), the search box
+     focused when the page opens. "Follow the filter bar" (default, as the Ranked universe) | "Whole file" (every row).
+     ETFs: leveraged / inverse funds hidden as on ETF ranking, switch to include them.
+   - The Ranked universe (Stocks today) and ETF ranking (ETFs) stay where they are, unchanged.
+   - Drawn through hook point "page" (BOARD HOOKS) — no override.
+   Storage NEW: adrb.univ = {k: "s" | "e", all: 0 | 1, lev: 0 | 1}.
+   ===================================================================== */
+const UNIV = {T: {}};
+const univCfg = () => { let o = null; try { o = store.get("adrb.univ", null); } catch (e) {} o = o || {}; return {k: o.k === "e" ? "e" : "s", all: o.all ? 1 : 0, lev: o.lev ? 1 : 0}; };
+{
+  const tabs = $("tabs"), td = tabs.querySelector('button[data-tab="today"]');
+  td.insertAdjacentHTML("beforebegin", `<button data-tab="univ" data-sub="Every stock and ETF · search · copy" title="Every stock and ETF · search · copy">Universe</button>`);
+  $("tab-today").insertAdjacentHTML("beforebegin", `<section class="tab" id="tab-univ"><p class="lede">Every stock and ETF in your files, one search away. Same table, columns and filters as the Ranked universe and ETF ranking — click a row for the ticker panel; Copy for TradingView takes what's shown.</p><div class="card g1" id="univBar"></div><div class="card" id="univTbl"></div></section>`);
+  document.head.insertAdjacentHTML("beforeend", `<style>#tabs button[data-tab="univ"]{--ic:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='11' cy='11' r='7'/><path d='M21 21l-4.3-4.3'/></svg>")}
+#univBar .bd{display:flex;gap:10px;flex-wrap:wrap;align-items:center}</style>`);
+}
+function univRows(c){
+  if (c.k === "e") { const L = S.etfs.filter(r => c.lev || !r.lev); return c.all ? L : L.filter(gOK); }
+  return c.all ? S.stocks : S.stocks.filter(gOK);
+}
+function univTable(c){
+  const key = c.k, el = $("univTbl");
+  if (!UNIV.T[key] || UNIV.T[key].el !== el) UNIV.T[key] = new Table(el, key === "e"
+    ? {title: "ETF universe", etf: true, filters: true, groups: ["etf", "rs", "perf"], sort: {k: "rs", d: -1}, rows: () => univRows(univCfg())}
+    : {title: "Stock universe", filters: true, groups: ["today", "struct", "info"], sort: {k: "rs", d: -1}, rows: () => univRows(univCfg())});
+  UNIV.T[key].el = el;
+  return UNIV.T[key];
+}
+function renderUniverse(){
+  const bar = $("univBar"), el = $("univTbl"); if (!bar || !el) return;
+  if (!S.snap) { bar.innerHTML = ""; el.innerHTML = `<div class="bd"><div class="empty">Load your files to see the universe.</div></div>`; if (typeof afterTab === "function") afterTab("univ"); return; }
+  const c = univCfg(), nAll = c.k === "e" ? S.etfs.filter(r => c.lev || !r.lev).length : S.stocks.length, nShow = univRows(c).length;
+  const seg = (k, v, opts) => `<span class="seg">${opts.map(([val, lab, tip]) => `<button data-univ="${k}" data-v="${val}" class="${String(v) === String(val) ? "on" : ""}" title="${esc(tip || "")}">${lab}</button>`).join("")}</span>`;
+  bar.innerHTML = `<div class="bd">${seg("k", c.k, [["s", `Stocks · ${S.stocks.length}`], ["e", `ETFs · ${S.etfs.length}`]])}
+    ${seg("all", c.all, [[0, "Follow the filter bar", "Same names as the Ranked universe / ETF ranking"], [1, "Whole file", "Every row in the file, whatever the filter bar hides"]])}
+    ${c.k === "e" ? seg("lev", c.lev, [[0, "Hide leveraged / inverse"], [1, "Include leveraged / inverse"]]) : ""}
+    <span class="small">${nShow} of ${nAll} ${c.k === "e" ? "ETFs" : "stocks"} before the table's own filters</span></div>`;
+  const T = univTable(c); T.render();
+  if (typeof afterTab === "function") afterTab("univ");
+  const q = el.querySelector('input[data-f="q"]'); if (q && !UNIV.focused) { UNIV.focused = true; setTimeout(() => { if (S.ui.tab === "univ") q.focus(); }, 0); }
+}
+pageOn("univ", renderUniverse);
+document.addEventListener("click", e => {
+  const b = e.target.closest("#univBar [data-univ]"); if (!b) return;
+  const c = univCfg(); c[b.dataset.univ] = b.dataset.univ === "k" ? b.dataset.v : +b.dataset.v; store.set("adrb.univ", c); UNIV.focused = false; renderUniverse();
+});
+document.addEventListener("click", e => { if (e.target.closest('#tabs button[data-tab]') && e.target.closest('#tabs button[data-tab]').dataset.tab !== "univ") UNIV.focused = false; }, true);
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   SHORT RESEARCH MEMORY (31 Oct 2026). Tracking / display only — research, watch only. No live short permission, no
+   sizing, no new rule; the short watch itself (weakness score, location, blockers) is unchanged.
+   Eugene (chat, 31 Oct), on the short-discovery review ("the board's short watch drops a damaged name exactly when it
+   rebounds … the fix is the same campaign memory"): "go".
+   - The campaign store of TRADINGVIEW LISTS (adrb.tvlCamp) also remembers every name on the short watch (pb "SH",
+     tvlCampSync). A name that leaves the watch — usually because the rebound lifts its weakness score — stays as
+     "rebounding" for TVL_SHMEM sessions (a memory length, not a trading rule), then closes; a name missing from the day's
+     file is carried, flagged. Synced after each page draw when the price history is loaded (writes only on change).
+   - Shorts page: card "Short research memory — damaged names rebounding" (after the short watch): since, weakness score
+     now, where it sits (the watch's own location words), % from the 21 EMA / 50 SMA, sessions off the watch.
+   - TradingView lists: "Short research · stocks" gains "Rebounding — kept in short research memory" (off by default; on in
+     the Short research preset).
+   Storage: none new (adrb.tvlCamp). Hook point "tab" — no override.
+   ===================================================================== */
+const SHM = {t: null};
+hookOn("tab", "shmem-sync", () => { if (!S.snap || !tvlHist()) return; clearTimeout(SHM.t); SHM.t = setTimeout(() => { try { tvlCampSync(); } catch (e) { console.error("campaigns", e); } if (S.ui.tab === "shorts") shmPaint(); }, 60); });
+function shmHTML(){
+  const L = tvlCampOpen(["SH"]), reb = L.filter(c => c.reb || c.miss), on = L.length - reb.length;
+  const hd = `<div class="hd"><h2>Short research memory — damaged names rebounding</h2><span class="sub">watch only · names that left the short watch in the last ${TVL_SHMEM} sessions, usually because a rebound lifted them · ${on} on the watch now</span></div>`;
+  if (!tvlHist()) return hd + `<div class="bd"><div class="empty">Needs the stored price history. <button class="btn sm" data-hist="full">Load price history</button></div></div>`;
+  if (!reb.length) return hd + `<div class="bd"><div class="empty">No name has left the short watch recently. Names appear here the session after they drop off the watch, and stay ${TVL_SHMEM} sessions.</div></div>`;
+  const rows = reb.sort((a, b) => (a.off || 0) - (b.off || 0) || (a.s < b.s ? -1 : 1)).map(c => { const r = S.rowBySym && S.rowBySym.get(c.s);
+    return `<tr ${r ? `data-sym="${esc(c.s)}"` : ""}><td class="l sym">${esc(c.s)}</td><td class="l small">${esc(c.since)}</td><td>${r && r.ss ? r.ss.n + "/7" : "—"}</td><td class="l small">${r && r.sLoc ? esc(r.sLoc) : `<span class="dim">${r ? "—" : "not in today's file"}</span>`}</td>
+      <td class="${r ? cls(r.p21) : ""}">${r && r.p21 != null ? pc(r.p21, 1) : "—"}</td><td class="${r ? cls(r.p50) : ""}">${r && r.p50 != null ? pc(r.p50, 1) : "—"}</td><td>${c.miss ? `<span class="dim">last on the watch ${esc(c.seen)}</span>` : c.off}</td><td class="l small">${r ? esc(r.group || "") : ""}</td></tr>`; }).join("");
+  return hd + `<div class="bd"><div class="small" style="margin-bottom:6px">A weak stock that bounces drops off the short watch because the bounce improves its score — but a failed-rally short needs exactly that bounce into resistance. These names stay here so you can check the next test of resistance in TradingView. Research only: no entry rule, no size.</div>
+    <div class="tscroll" style="max-height:420px"><table class="mini"><thead><tr><th class="l">Ticker</th><th class="l">On the watch since</th><th>Weakness now</th><th class="l">Where it is</th><th>vs 21 EMA</th><th>vs 50 SMA</th><th>Sessions off the watch</th><th class="l">Group</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+}
+function shmPaint(){
+  const at = $("shortBox2"); if (!at || !S.snap) return;
+  let box = $("shMem"); if (!box) { at.insertAdjacentHTML("afterend", `<div class="card g1" id="shMem"></div>`); box = $("shMem"); }
+  try { box.innerHTML = shmHTML(); } catch (e) { console.error("short memory", e); box.innerHTML = `<div class="hd"><h2>Short research memory</h2></div><div class="bd"><div class="empty">Couldn't be drawn (error logged).</div></div>`; }
+}
+hookOn("tab", "shmem", t => { if (t === "shorts") shmPaint(); });
+document.addEventListener("click", e => { const tr = e.target.closest("#shMem tr[data-sym]"); if (tr && S.rowBySym && S.rowBySym.has(tr.dataset.sym)) openDrawer(tr.dataset.sym); });
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   STRUCTURE LABELS (31 Oct 2026). Display only — never a gate; changes no Entry Check list, size, plan, feed column, MAP
+   input, rank or the existing Trend column (file-based, unchanged).
+   Eugene (chat, 31 Oct): "approve both drafts as written" — docs/draft-lml-cooling-repairing-2026-10-31.md; Notion
+   "📈 Lead / Mediocre / Lag Tracker", dated line 31 Oct 2026.
+   - Labels from the stored daily bars (dssBars: split-adjusted, the symbol's own bars), 9 EMA / 21 EMA (Pine style, SMA seed)
+     and 50 SMA: Lead = 9 > 21 > 50 · Repairing = 9 > 21, 21 < 50 · Cooling = 9 < 21, 21 > 50 · Lag = 9 < 21 < 50 · Boundary =
+     two exactly equal · Not enough history = under 50 bars. Without the price history: today's label from the file's own
+     averages (the Trend column's values), no history.
+   - Per name (lmlOf): label, since (date the current label began), the label before, labels 1 and 5 sessions ago, last
+     Lead date (former leaders). Cache on the price-bar key (pbKey).
+   - Shown: a Structure column (Universe, Ranked universe, ETF tables — column group "Structure"), a chip + change tag next
+     to stock tickers on the Watchlist, Setups (Entry Check / Shakeout Reclaim / Floor Bounce), Today and Shorts tables (not
+     on ETF rows — those cards keep their layout), a line in the ticker panel (just under the chart), filter-bar criteria "Structure is" / "Structure changed in the last 5 sessions", the
+     TradingView lists CSV (structure, structure_since, last_lead), and the Themes card "Structure by group" — counted on
+     today's names from their own bars (1 and 5 sessions back), so a growing list can't look like improvement; Repairing ↔
+     Cooling counts as a switch, not an upgrade.
+   - Agreement check with the LML log (≥ 97%, misses within 0.1% of a boundary) is required before this is published.
+   Storage: none. Hook points "tab" + "panel" — no override.
+   ===================================================================== */
+const LML_N = {L: "Lead", R: "Repairing", C: "Cooling", G: "Lag", B: "Boundary", X: "Not enough history"};
+const LML_RANK = {L: 3, R: 2, C: 2, G: 1};
+const LML_CLS = {L: "go", R: "zone", C: "wait", G: "bad", B: "", X: ""};
+const LML_TIP = {L: "9 EMA > 21 EMA > 50 SMA", R: "9 EMA over the 21 EMA, 21 EMA under the 50 SMA — repairing from below", C: "9 EMA under the 21 EMA, 21 EMA over the 50 SMA — cooling from above", G: "9 EMA < 21 EMA < 50 SMA", B: "two of the averages exactly equal", X: "fewer than 50 stored daily bars"};
+const LMLX = {key: null, m: new Map()};
+function lmlLab(e9, e21, s50){
+  if (!fin(e9) || !fin(e21) || !fin(s50)) return "X";
+  if (e9 === e21 || e21 === s50 || e9 === s50) return "B";
+  if (e9 > e21) return e21 > s50 ? "L" : "R";
+  return e21 > s50 ? "C" : "G";
+}
+// pure: bars {c, dates, n} → the label at the last bar + its history
+function lmlCalc(b){
+  if (!b || !b.n) return null;
+  const n = b.n, t = n - 1;
+  if (n < 50) return {lab: "X", src: "bars", n};
+  const e9 = PZ.ema(b.c, 9), e21 = PZ.ema(b.c, 21), s50 = PZ.sma(b.c, 50), L = new Array(n);
+  for (let k = 0; k < n; k++) L[k] = lmlLab(e9[k], e21[k], s50[k]);
+  const lab = L[t]; let k = t; while (k > 0 && L[k - 1] === lab) k--;
+  let lastLead = null; if (lab !== "L") for (let j = t - 1; j >= 0; j--) if (L[j] === "L") { lastLead = b.dates[j]; break; }
+  return {lab, src: "bars", n, since: k > 0 && L[k - 1] !== "X" ? b.dates[k] : null, sinceN: t - k, prev: k > 0 && L[k - 1] !== "X" ? L[k - 1] : null,
+    d1: t >= 1 ? L[t - 1] : null, d5: t >= 5 ? L[t - 5] : null, lastLead, to: b.dates[t], e9: e9[t], e21: e21[t], s50: s50[t]};
+}
+function lmlOf(r){
+  if (!r) return null;
+  const key = typeof pbKey === "function" ? pbKey() : dssKey();
+  if (LMLX.key !== key) { LMLX.key = key; LMLX.m = new Map(); }
+  if (LMLX.m.has(r.sym)) return LMLX.m.get(r.sym);
+  let x = null;
+  try { const b = HIST.nD ? dssBars(r.sym) : null; x = b ? lmlCalc(b) : null; } catch (e) { x = null; }
+  if (!x && fin(r.e9) && fin(r.e21) && fin(r.s50)) x = {lab: lmlLab(r.e9, r.e21, r.s50), src: "file", e9: r.e9, e21: r.e21, s50: r.s50};
+  LMLX.m.set(r.sym, x); return x;
+}
+const lmlShortD = d => { if (!d) return ""; const [y, m, dd] = d.split("-"); return `${+dd} ${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][+m - 1]}`; };
+function lmlTag(x){
+  if (!x || x.src !== "bars") return "";
+  const p = [];
+  if (x.prev && x.sinceN <= 10) p.push(`${LML_N[x.prev]} → ${LML_N[x.lab]} · ${x.sinceN === 0 ? "today" : x.sinceN + " session" + (x.sinceN === 1 ? "" : "s") + " ago"}`);
+  if (x.lab !== "L" && x.lastLead) p.push(`last Lead ${lmlShortD(x.lastLead)}`);
+  return p.join(" · ");
+}
+function lmlChipHTML(x){
+  if (!x) return `<span class="dim">—</span>`;
+  const tip = `${LML_TIP[x.lab]}${x.src === "file" ? " · from the file's averages (load the price history for since-dates)" : x.since ? ` · since ${x.since}` : ""}`;
+  return `<span class="pill lmlp ${LML_CLS[x.lab]}" title="${esc(tip)}">${LML_N[x.lab]}</span>`;
+}
+function lmlCellHTML(r){ const x = lmlOf(r); if (!x) return `<span class="dim">—</span>`; const t = lmlTag(x); return lmlChipHTML(x) + (t ? ` <span class="small dim">${esc(t)}</span>` : ""); }
+const lmlSortV = r => { const x = lmlOf(r); if (!x || !LML_RANK[x.lab]) return 0; return LML_RANK[x.lab] * 1000 + (x.lab === "R" ? 500 : 0) - Math.min(x.sinceN ?? 999, 499); };
+document.head.insertAdjacentHTML("beforeend", `<style>.lmlp{font-size:10.5px;padding:1px 6px}
+td.sym[data-lml]::after{content:attr(data-lml);margin-left:6px;font-size:10.5px;font-weight:500;padding:1px 6px;border-radius:999px;background:var(--chip);color:var(--ink-2);white-space:nowrap}
+td.sym[data-lmlk="L"]::after{background:var(--st1);color:#fff}td.sym[data-lmlk="R"]::after{background:var(--good-soft);color:var(--ink)}td.sym[data-lmlk="C"]::after{background:var(--warn-soft);color:var(--ink)}td.sym[data-lmlk="G"]::after{background:var(--down-soft);color:var(--ink)}.lmlline{font-size:12.5px;margin:6px 0;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.lmlg td,.lmlg th{white-space:nowrap}.lmlg .tks{white-space:normal;max-width:420px}</style>`);
+
+/* ---------------- chips next to tickers on the list pages ---------------- */
+const LML_DECO = {watch: "#tab-watch", plan: "#tab-plan", home: "#tab-home", shorts: "#tab-shorts"};
+function lmlDecorate(t){
+  const root = document.querySelector(LML_DECO[t] || "#none"); if (!root || !S.snap) return;
+  root.querySelectorAll("td.sym").forEach(td => {
+    if (td.dataset.lml || td.closest("#tvlBox")) return;
+    const tr = td.closest("tr"), sym = (tr && (tr.dataset.sym || tr.dataset.psym || tr.dataset.jsym)) || (td.textContent || "").trim().split(/\s+/)[0];
+    const r = S.rowBySym && S.rowBySym.get(sym); if (!r || r.etf) return;   // stocks only — ETF cards keep their own layout (the ETF tables have the column)
+    const x = lmlOf(r); if (!x || x.lab === "X") return;
+    // drawn by CSS from data attributes, so the cell's text (the ticker) stays exactly as before
+    const tg = lmlTag(x); td.dataset.lmlk = x.lab; td.dataset.lml = LML_N[x.lab] + (tg ? " · " + tg : "");
+  });
+}
+hookOn("tab", "lml-chips", t => { try { lmlDecorate(t); } catch (e) { console.error("structure chips", e); } });
+// warm the label cache once per price-bar key right after a page draws (~0.15 s on 600 names), so a table's first draw doesn't pay for it
+hookOn("tab", "lml-warm", () => { if (!S.snap || !HIST.nD) return; const key = typeof pbKey === "function" ? pbKey() : dssKey(); if (LMLX.key === key && LMLX.m.size >= S.stocks.length) return;
+  clearTimeout(LMLX.t); LMLX.t = setTimeout(() => { try { S.stocks.forEach(r => lmlOf(r)); S.etfs.forEach(r => lmlOf(r)); } catch (e) {} }, 0); });
+
+/* ---------------- ticker panel line ---------------- */
+hookOn("panel", "lml", (r, dr) => {
+  const x = lmlOf(r); if (!x) return;
+  dr.querySelectorAll(".lmlline").forEach(n => n.remove());
+  // just under the chart — the Name check strip keeps its place under the context line / above the chart
+  const at = dr.querySelector("#tvbox") || dr.querySelector(".nc") || dr.firstElementChild; if (!at) return;
+  const vals = [x.e9, x.e21, x.s50].every(fin) ? ` · 9 EMA ${x.e9.toFixed(2)} · 21 EMA ${x.e21.toFixed(2)} · 50 SMA ${x.s50.toFixed(2)}` : "";
+  const hist = x.src === "bars" ? `${x.since ? `since ${lmlShortD(x.since)}` : ""}${x.prev ? ` (was ${LML_N[x.prev]})` : ""}${x.lab !== "L" && x.lastLead ? ` · last Lead ${lmlShortD(x.lastLead)}` : ""}` : "from the file's averages";
+  at.insertAdjacentHTML("afterend", `<div class="lmlline"><span class="small dim">Structure</span>${lmlChipHTML(x)}<span class="small">${esc(hist)}${esc(vals)}</span></div>`);
+});
+
+/* ---------------- filter-bar criteria (visibility only) ---------------- */
+for (const c of [
+  {k: "lml", cat: "Structure", l: "Structure is", type: "multi", p: ["C"], opts: () => ["L", "R", "C", "G", "B"].map(k => [k, LML_N[k]]), t: (r, p) => { const x = lmlOf(r); return x ? p.includes(x.lab) : null; }},
+  {k: "lmlchg", cat: "Structure", l: "Structure changed in the last 5 sessions to", type: "multi", p: ["L"], need: HH, opts: () => ["L", "R", "C", "G"].map(k => [k, LML_N[k]]), t: (r, p) => { const x = lmlOf(r); return x && x.src === "bars" ? p.includes(x.lab) && x.prev != null && x.sinceN <= 5 : null; }}
+]) { CRIT.push(c); CRIT_BY[c.k] = c; }
+
+/* ---------------- Themes: structure by group, counted honestly ---------------- */
+function lmlMove(a, b){ // a = then, b = now
+  if (!LML_RANK[a] || !LML_RANK[b]) return "na";
+  if (LML_RANK[b] > LML_RANK[a]) return "up"; if (LML_RANK[b] < LML_RANK[a]) return "down";
+  return a === b ? "same" : "switch";
+}
+function lmlGroups(){
+  const tot = {n: 0, L: 0, R: 0, C: 0, G: 0, m1: {up: [], down: [], switch: [], same: 0, na: 0}, m5: {up: [], down: [], switch: [], same: 0, na: 0}}, G = new Map();
+  for (const r of S.stocks) {
+    const x = lmlOf(r); if (!x || x.src !== "bars" || !LML_RANK[x.lab]) continue;
+    const g = r.group || "—"; if (!G.has(g)) G.set(g, {g, n: 0, L: 0, R: 0, C: 0, G: 0, up5: [], down5: []});
+    const o = G.get(g); o.n++; o[x.lab]++; tot.n++; tot[x.lab]++;
+    for (const [k, then] of [["m1", x.d1], ["m5", x.d5]]) { const mv = lmlMove(then, x.lab); if (mv === "same" || mv === "na") tot[k][mv]++; else tot[k][mv].push(r.sym); if (k === "m5" && (mv === "up" || mv === "down")) o[mv + "5"].push(r.sym); }
+  }
+  return {tot, groups: [...G.values()].filter(o => o.n >= 3).sort((a, b) => (b.L / b.n) - (a.L / a.n) || b.n - a.n || (a.g < b.g ? -1 : 1))};
+}
+function lmlGroupsHTML(){
+  const hd = `<div class="hd"><h2>Structure by group</h2><span class="sub">Lead / Repairing / Cooling / Lag from each stock's own daily bars · changes counted on today's names only, so a growing list can't look like improvement</span></div>`;
+  if (!tvlHist()) return hd + `<div class="bd"><div class="empty">Needs the stored price history. <button class="btn sm" data-hist="full">Load price history</button></div></div>`;
+  const {tot, groups} = lmlGroups(); if (!tot.n) return hd + `<div class="bd"><div class="empty">No stock has enough stored bars yet.</div></div>`;
+  const pc0 = (a, n) => n ? Math.round(100 * a / n) + "%" : "—", tk = L => L.length ? `<span class="small">${esc(L.slice(0, 12).join(" "))}${L.length > 12 ? ` +${L.length - 12}` : ""}</span>` : "";
+  const line = (lab, m) => `<div><b>${lab}:</b> ${m.up.length} improved · ${m.down.length} worsened · ${m.switch.length} switched Repairing ↔ Cooling · ${m.same} unchanged${m.na ? ` · ${m.na} not comparable` : ""}</div>${m.up.length ? `<div class="small">Improved: ${tk(m.up)}</div>` : ""}${m.down.length ? `<div class="small">Worsened: ${tk(m.down)}</div>` : ""}`;
+  return hd + `<div class="bd"><div style="margin-bottom:8px">${tot.n} stocks assessed · Lead ${tot.L} (${pc0(tot.L, tot.n)}) · Repairing ${tot.R} · Cooling ${tot.C} · Lag ${tot.G}</div>
+    <div style="margin-bottom:8px">${line("Since the last session", tot.m1)}${line("Over 5 sessions", tot.m5)}</div>
+    <details class="tp-fold"><summary>By group (3+ names) — ${groups.length} groups</summary><div class="tscroll" style="max-height:480px"><table class="mini lmlg"><thead><tr><th class="l">Group</th><th>Lead</th><th>Repairing</th><th>Cooling</th><th>Lag</th><th class="l">Improved · 5 sessions</th><th class="l">Worsened · 5 sessions</th></tr></thead><tbody>
+    ${groups.map(o => `<tr><td class="l">${esc(o.g)}</td><td>${o.L}/${o.n}</td><td>${o.R}</td><td>${o.C}</td><td>${o.G}</td><td class="l tks pos">${tk(o.up5)}</td><td class="l tks neg">${tk(o.down5)}</td></tr>`).join("")}</tbody></table></div></details></div>`;
+}
+hookOn("tab", "lml-groups", t => {
+  if (t !== "themes" || !S.snap) return;
+  const tab = $("tab-themes"); if (!tab) return;
+  let box = $("lmlGroups"); if (!box) { const first = tab.querySelector(".card"); (first || tab).insertAdjacentHTML(first ? "beforebegin" : "afterbegin", `<div class="card g1" id="lmlGroups"></div>`); box = $("lmlGroups"); }
+  try { box.innerHTML = lmlGroupsHTML(); } catch (e) { console.error("structure groups", e); box.innerHTML = `<div class="hd"><h2>Structure by group</h2></div><div class="bd"><div class="empty">Couldn't be drawn (error logged).</div></div>`; }
+});
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   FAILED RALLY RESEARCH STATES (31 Oct 2026). Research / watch only — no entry rule, no live stock-short permission, no
+   sizing; the short watch, the ETF setups short side (MAP S5.4) and every list / feed are unchanged.
+   Eugene (chat, 31 Oct): "approve both drafts as written". Spec: Notion "Failed Rally Short — Research Spec (RESEARCH, watch
+   only — 31 Oct 2026)" https://app.notion.com/p/40aff58fe7ad81b1bfb1e2dea7cbc96f §2–§3 (repo docs/draft-failed-rally-short-
+   research-2026-10-31.md). Thresholds = the page's (proposed) starting values, in FRC.
+   - Damaged: on the short watch within the last 20 sessions (short research memory: an open "SH" record, or a closed one
+     whose last day on the watch is within 20 sessions — so this builds up from 31 Oct) AND close below the 50 SMA.
+   - Resistance kinds (each a level above / near the close): the daily 21 EMA when falling (below its value 5 bars ago), the
+     50 SMA, broken support (a swing low — lower than the 3 bars either side — of the last 60 bars that a later close went
+     below). AVWAP: only with a recorded anchor — none recorded yet, so not used.
+   - States at the last bar, first match wins: Invalidated (two closes > 0.5 ADR above the last tested level) · Extended
+     (close > 2 ADR below the test-day low) · Rejection confirmed (tested 1–3 sessions ago; today closes under the prior
+     low, or a lower high closing in the lower half) · Testing resistance (high within 0.25 ADR of a level or above, close ≤
+     0.25 ADR above it) · Rebounding toward resistance (close ≥ 1 ADR above the lowest close of the last 10, a level ≤ 1.5
+     ADR above) · Damaged — waiting. ADR = 20-day mean(high / low − 1) × close.
+   - Levels shown: resistance + kind, failed-rally high (highest high since the test), first support (nearest swing low below,
+     else the 20-session low), stop distance in ADR, room in R, RS 5 / RS 20 vs QQQ side by side (percentage points).
+   - Shorts page card "Failed rally research"; TradingView lists items under Short research · stocks.
+   Storage: none. Hook point "tab" — no override.
+   ===================================================================== */
+const FRC = {dmgN: 20, rebN: 10, reb: 1.0, near: 1.5, test: 0.25, testOver: 0.25, rejN: 3, inval: 0.5, ext: 2.0, e21Slope: 5, swingW: 3, swingN: 60, look: 10};
+const FR_ST = {inv: {n: "Invalidated — repaired", c: "", o: 6}, ext: {n: "Extended — too late", c: "", o: 5}, rej: {n: "Rejection confirmed", c: "go", o: 1}, test: {n: "Testing resistance", c: "zone", o: 2}, reb: {n: "Rebounding toward resistance", c: "wait", o: 3}, wait: {n: "Damaged — waiting", c: "", o: 4}};
+const FRX = {key: null, m: new Map()};
+// sessions between two dates on the NYSE calendar
+function frSessBetween(a, b){ let n = 0, d = a; while (d && d < b && n < 400) { d = nextSess(d); n++; } return n; }
+function frDamagedMemo(sym, sess){
+  const o = tvlCampAll(), k = "SH:" + sym;
+  if (o.open[k]) return o.open[k].reb || o.open[k].miss ? frSessBetween(o.open[k].seen, sess) <= FRC.dmgN : true;
+  return o.closed.some(c => c.pb === "SH" && c.s === sym && c.seen && frSessBetween(c.seen, sess) <= FRC.dmgN);
+}
+// pure: bars {c,h,l,bc,dates,n} → the research state at the last bar (null when not damaged by price: close ≥ 50 SMA)
+function frCalc(b){
+  if (!b || b.n < 60) return null;
+  const {c, h, l} = b, n = b.n, t = n - 1, C = FRC;
+  const s50 = PZ.sma(c, 50), e21 = PZ.ema(c, 21), adrA = PZ.sma(PZ.map(n, k => h[k] / l[k]), 20);
+  const D = k => fin(adrA[k]) ? (adrA[k] - 1) * c[k] : NaN;
+  if (!(fin(s50[t]) && c[t] < s50[t]) || !fin(D(t))) return null;
+  // swing lows (lower than the swingW bars either side) inside the window, and whether a later close broke them
+  const swings = []; for (let k = Math.max(C.swingW, n - C.swingN); k <= t - C.swingW; k++) { let ok = true; for (let u = 1; u <= C.swingW; u++) if (!(l[k] < l[k - u] && l[k] < l[k + u])) { ok = false; break; } if (ok) swings.push(k); }
+  const levels = k => { const L = []; if (fin(e21[k]) && fin(e21[k - C.e21Slope]) && e21[k] < e21[k - C.e21Slope]) L.push({x: e21[k], kind: "falling 21 EMA"}); if (fin(s50[k])) L.push({x: s50[k], kind: "50 SMA"});
+    for (const j of swings) { if (j >= k) continue; let broke = false; for (let u = j + 1; u <= k; u++) if (c[u] < l[j]) { broke = true; break; } if (broke) L.push({x: l[j], kind: "broken support " + b.dates[j]}); } return L; };
+  const testAt = k => { const d = D(k); if (!fin(d)) return null; let best = null; for (const v of levels(k)) if (h[k] >= v.x - C.test * d && c[k] <= v.x + C.testOver * d && (!best || v.x < best.x)) best = v; return best; };
+  // most recent test within the look-back window (not today)
+  let jT = null, lvT = null; for (let k = t - 1; k >= Math.max(0, t - C.look); k--) { const v = testAt(k); if (v) { jT = k; lvT = v; break; } }
+  const d = D(t), Lt = levels(t), above = Lt.filter(v => v.x >= c[t]).sort((a, b) => a.x - b.x), testNow = testAt(t);
+  let st = "wait", lv = testNow || lvT || above[0] || null;
+  if (lvT && c[t] > lvT.x + C.inval * d && c[t - 1] > lvT.x + C.inval * D(t - 1)) { st = "inv"; lv = lvT; }
+  else if (jT != null && c[t] < l[jT] - C.ext * d) { st = "ext"; lv = lvT; }
+  else if (jT != null && t - jT <= C.rejN && (c[t] < l[t - 1] || (h[t] < h[jT] && c[t] < (h[t] + l[t]) / 2))) { st = "rej"; lv = lvT; }
+  else if (testNow) { st = "test"; lv = testNow; }
+  else { let lo = Infinity; for (let k = Math.max(0, t - C.rebN + 1); k <= t; k++) lo = Math.min(lo, c[k]); if (c[t] >= lo + C.reb * d && above.length && above[0].x - c[t] <= C.near * d) { st = "reb"; lv = above[0]; } }
+  const j0 = st === "test" ? t : jT; let frHi = NaN; if (j0 != null) { frHi = -Infinity; for (let k = j0; k <= t; k++) frHi = Math.max(frHi, h[k]); }
+  const sup = swings.filter(k => l[k] < c[t]).map(k => l[k]).sort((a, b) => b - a)[0]; let lo20 = Infinity; for (let k = Math.max(0, t - 19); k <= t; k++) lo20 = Math.min(lo20, l[k]);
+  const support = fin(sup) ? sup : lo20, stopA = fin(frHi) ? (frHi - c[t]) / d : NaN, room = fin(frHi) && frHi > c[t] ? (c[t] - support) / (frHi - c[t]) : NaN;
+  const rs = m => t >= m && fin(b.bc[t]) && fin(b.bc[t - m]) ? ((c[t] / c[t - m]) - (b.bc[t] / b.bc[t - m])) * 100 : NaN;
+  return {st, lv: lv ? lv.x : NaN, kind: lv ? lv.kind : "", testDate: j0 != null ? b.dates[j0] : null, frHi, support, stopA, room, rs5: rs(5), rs20: rs(20), adrD: d, close: c[t], to: b.dates[t]};
+}
+function frOf(r){
+  if (!r || !tvlHist()) return null;
+  const key = (typeof pbKey === "function" ? pbKey() : dssKey()) + "|" + (tvlCampAll().last || "");
+  if (FRX.key !== key) { FRX.key = key; FRX.m = new Map(); }
+  if (FRX.m.has(r.sym)) return FRX.m.get(r.sym);
+  let x = null; const sess = tvlSess();
+  try { if (sess && frDamagedMemo(r.sym, sess)) { const b = dssBars(r.sym); x = b ? frCalc(b) : null; } } catch (e) { x = null; }
+  FRX.m.set(r.sym, x); return x;
+}
+function frRows(){ const out = []; for (const r of S.stocks) { const x = frOf(r); if (x) out.push({r, x}); } return out.sort((a, b) => FR_ST[a.x.st].o - FR_ST[b.x.st].o || (a.r.sym < b.r.sym ? -1 : 1)); }
+const frP = v => fin(v) ? v.toFixed(2) : "—";
+function frHTML(){
+  const hd = `<div class="hd"><h2>Failed rally research</h2><span class="sub">watch only · research spec (Notion, 31 Oct) · damaged names: on the short watch in the last ${FRC.dmgN} sessions and under the 50 SMA · intraday trigger in TradingView</span></div>`;
+  if (!tvlHist()) return hd + `<div class="bd"><div class="empty">Needs the stored price history. <button class="btn sm" data-hist="full">Load price history</button></div></div>`;
+  const R = frRows(); if (!R.length) return hd + `<div class="bd"><div class="empty">No damaged name under its 50 SMA right now. Names come from the short watch and its memory (building up from 31 Oct).</div></div>`;
+  const cnt = Object.keys(FR_ST).map(k => [k, R.filter(o => o.x.st === k).length]).filter(([, n]) => n).map(([k, n]) => `${FR_ST[k].n} ${n}`).join(" · ");
+  return hd + `<div class="bd"><div class="small" style="margin-bottom:6px">${cnt}. A failed rally is taken on the <b>failure</b> of a rebound into resistance — not on weakness alone. Trigger A (main route): a fresh 30-min close under its 21 EMA after the prior close at or above it, next bar, not before 10:00 ET. Checks to research: stop ≤ 0.6 ADR above the failed-rally high, room ≥ 2R to first support, no earnings within 5 sessions. No size — research only.</div>
+    <div class="tscroll" style="max-height:520px"><table class="mini"><thead><tr><th class="l">Ticker</th><th class="l">State</th><th class="l">Resistance</th><th>Level</th><th>Close</th><th title="Highest high since the test">Failed-rally high</th><th title="Nearest swing low below, else the 20-session low">First support</th><th title="(failed-rally high − close) ÷ ADR">Stop, ADR</th><th title="(close − support) ÷ (failed-rally high − close)">Room, R</th><th title="5-session return minus QQQ's, percentage points">RS 5</th><th title="20-session return minus QQQ's">RS 20</th><th class="l">Group</th></tr></thead><tbody>
+    ${R.map(({r, x}) => `<tr data-sym="${esc(r.sym)}"><td class="l sym">${esc(r.sym)}</td><td class="l"><span class="pill ${FR_ST[x.st].c}">${FR_ST[x.st].n}</span>${x.testDate ? ` <span class="small dim">test ${esc(x.testDate)}</span>` : ""}</td><td class="l small">${esc(x.kind || "—")}</td><td>${frP(x.lv)}</td><td>${frP(x.close)}</td><td>${frP(x.frHi)}</td><td>${frP(x.support)}</td>
+      <td class="${fin(x.stopA) && x.stopA > 0.6 ? "neg" : ""}">${fin(x.stopA) ? x.stopA.toFixed(2) : "—"}</td><td class="${fin(x.room) && x.room < 2 ? "neg" : fin(x.room) ? "pos" : ""}">${fin(x.room) ? x.room.toFixed(1) : "—"}</td><td class="${cls(x.rs5)}">${fin(x.rs5) ? (x.rs5 > 0 ? "+" : "") + x.rs5.toFixed(1) : "—"}</td><td class="${cls(x.rs20)}">${fin(x.rs20) ? (x.rs20 > 0 ? "+" : "") + x.rs20.toFixed(1) : "—"}</td><td class="l small">${esc(r.group || "")}</td></tr>`).join("")}</tbody></table></div></div>`;
+}
+function frPaint(){
+  const at = $("shMem") || $("shortBox2"); if (!at || !S.snap) return;
+  let box = $("frBox"); if (!box) { at.insertAdjacentHTML("afterend", `<div class="card g1" id="frBox"></div>`); box = $("frBox"); }
+  try { box.innerHTML = frHTML(); } catch (e) { console.error("failed rally research", e); box.innerHTML = `<div class="hd"><h2>Failed rally research</h2></div><div class="bd"><div class="empty">Couldn't be drawn (error logged).</div></div>`; }
+}
+hookOn("tab", "failed-rally", t => { if (t === "shorts") setTimeout(frPaint, 80); });   // after the memory sync (60 ms)
+document.addEventListener("click", e => { const tr = e.target.closest("#frBox tr[data-sym]"); if (tr && S.rowBySym && S.rowBySym.has(tr.dataset.sym)) openDrawer(tr.dataset.sym); });
 </script>
