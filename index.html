@@ -2914,6 +2914,7 @@ function histBuild(recs){
   // O = opening prices; days stored before opens were kept stay NaN (the Market breadth card refetches recent ones)
   Object.assign(HIST, {dates: recs.map(r => r.d), syms, idx, nD, nS, C, Hh, L, V, O, oDays: new Set(recs.filter(r => r.o).map(r => r.d)), p1Days: new Set(recs.filter(r => r.p1).map(r => r.d)), hl: null, status: nD ? "ready" : "none"});
   HIST.wk = HIST.dates.map(weekKey);
+  if (typeof histRestarts === "function") histRestarts();   // 31 Oct: re-used tickers — RE-USED TICKER GUARD script
 }
 const histEmpty = () => new Set(store.get("adrb.histEmpty", []));
 async function histUpdate(full, quiet){
@@ -15047,4 +15048,66 @@ function frPaint(){
 }
 hookOn("tab", "failed-rally", t => { if (t === "shorts") setTimeout(frPaint, 80); });   // after the memory sync (60 ms)
 document.addEventListener("click", e => { const tr = e.target.closest("#frBox tr[data-sym]"); if (tr && S.rowBySym && S.rowBySym.has(tr.dataset.sym)) openDrawer(tr.dataset.sym); });
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   RE-USED TICKER GUARD (31 Oct 2026). Data handling — changes numbers ONLY for a symbol whose stored price history mixes two
+   instruments; every other symbol's bars, and so every other number, is untouched.
+   Eugene (chat, 31 Oct): "go ahead with the re-used ticker guard" — after the structure-label agreement check found one
+   ticker whose Massive history held an older instrument (~$22–25 on tiny volume), a 67-session gap, then a new listing at
+   ~$161 (docs/lml-agreement-check-2026-10-31.md). The board's averages, Entry Check, R1, Floor Bounce, feed, labels and
+   scans all read that window, so they silently mixed the two.
+   - histRestarts() runs at the end of histBuild (in memory only; the stored days in IndexedDB are never changed). For each
+     symbol, a "restart" = a gap of HRS.gap or more stored sessions with no bar, after which the first close differs from the
+     last close before the gap by HRS.ratio× or more either way, AND no share split on record (SB.splits, the same list
+     dssSplits uses) falls inside the gap and explains the jump. The days before the last restart are set to "no bar" —
+     the same as days before a listing — so every reader (dssBars and the ~15 direct readers of HIST) starts the symbol at
+     its restart. HIST.restart = Map sym → {date, gap, before, after, beforeDate}.
+   - Shown: Data check card "Price history restarted (re-used tickers)" listing each one; a line in the ticker panel.
+   Storage: none. Hook points "tab" + "panel"; histBuild gains one call line (in place).
+   ===================================================================== */
+const HRS = {gap: 20, ratio: 1.5};
+function hrsSplitExplains(sym, d0, d1, r){
+  const L = typeof SB !== "undefined" && SB.splits && SB.splits.list ? SB.splits.list : [];
+  for (const [t, d, from, to] of L) { if (t !== sym || !(d > d0 && d <= d1)) continue; const f = to / from; if (!(f > 0)) continue;
+    const exp = Math.log(1 / f); if (Math.abs(Math.log(r) - exp) < Math.abs(exp) / 2) return true; }
+  return false;
+}
+function histRestarts(){
+  HIST.restart = new Map();
+  const nD = HIST.nD; if (!nD || !HIST.C) return HIST.restart;
+  for (let i = 0; i < HIST.nS; i++) {
+    const o = i * nD, sym = HIST.syms[i]; let last = -1, cut = -1, info = null;
+    for (let t = 0; t < nD; t++) {
+      const c = HIST.C[o + t]; if (!isFinite(c) || !(c > 0)) continue;
+      if (last >= 0 && t - last - 1 >= HRS.gap) {
+        const b = HIST.C[o + last], r = c / b;
+        if ((r >= HRS.ratio || r <= 1 / HRS.ratio) && !hrsSplitExplains(sym, HIST.dates[last], HIST.dates[t], r)) { cut = t; info = {date: HIST.dates[t], gap: t - last - 1, before: b, after: c, beforeDate: HIST.dates[last]}; }
+      }
+      last = t;
+    }
+    if (cut > 0) { for (let t = 0; t < cut; t++) { const k = o + t; HIST.C[k] = NaN; HIST.Hh[k] = NaN; HIST.L[k] = NaN; HIST.V[k] = NaN; if (HIST.O) HIST.O[k] = NaN; } HIST.restart.set(sym, info); }
+  }
+  return HIST.restart;
+}
+const hrsLine = (sym, x) => `${sym}: no bars for ${x.gap} sessions after ${x.beforeDate} (last close ${x.before.toFixed(2)}), then ${x.after.toFixed(2)} on ${x.date} — a different instrument under the same ticker; the bars before ${x.date} are ignored`;
+function hrsHTML(){
+  const R = HIST.restart || new Map();
+  const L = [...R.entries()].sort((a, b) => a[0] < b[0] ? -1 : 1);
+  return `<div class="hd"><h2>Price history restarted (re-used tickers)</h2><span class="sub">a gap of ${HRS.gap}+ sessions, then a price ${HRS.ratio}× away, with no share split on record — the board starts these symbols at the new listing</span></div><div class="bd">
+    ${L.length ? `<ul class="small" style="margin:0;padding-left:18px">${L.map(([s, x]) => `<li><b>${esc(s)}</b> — ${esc(hrsLine(s, x).slice(s.length + 2))}</li>`).join("")}</ul>` : `<div class="empty">None in the stored history.</div>`}</div>`;
+}
+hookOn("tab", "hrs", t => {
+  if (t !== "data" || !HIST.nD) return;
+  const tab = $("tab-data"); if (!tab) return;
+  let box = $("hrsBox"); if (!box) { tab.insertAdjacentHTML("beforeend", `<div class="card g1" id="hrsBox"></div>`); box = $("hrsBox"); }
+  try { box.innerHTML = hrsHTML(); } catch (e) { console.error("restart card", e); }
+});
+hookOn("panel", "hrs", (r, dr) => {
+  dr.querySelectorAll(".hrsline").forEach(n => n.remove());
+  const x = HIST.restart && HIST.restart.get(r.sym); if (!x) return;
+  const at = dr.querySelector("#tvbox") || dr.firstElementChild; if (!at) return;
+  at.insertAdjacentHTML("afterend", `<div class="note hrsline small" style="margin:6px 0">Price history restarts on <b>${esc(x.date)}</b> — a different instrument used this ticker before (no bars for ${x.gap} sessions, then ${x.before.toFixed(2)} → ${x.after.toFixed(2)}). The board ignores the bars before ${esc(x.date)}.</div>`);
+});
 </script>
