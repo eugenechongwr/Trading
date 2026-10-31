@@ -14614,7 +14614,8 @@ function dvBuild(){
     when: {new_york_now: `${ny.d} ${hhmm(ny.m)} ET`, files: rawNames(curFiles()), file_data_to: S.snap.asOf || null, session_mode: S.mode === "pm" ? "premarket" : "regular session",
       live: live ? {data_to: `${live.date} ${hhmm(etMin(live.dataMs - 1) + 1)} ET`, phase: live.mode === "pm" ? "premarket" : "regular session", source: "Massive, 15 minutes delayed"} : null,
       price_history_to: S.has.hist && HIST.nD ? HIST.dates[HIST.nD - 1] : null, entry_check: L ? "on" : "needs the price history (Data check → Load price history)"},
-    market: {map_call: mapRegime().v || null, board_tape_read: tp ? {read: tp.bucket, score: tp.score} : null, size_regime: rg.v ? `${rg.v} (${rg.src === "map" ? "MAP" : rg.src === "tape" ? "tape read" : "default"})` : null},
+    market: {map_call: mapRegime().v || null, board_tape_read: tp ? {read: tp.bucket, score: tp.score} : null, size_regime: rg.v ? `${rg.v} (${rg.src === "map" ? "MAP" : rg.src === "tape" ? "tape read" : "default"})` : null,
+      macro_checklist: (() => { try { return typeof mcSummary === "function" ? mcSummary() : null; } catch (e) { return null; } })()},   // 31 Oct: MACRO CHECKLIST (display only)
     map: {A: [...LISTS.focus], B: typeof MAPL !== "undefined" ? [...MAPL.b] : [], stalk: typeof MAPL !== "undefined" ? [...MAPL.stalk] : [], held: [...LISTS.held]},
     lists, counts, watchlist: wl, names};
 }
@@ -15453,6 +15454,396 @@ function frPaint(){
 }
 hookOn("tab", "failed-rally", t => { if (t === "shorts") setTimeout(frPaint, 80); });   // after the memory sync (60 ms)
 document.addEventListener("click", e => { const tr = e.target.closest("#frBox tr[data-sym]"); if (tr && S.rowBySym && S.rowBySym.has(tr.dataset.sym)) openDrawer(tr.dataset.sym); });
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   MACRO CHECKLIST (31 Oct 2026). Display / tracking only — reads the breadth screener file; never changes the six-line
+   tape read (S.tape: bucket, score, lines, history), MAP's call, the size regime, shorts, lists, the plan, the Deep Space
+   or ETF feeds, the Decision log, snapshots or the MAP import. Changes no number any of those use.
+   Eugene (chat, 31 Oct): "i want a new rebuild to the script. an update to map with this new breadth csv. an update to
+   deep space board so it can read the new breadth csv and use everything in it."
+   What it reads: Breadth Screener v3.0 (indicators/screener/breadth-screener/) over the "Macro Checklist" watchlist
+   (macro-checklist-watchlist.txt, 96 lines: the 77 v2 lines + 11 sectors, NYSE / Nasdaq A/D ratio rows, up/down
+   volume ratio rows, Nasdaq new highs / lows, HYG/LQD, VIX9D/VIX, QQQE/QQQ, ARKK/SPY). Every column of the file is
+   parsed from the raw text the board already keeps (S.breadth.raw.text, set by the saved-files section) — setBreadth,
+   BR_EXPECTED, BR_COLS and computeTape are untouched, so an old v2 file still reads exactly as before.
+   Spread rows export odd keys (AMEX:HYG/NASDAQ:IEF → "HYG/NASDAQ"), so each line is matched by its export key, by its
+   symbol with exchange prefixes stripped, or by its Description formula (e.g. "ADVN.NQ/DECL.NQ").
+   Presentation (Eugene, chat, 31 Oct: "update MAP and deepspace board so that it utilises and present the breadth screener
+   effectively"): a one-line headline (what's weak / what's holding), "since the last file" changes per line (forward-only
+   history, one entry per breadth date), and a compact strip on Today under the tape read that opens the Market card.
+   Shows, on Market under the tape read: a 15-line macro checklist (index trend + stage, a daily Weinstein-style check,
+   breadth levels + stall, NASI / NYSI-style summation, A/D line + new highs / lows, thrust + 90% days, sectors,
+   risk-appetite ratios, credit, volatility, put/call, rates + Fed path, dollar, commodities, yesterday's unusual moves)
+   with healthy / caution / weak / context dots, plus a fold with every line and every column in native units
+   (breadth in points, yields in basis points, SOFR as the implied rate). The dots are not a verdict and feed nothing.
+   Thresholds borrowed from the tape read come from CFG.tape (VIX calm / stress, VIX/VIX3M stress, breadth 60 / 40).
+   Also adds market.macro_checklist to what the Claude connector shares (one line in dvBuild; read-only summary).
+   Asia board: off (parked; it has its own breadth screener).
+   Storage NEW: adrb.mcCols ("key" | "all"), adrb.mcOpen (0/1), adrb.mcHist (last 120 breadth dates: {d, l: line → dot}).
+   Hook: hookOn("tab", "macro") (Market card + Today strip). Test: tools/board-macro-test.js.
+   ===================================================================== */
+const MC = {cache: null, src: null};
+// [section, [[export key, description formula or "", unit, short label]]] — units: px price/level (%), pp breadth % (points),
+// yd yield / rate spread in % (bp), vx volatility index (points), rt ratio (%), ct count, nt net advances, pcr put/call,
+// sofr SOFR future (implied rate = 100 − price), ar advance/decline or up/down-volume ratio
+const MC_SEC = [
+  ["Rates & Fed path", [["US03MY", "", "yd", "3-month"], ["US02Y", "", "yd", "2-year"], ["US03Y", "", "yd", "3-year"], ["US10Y", "", "yd", "10-year"], ["US20Y", "", "yd", "20-year"], ["US30Y", "", "yd", "30-year"], ["T10Y2Y", "", "yd", "10s−2s (FRED)"], ["T10Y3M", "", "yd", "10y−3m (FRED)"], ["DFII10", "", "yd", "10-yr real yield"], ["T10YIE", "", "yd", "10-yr breakeven"], ["SR3Z2026", "", "sofr", "SOFR Dec-26"], ["SR3M2027", "", "sofr", "SOFR Jun-27"], ["TLT", "", "px", "TLT"]]],
+  ["Dollar & FX", [["DXY", "", "px", "Dollar"], ["USDJPY", "", "px", "USD/JPY"], ["AUDJPY", "", "px", "AUD/JPY"]]],
+  ["Credit", [["HYG", "", "px", "HYG"], ["LQD", "", "px", "LQD"], ["HYG/NASDAQ", "HYG/IEF", "rt", "HYG/IEF"], ["HYG/AMEX", "HYG/LQD", "rt", "HYG/LQD"], ["BAMLH0A0HYM2", "", "yd", "High-yield spread"], ["KRE", "", "px", "Regional banks"]]],
+  ["Volatility", [["VIX", "", "vx", "VIX"], ["VIX9D", "", "vx", "VIX 9-day"], ["VIX3M", "", "vx", "VIX 3-month"], ["VIX/CBOE", "VIX/VIX3M", "rt", "VIX/VIX3M"], ["VIX9D/TVC", "VIX9D/VIX", "rt", "VIX9D/VIX"], ["VXN", "", "vx", "Nasdaq VIX"], ["VVIX", "", "vx", "VVIX"], ["SKEW", "", "vx", "SKEW"], ["MOVE", "", "vx", "MOVE"]]],
+  ["Put / call", [["CPC", "", "pcr", "Total"], ["CPCS", "", "pcr", "Equity"], ["CPCI", "", "pcr", "Index"]]],
+  ["Index futures", [["ES1!", "", "px", "S&P fut"], ["NQ1!", "", "px", "Nasdaq fut"], ["RTY1!", "", "px", "Russell fut"]]],
+  ["Indexes & core ETFs", [["SPY", "", "px", "SPY"], ["QQQ", "", "px", "QQQ"], ["RSP", "", "px", "RSP"], ["QQQE", "", "px", "QQQE"], ["IWM", "", "px", "IWM"], ["IXIC", "", "px", "Nasdaq Comp"], ["SMH", "", "px", "Semis"]]],
+  ["Sectors — offense", [["XLK", "", "px", "Tech"], ["XLC", "", "px", "Comms"], ["XLY", "", "px", "Discretionary"], ["XLF", "", "px", "Financials"], ["XLI", "", "px", "Industrials"], ["XLB", "", "px", "Materials"]]],
+  ["Sectors — defense & rates", [["XLP", "", "px", "Staples"], ["XLU", "", "px", "Utilities"], ["XLV", "", "px", "Health care"], ["XLE", "", "px", "Energy"], ["XLRE", "", "px", "Real estate"]]],
+  ["Risk-appetite ratios", [["RSP/AMEX", "RSP/SPY", "rt", "RSP/SPY"], ["QQQE/NASDAQ", "QQQE/QQQ", "rt", "QQQE/QQQ"], ["IWM/AMEX", "IWM/SPY", "rt", "IWM/SPY"], ["SMH/AMEX", "SMH/SPY", "rt", "SMH/SPY"], ["XLY/AMEX", "XLY/XLP", "rt", "XLY/XLP"], ["SPHB/AMEX", "SPHB/SPLV", "rt", "SPHB/SPLV"], ["IWD/AMEX", "IWD/IWF", "rt", "IWD/IWF"], ["ARKK/AMEX", "ARKK/SPY", "rt", "ARKK/SPY"], ["HG1!/COMEX", "HG1!/GC1!", "rt", "Copper/gold"]]],
+  ["Commodities & crypto", [["CL1!", "", "px", "Oil"], ["GC1!", "", "px", "Gold"], ["HG1!", "", "px", "Copper"], ["BTCUSD", "", "px", "Bitcoin"]]],
+  ["Advances, declines, highs & lows", [["ADVN", "", "ct", "NYSE up"], ["DECN", "", "ct", "NYSE down"], ["ADRN", "", "ar", "NYSE A/D ratio"], ["ADVN.NQ", "", "ct", "Nasdaq up"], ["DECL.NQ", "", "ct", "Nasdaq down"], ["NSHF", "", "nt", "NYSE net advances"], ["HIGN", "", "ct", "NYSE new highs"], ["LOWN", "", "ct", "NYSE new lows"], ["HIGQ", "", "ct", "Nasdaq new highs"], ["LOWQ", "", "ct", "Nasdaq new lows"]]],
+  ["Summation, thrust & up/down volume", [["ADVN/INDEX", "ADVN/DECN", "ar", "NYSE A/D (NYSI)"], ["ADVN.NQ/USI", "ADVN.NQ/DECL.NQ", "ar", "Nasdaq A/D (NASI)"], ["UPVOL.NY/USI", "UPVOL.NY/DNVOL.NY", "ar", "NYSE up/down volume"], ["UPVOL.NQ/USI", "UPVOL.NQ/DNVOL.NQ", "ar", "Nasdaq up/down volume"]]],
+  ["% of stocks above their averages", [["MMTW", "", "pp", "All 20-day"], ["MMFI", "", "pp", "All 50-day"], ["MMTH", "", "pp", "All 200-day"], ["S5TW", "", "pp", "S&P 20-day"], ["S5FI", "", "pp", "S&P 50-day"], ["S5TH", "", "pp", "S&P 200-day"], ["NDTW", "", "pp", "NDX 20-day"], ["NDFI", "", "pp", "NDX 50-day"], ["NDTH", "", "pp", "NDX 200-day"], ["R2TW", "", "pp", "R2K 20-day"], ["R2FI", "", "pp", "R2K 50-day"], ["R2TH", "", "pp", "R2K 200-day"], ["NCFD", "", "pp", "Nasdaq 5-day"], ["SKFD", "", "pp", "Tech 5-day"]]]
+];
+const MC_SPECS = MC_SEC.flatMap(([sec, L]) => L.map(([k, f, u, n]) => ({k, f, u, n, sec})));
+const MC_BYK = new Map(MC_SPECS.map(s => [s.k, s]));
+// every column of the v3 export (lower-cased header → field); v2 files simply lack the v3 ones
+const MC_COLS = {close: "close", chg1d: "chg_1d", p1d: "pct_1d", chg1w: "chg_1w", chg1m: "chg_1m", p1w: "pct_1w", p1m: "pct_1m", slope5: "slope_5d",
+  adCum: "ad_cum", adSum5: "ad_sum_5d", mcc: "mcclellan", ema10: "ema_10d", pos1y: "pos_1y", vs50: "vs_50d", vs200: "vs_200d",
+  z: "move_z", vs150: "vs_150d", ma150: "ma150_slope", stage: "stage", d50: "days_vs50", band: "band_days", cumPos: "cum_pos_1y",
+  mco: "ra_mco", mcoChg: "ra_mco_chg1", sum: "ra_sum", sumVs50: "ra_sum_vs50", sumChg5: "ra_sum_chg5",
+  share: "share", zw: "zweig", zwLo: "zweig_low10", thr: "thrust_days", n90u: "n90up_10d", n90d: "n90dn_10d"};
+const MC_V3 = ["chg_1d", "stage", "ra_sum_vs50", "zweig"];
+const mcNorm = s => String(s || "").toUpperCase().replace(/\s+/g, "").replace(/[A-Z0-9_]+:/g, "");
+// parse the whole breadth file once per file (cached on the raw text)
+function mcData(){
+  const B = S.breadth; if (!B) return null;
+  const text = B.raw && B.raw.text;
+  if (MC.cache && MC.src === (text || B)) return MC.cache;
+  const rows = [];
+  let hdr = [];
+  if (text) {
+    const grid = parseCSV(String(text).replace(/^﻿/, ""));
+    hdr = (grid[0] || []).map(h => String(h).trim().toLowerCase());
+    const ix = {}; for (const k in MC_COLS) ix[k] = hdr.indexOf(MC_COLS[k]);
+    const iS = hdr.indexOf("symbol"), iD = hdr.indexOf("description");
+    for (const r of grid.slice(1)) {
+      const sym = String(r[iS] ?? "").trim(); if (!sym) continue;
+      const o = {sym, desc: iD >= 0 ? String(r[iD] ?? "").trim() : ""};
+      for (const k in MC_COLS) o[k] = ix[k] >= 0 ? num(r[ix[k]]) : null;
+      rows.push(o);
+    }
+  } else for (const o of B.map.values()) rows.push({...o});        // no raw text: the v2 fields the board already parsed
+  // match every expected line: export key, then the symbol without exchange prefixes, then the Description formula
+  const got = new Map(), used = new Set();
+  for (const s of MC_SPECS) {
+    let o = rows.find(x => x.sym === s.k);
+    if (!o) o = rows.find(x => !used.has(x) && mcNorm(x.sym) === (s.f ? mcNorm(s.f) : s.k));
+    if (!o && s.f) o = rows.find(x => !used.has(x) && mcNorm(x.desc) === mcNorm(s.f));
+    if (o) { got.set(s.k, o); used.add(o); }
+  }
+  const v3 = MC_V3.every(c => hdr.includes(c));
+  MC.src = text || B;
+  MC.cache = {rows, got, other: rows.filter(o => !used.has(o)), missing: MC_SPECS.filter(s => !got.has(s.k)).map(s => s.k), v3, asOf: B.asOf, name: B.name, n: rows.length};
+  return MC.cache;
+}
+// ---- formatting in native units
+const mcF = (x, d) => fin(x) ? (x > 0 ? "+" : x < 0 ? "−" : "") + Math.abs(x).toFixed(d) : "—";
+const mcCls = (x, inv) => fin(x) ? ((inv ? -x : x) > 0 ? "pos" : (inv ? -x : x) < 0 ? "neg" : "") : "dim";
+function mcLast(o, u){
+  const c = o && o.close; if (!fin(c)) return "—";
+  if (u === "sofr") return (100 - c).toFixed(2) + "%";
+  if (u === "yd" || u === "pp") return c.toFixed(2) + (u === "pp" ? "%" : "%");
+  if (u === "ct" || u === "nt") return Math.round(c).toLocaleString();
+  if (u === "ar" || u === "pcr") return c.toFixed(2);
+  return Math.abs(c) >= 1000 ? c.toLocaleString(undefined, {maximumFractionDigits: 0}) : Math.abs(c) >= 10 ? c.toFixed(2) : c.toFixed(3);
+}
+// change over h = "1d" | "1w" | "1m" in the line's own unit; returns {t, v} (v signed for colour)
+function mcChg(o, u, h){
+  if (!o) return {t: "—", v: null};
+  const c = o["chg" + h], p = o["p" + h];
+  if (u === "px" || u === "rt") return {t: fin(p) ? mcF(p, 1) + "%" : "—", v: p};
+  if (u === "yd") return {t: fin(c) ? mcF(c * 100, 0) + " bp" : "—", v: c};
+  if (u === "sofr") return {t: fin(c) ? mcF(-c * 100, 0) + " bp" : "—", v: fin(c) ? -c : null};
+  if (u === "pp") return {t: fin(c) ? mcF(c, 1) + " pts" : "—", v: c};
+  if (u === "ct" || u === "nt") return {t: fin(c) ? mcF(c, 0) : "—", v: c};
+  return {t: fin(c) ? mcF(c, 2) : "—", v: c};
+}
+const MC_STAGE = {1: "Stage 1", 2: "Stage 2", 3: "Stage 3", 4: "Stage 4"};
+const mcSt = x => fin(x) && MC_STAGE[Math.round(x)] ? MC_STAGE[Math.round(x)] : "—";
+const mcPct = (x, d = 1) => fin(x) ? mcF(x, d) + "%" : "—";
+const mcTimes = z => fin(z) ? `${Math.abs(z).toFixed(1)}× a normal day` : "";
+// ---- the checklist lines
+function mcLines(D){
+  const R = k => D.got.get(k) || null, v = (k, f) => { const o = R(k); return o && fin(o[f]) ? o[f] : null; }, T = CFG.tape, L = [];
+  const has = k => !!R(k), list = a => a.filter(Boolean).join(", ");
+  const and = a => a.length <= 1 ? a.join("") : a.slice(0, -1).join(", ") + " and " + a[a.length - 1];
+  // 1 · index trend + stage
+  { const idx = ["SPY", "QQQ", "RSP", "IWM"].filter(has).map(s => ({s, x: v(s, "vs50"), d: v(s, "d50"), st: v(s, "stage"), x200: v(s, "vs200")}));
+    let st = null, tx = "Not in the file.";
+    if (idx.length) {
+      const I = s => idx.find(o => o.s === s) || {}, spy = I("SPY"), qqq = I("QQQ"), s2 = o => fin(o.st) ? o.st === 2 : (o.x200 ?? 0) > 0;
+      st = (spy.x > 0 && qqq.x > 0 && s2(spy) && s2(qqq)) ? "g" : (spy.x <= 0 && qqq.x <= 0 && (!s2(spy) || !s2(qqq))) ? "r" : "a";
+      const up = idx.filter(o => o.x > 0), dn = idx.filter(o => o.x <= 0), byStage = {};
+      idx.forEach(o => { const k = mcSt(o.st); (byStage[k] = byStage[k] || []).push(o.s); });
+      tx = (up.length ? `${and(up.map(o => o.s + (fin(o.d) ? ` (${Math.abs(o.d)} d)` : "")))} above the 50-day` : "") + (up.length && dn.length ? "; " : "") +
+        (dn.length ? `${and(dn.map(o => o.s + (fin(o.d) ? ` (${Math.abs(o.d)} d)` : "")))} below it` : "") + ". " +
+        (Object.keys(byStage).some(k => k !== "—") ? Object.entries(byStage).filter(([k]) => k !== "—").map(([k, a]) => `${k}: ${a.join(", ")}`).join(" · ") + " (150-day average)." : "");
+    }
+    L.push({k: "trend", name: "Index trend & stage", sub: "vs 50-day · stage on the 150-day", st, tx, nums: idx.map(o => `${o.s} ${mcPct(o.x)}`).join(" · ")}); }
+  // 2 · Weinstein-style check, daily
+  { const ix = ["QQQ", "SPY", "RSP"].map(s => ({s, st: v(s, "stage")})).filter(o => o.st != null);
+    const secs = MC_SEC.filter(([g]) => /^Sectors/.test(g)).flatMap(([, a]) => a.map(x => x[0])).map(s => ({s, st: v(s, "stage")})).filter(o => o.st != null);
+    let st = null, tx = "Needs the v3 file (Stage column) with the sector rows.", nums = "";
+    if (ix.length) {
+      const s2 = secs.filter(o => o.st === 2), secOk = secs.length ? s2.length / secs.length >= 0.5 : null;
+      const pts = ix.filter(o => o.st === 2).length + (secOk ? 1 : 0), of = ix.length + (secs.length ? 1 : 0);
+      st = of === 4 ? (pts >= 4 ? "g" : pts >= 2 ? "a" : "r") : (pts === of ? "g" : pts === 0 ? "r" : "a");
+      tx = `≈ ${pts}/${of} — Stage 2: ${list(ix.filter(o => o.st === 2).map(o => o.s)) || "none of QQQ, SPY, RSP"}${secs.length ? `; ${s2.length} of ${secs.length} sectors in Stage 2 (needs half)` : "; no sector rows"}. A daily read on the 150-day average — the Sunday Weinstein Regime Gate stays the official score.`;
+      nums = secs.length ? `Not Stage 2: ${list(secs.filter(o => o.st !== 2).map(o => `${o.s} (${mcSt(o.st)})`)) || "none"}` : "";
+    }
+    L.push({k: "wein", name: "Weinstein check (daily)", sub: "QQQ · SPY · sectors · RSP", st, tx, nums}); }
+  // 3 · breadth levels + stall
+  { const b50 = [["S5FI", "S&P"], ["NDFI", "NDX"], ["R2FI", "R2K"], ["MMFI", "all"]].map(([s, n]) => ({n, x: v(s, "close"), c: v(s, "chg1m")})).filter(o => o.x != null);
+    let st = null, tx = "Not in the file.";
+    if (b50.length) {
+      const avg = mean(b50.map(o => o.x)), c1 = mean(b50.map(o => o.c)), band = v("MMTW", "band"), band5 = v("S5TW", "band");
+      st = avg >= T.brGreen ? "g" : avg < T.brRed ? "r" : "a";
+      const stall = [band, band5].some(x => fin(x) && x >= 15);
+      tx = `${Math.round(avg)}% of stocks above their 50-day on average (${avg >= T.brGreen ? "broad" : avg < T.brRed ? "thin" : "middling"})${fin(c1) ? `, ${mcF(c1, 0)} pts in a month` : ""}.` +
+        (fin(band) ? (stall ? ` Breadth stall: the 20-day reading has sat inside 45–65% for ${Math.max(band || 0, band5 || 0)} sessions.` : ` No breadth stall (20-day reading ${band ? `inside 45–65% for ${band} sessions` : "outside 45–65%"}).`) : "");
+    }
+    const t20 = ["MMTW", "S5TW"].map(s => fin(v(s, "close")) ? `${s === "MMTW" ? "all" : "S&P"} above 20-day ${Math.round(v(s, "close"))}%` : "").filter(Boolean);
+    const t200 = ["MMTH", "S5TH"].map(s => fin(v(s, "close")) ? `${s === "MMTH" ? "all" : "S&P"} above 200-day ${Math.round(v(s, "close"))}%` : "").filter(Boolean);
+    L.push({k: "breadth", name: "Breadth", sub: "% of stocks above their averages", st, tx, nums: [b50.map(o => `${o.n} ${Math.round(o.x)}%`).join(" · "), ...t20, ...t200].filter(Boolean).join(" · ")}); }
+  // 4 · NASI / NYSI-style summation
+  { const one = (k, alt, n) => { const key = has(k) && fin(v(k, "sumVs50")) ? k : (alt && fin(v(alt, "sumVs50")) ? alt : null); if (!key) return null;
+      const sv = v(key, "sumVs50"), m = v(key, "mco"), mc = v(key, "mcoChg");
+      return {n, sv, m, mc, st: sv > 0 && m > 0 ? "g" : sv < 0 && m < 0 ? "r" : "a"}; };
+    const A = [one("ADVN.NQ/USI", null, "Nasdaq (NASI)"), one("ADVN/INDEX", "ADRN", "NYSE (NYSI)")].filter(Boolean);
+    let st = null, tx = "Needs the v3 file with the A/D ratio rows (USI:ADVN.NQ/USI:DECL.NQ, INDEX:ADVN/INDEX:DECN).";
+    if (A.length) {
+      st = A.every(o => o.st === "g") ? "g" : A.every(o => o.st === "r") ? "r" : "a";
+      tx = A.map(o => `${o.n} summation ${o.sv > 0 ? "above" : "below"} its 50-day average and ${o.m > 0 ? "rising" : "falling"} (oscillator ${mcF(o.m, 0)}, ${fin(o.mc) ? (o.mc > 0 ? "up" : "down") + " on the day" : "—"})`).join("; ") + ". The level vs zero isn't used here (it depends on how much history loaded) — read the zero line on your NASI chart.";
+    }
+    L.push({k: "nasi", name: "NASI / NYSI", sub: "ratio-adjusted summation vs its 50-day", st, tx, nums: A.map(o => `${o.n.split(" ")[0]}: vs avg ${mcF(o.sv, 0)} · osc ${mcF(o.m, 0)}`).join(" · ")}); }
+  // 5 · A/D line + new highs / lows
+  { const cp = v("NSHF", "cumPos"), ny = [v("HIGN", "adSum5"), v("LOWN", "adSum5")], nq = [v("HIGQ", "adSum5"), v("LOWQ", "adSum5")];
+    const nyOk = fin(ny[0]) && fin(ny[1]), nqOk = fin(nq[0]) && fin(nq[1]);
+    let st = null, tx = "Not in the file.";
+    if (fin(cp) || nyOk) {
+      const hiNY = nyOk ? ny[0] > ny[1] : null, hiNQ = nqOk ? nq[0] > nq[1] : null;
+      st = ((cp ?? 100) >= 80 && hiNY !== false && hiNQ !== false) ? "g" : ((cp ?? 0) < 50 && hiNY === false && hiNQ !== true) ? "r" : "a";
+      tx = (fin(cp) ? `NYSE A/D line at ${Math.round(cp)}% of its 1-year range${cp >= 90 ? " — at or near a new high" : cp < 50 ? " — well off its high" : ""}. ` : "") +
+        (nyOk ? `NYSE ${Math.round(ny[0])} new highs vs ${Math.round(ny[1])} new lows this week` : "") + (nqOk ? `; Nasdaq ${Math.round(nq[0])} vs ${Math.round(nq[1])}` : "") + (nyOk ? "." : "");
+    }
+    const td = [v("HIGN", "close"), v("LOWN", "close")];
+    L.push({k: "adl", name: "A/D line & new highs", sub: "is the average stock confirming?", st, tx, nums: [fin(td[0]) ? `yesterday NYSE ${Math.round(td[0])} highs / ${Math.round(td[1])} lows` : "", fin(v("HIGQ", "close")) ? `Nasdaq ${Math.round(v("HIGQ", "close"))} / ${Math.round(v("LOWQ", "close"))}` : ""].filter(Boolean).join(" · ")}); }
+  // 6 · thrust + washout
+  { const zk = fin(v("ADVN/INDEX", "zw")) ? "ADVN/INDEX" : fin(v("ADRN", "zw")) ? "ADRN" : null, zq = fin(v("ADVN.NQ/USI", "zw")) ? "ADVN.NQ/USI" : null;
+    const vol = [["UPVOL.NY/USI", "NYSE"], ["UPVOL.NQ/USI", "Nasdaq"]].map(([k, n]) => ({n, u: v(k, "n90u"), d: v(k, "n90d"), s: v(k, "close")})).filter(o => fin(o.u));
+    let st = null, tx = "Needs the v3 file with the A/D and up/down-volume ratio rows.";
+    if (zk || vol.length) {
+      const zw = zk ? v(zk, "zw") : null, thr = zk ? v(zk, "thr") : null, thrQ = zq ? v(zq, "thr") : null;
+      const U = vol.reduce((s, o) => s + o.u, 0), Dn = vol.reduce((s, o) => s + (o.d || 0), 0);
+      const recent = [thr, thrQ].some(x => fin(x) && x <= 20);
+      st = recent || (U >= 1 && Dn === 0) ? "g" : Dn >= 2 && U === 0 ? "r" : Dn >= 1 && U === 0 ? "a" : "n";
+      tx = (zk ? `Zweig ${zw.toFixed(3)} (${zw > 0.615 ? "above the thrust line" : zw < 0.40 ? "washout zone" : "between 0.40 and 0.615"}) — ${fin(thr) ? (thr === 0 ? "a breadth thrust fired yesterday" : `last thrust ${Math.round(thr)} sessions ago`) : "no thrust in the loaded history"}${fin(thrQ) && thrQ <= 20 ? `; Nasdaq thrust ${Math.round(thrQ)} sessions ago` : ""}. ` : "") +
+        (vol.length ? `90% days in the last 10 sessions: ${vol.map(o => `${o.n} ${Math.round(o.u)} up / ${Math.round(o.d || 0)} down`).join(", ")}.` : "");
+    }
+    L.push({k: "thrust", name: "Thrust & washout", sub: "Zweig · 90% up / down days", st, tx, nums: vol.map(o => fin(o.s) ? `${o.n} up/down volume yesterday ${o.s.toFixed(2)}` : "").filter(Boolean).join(" · ")}); }
+  // 7 · sectors + leadership (MAP's offense / defense split; real estate counted in neither)
+  { const OFF = ["XLK", "XLC", "XLY", "XLF", "XLI", "XLB"], DEF = ["XLP", "XLU", "XLV", "XLE"], spy1m = v("SPY", "p1m"), spy1w = v("SPY", "p1w");
+    const secs = [...OFF, ...DEF, "XLRE"].filter(s => fin(v(s, "p1m"))).map(s => ({s, n: MC_BYK.get(s).n, r1m: fin(spy1m) ? v(s, "p1m") - spy1m : v(s, "p1m"), r1w: fin(spy1w) && fin(v(s, "p1w")) ? v(s, "p1w") - spy1w : null})).sort((a, b) => b.r1m - a.r1m);
+    let st = null, tx = "Needs the sector rows (v3 watchlist).", nums = "";
+    if (secs.length >= 6) {
+      const top = secs.slice(0, 4), o = top.filter(x => OFF.includes(x.s)).length, d = top.filter(x => DEF.includes(x.s)).length;
+      st = o >= 3 ? "g" : d >= 3 ? "r" : "a";
+      tx = `Leading SPY over a month: ${top.map(x => `${x.n} ${mcF(x.r1m, 1)}`).join(", ")}. Lagging: ${secs.slice(-3).reverse().map(x => `${x.n} ${mcF(x.r1m, 1)}`).join(", ")}. ${o >= 3 ? "Offense leads." : d >= 3 ? "Defense leads — money is hiding." : "No clear side."}`;
+      const w = secs.filter(x => fin(x.r1w)).sort((a, b) => b.r1w - a.r1w);
+      nums = w.length ? `This week vs SPY: best ${w[0].n} ${mcF(w[0].r1w, 1)} · worst ${w[w.length - 1].n} ${mcF(w[w.length - 1].r1w, 1)}` : "";
+    }
+    L.push({k: "sectors", name: "Sectors & leadership", sub: "1-month return vs SPY", st, tx, nums}); }
+  // 8 · every risk-appetite ratio vs its 50-day (IWD/IWF counted inverted: value beating growth = defensive)
+  { const P = [["RSP/AMEX", 1], ["QQQE/NASDAQ", 1], ["IWM/AMEX", 1], ["SMH/AMEX", 1], ["XLY/AMEX", 1], ["SPHB/AMEX", 1], ["IWD/AMEX", -1], ["ARKK/AMEX", 1], ["HG1!/COMEX", 1], ["HYG/NASDAQ", 1], ["AUDJPY", 1]]
+      .map(([k, d]) => ({k, n: MC_BYK.get(k).n, d, x: v(k, "vs50"), m: v(k, "p1m")})).filter(o => o.x != null);
+    let st = null, tx = "Not in the file.";
+    if (P.length) {
+      const on = P.filter(o => o.d * o.x > 0), f = on.length / P.length;
+      st = f >= 0.67 ? "g" : f <= 0.34 ? "r" : "a";
+      tx = `${on.length} of ${P.length} risk-on (above the 50-day${P.some(o => o.d < 0) ? "; value vs growth counted the other way" : ""}). Risk-on: ${list(on.map(o => o.n)) || "none"}. Against: ${list(P.filter(o => o.d * o.x <= 0).map(o => o.n)) || "none"}.`;
+    }
+    L.push({k: "risk", name: "Risk appetite (all ratios)", sub: "each ratio vs its 50-day", st, tx, nums: P.map(o => `${o.n} ${mcPct(o.m)} 1M`).join(" · ")}); }
+  // 9 · credit
+  { const o = R("BAMLH0A0HYM2"), hi = v("HYG/NASDAQ", "vs50"), hl = v("HYG/AMEX", "p1m"), kre = v("KRE", "vs50");
+    let st = null, tx = "Not in the file.";
+    if (o && fin(o.close)) {
+      st = (fin(o.vs50) && o.vs50 <= 0 && (hi == null || hi > 0)) ? "g" : ((fin(o.chg1m) && o.chg1m >= 0.40) || (fin(o.pos1y) && o.pos1y >= 90)) ? "r" : "a";
+      tx = `High-yield spread ${o.close.toFixed(2)}% (${mcF((o.chg1w ?? NaN) * 100, 0)} bp this week, ${mcF((o.chg1m ?? NaN) * 100, 0)} bp this month; ${fin(o.vs50) ? (o.vs50 > 0 ? "above" : "below") + " its 50-day" : ""}) — ${st === "g" ? "tightening, credit agrees with stocks" : st === "r" ? "stress: widening fast or near its 1-year wide" : "widening from where it was, not stress yet"}. The FRED rows usually run a day behind.`;
+    }
+    L.push({k: "credit", name: "Credit", sub: "high-yield spread · junk vs Treasuries", st, tx, nums: [hi != null ? `HYG/IEF ${mcPct(hi)} vs 50-day` : "", hl != null ? `HYG/LQD ${mcPct(hl)} 1M` : "", kre != null ? `regional banks ${mcPct(kre)} vs 50-day` : ""].filter(Boolean).join(" · ")}); }
+  // 10 · volatility
+  { const vix = v("VIX", "close"), term = v("VIX/CBOE", "close") ?? (fin(vix) && fin(v("VIX3M", "close")) ? vix / v("VIX3M", "close") : null);
+    const nine = v("VIX9D/TVC", "close") ?? (fin(vix) && fin(v("VIX9D", "close")) ? v("VIX9D", "close") / vix : null);
+    let st = null, tx = "Not in the file.";
+    if (fin(vix)) {
+      st = (vix >= T.vixStress || (fin(term) && term >= T.termStress) || (fin(nine) && nine >= 1.1)) ? "r" : (vix < T.vixCalm && (!fin(term) || term < 0.9) && (!fin(nine) || nine < 1)) ? "g" : "a";
+      const mv = R("MOVE");
+      tx = `VIX ${vix.toFixed(1)}${fin(v("VIX", "chg1d")) ? ` (${mcF(v("VIX", "chg1d"), 1)} yesterday)` : ""}; short-term vs 3-month ${fin(term) ? term.toFixed(2) : "—"}${fin(term) && term >= 1 ? " (inverted)" : ""}; 9-day vs VIX ${fin(nine) ? nine.toFixed(2) : "—"}${fin(nine) && nine >= 1 ? " — near-term event fear" : ""}.` + (mv && fin(mv.vs50) ? ` Bond volatility (MOVE) ${mv.close.toFixed(0)}, ${mv.vs50 > 0 ? "above" : "below"} its 50-day.` : "");
+    }
+    L.push({k: "vol", name: "Volatility", sub: "VIX family · MOVE", st, tx, nums: [["VXN", "Nasdaq VIX"], ["VVIX", "VVIX"], ["SKEW", "SKEW"]].map(([k, n]) => fin(v(k, "close")) ? `${n} ${v(k, "close").toFixed(1)} (${mcF(v(k, "chg1m"), 1)} 1M)` : "").filter(Boolean).join(" · ")}); }
+  // 11 · put / call — context
+  { const e = R("CPCS"), t = R("CPC");
+    let tx = "Not in the file.";
+    if (e && fin(e.close)) tx = `Equity put/call ${e.close.toFixed(2)}${fin(e.vs50) ? `, ${Math.abs(e.vs50).toFixed(0)}% ${e.vs50 > 0 ? "above" : "below"} its 50-day — ${e.vs50 > 15 ? "hedging demand rising (a contrarian plus near lows, not a signal on its own)" : e.vs50 < -15 ? "little hedging (complacent)" : "normal"}` : ""}.`;
+    L.push({k: "pc", name: "Put / call", sub: "sentiment, context only", st: e ? "n" : null, tx, nums: [t && fin(t.close) ? `total ${t.close.toFixed(2)}` : "", fin(v("CPCI", "close")) ? `index ${v("CPCI", "close").toFixed(2)}` : ""].filter(Boolean).join(" · ")}); }
+  // 12 · rates + Fed path
+  { const o = R("US10Y"), y2 = v("US02Y", "close"), y3m = v("US03MY", "close"), z = v("SR3Z2026", "close"), m = v("SR3M2027", "close");
+    let st = null, tx = "Not in the file.";
+    if (o && fin(o.close)) {
+      st = (fin(o.chg1m) && o.chg1m <= -0.10 && (o.vs50 ?? 0) < 0) ? "g" : (fin(o.chg1m) && o.chg1m >= 0.25 && (o.vs50 ?? 0) > 0) ? "r" : "a";
+      const c210 = fin(y2) ? o.close - y2 : null, c3m = fin(y3m) ? o.close - y3m : null;
+      tx = `10-year ${o.close.toFixed(2)}% (${mcF((o.chg1d ?? NaN) * 100, 0)} bp yesterday, ${mcF((o.chg1w ?? NaN) * 100, 0)} bp week, ${mcF((o.chg1m ?? NaN) * 100, 0)} bp month). Curve: 10s−2s ${fin(c210) ? mcF(c210 * 100, 0) + " bp" : "—"}, 10y−3m ${fin(c3m) ? mcF(c3m * 100, 0) + " bp" : "—"}.` +
+        (fin(z) && fin(m) ? ` Fed path (SOFR futures): ${(100 - z).toFixed(2)}% for Dec-26, ${(100 - m).toFixed(2)}% for Jun-27 — ${(z - m) * 100 > 5 ? `${Math.round((z - m) * 100)} bp of hikes priced` : (m - z) * 100 > 5 ? `${Math.round((m - z) * 100)} bp of cuts priced` : "flat"} between them.` : "");
+    }
+    L.push({k: "rates", name: "Rates & Fed path", sub: "yields · curve · SOFR futures", st, tx, nums: [fin(v("T10Y2Y", "close")) ? `FRED 10s−2s ${mcF(v("T10Y2Y", "close") * 100, 0)} bp (a day behind)` : "", fin(v("DFII10", "close")) ? `real yield ${v("DFII10", "close").toFixed(2)}%` : "", fin(v("T10YIE", "close")) ? `breakeven ${v("T10YIE", "close").toFixed(2)}%` : ""].filter(Boolean).join(" · ")}); }
+  // 13 · dollar + FX
+  { const d = R("DXY"), aj = v("AUDJPY", "vs50"), uj = R("USDJPY");
+    let st = null, tx = "Not in the file.";
+    if (d && fin(d.vs50)) {
+      st = d.vs50 < 0 && (aj == null || aj > 0) ? "g" : d.vs50 > 0 && aj != null && aj < 0 ? "r" : "a";
+      tx = `Dollar ${d.close.toFixed(1)} (${mcPct(d.p1m)} 1M, ${d.vs50 > 0 ? "above" : "below"} its 50-day)${aj != null ? `; AUD/JPY ${aj > 0 ? "above" : "below"} its 50-day (${aj > 0 ? "carry / risk-on" : "risk-off"})` : ""}${uj && fin(uj.close) ? `; USD/JPY ${uj.close.toFixed(1)} (${mcPct(uj.p1w)} this week)` : ""}.`;
+    }
+    L.push({k: "fx", name: "Dollar & FX", sub: "vs 50-day", st, tx, nums: ""}); }
+  // 14 · commodities + crypto — context, oil spike flagged
+  { const oil = R("CL1!"), au = R("GC1!"), cu = R("HG1!/COMEX"), bt = R("BTCUSD");
+    let st = null, tx = "Not in the file.";
+    if (oil || au || bt) {
+      const spike = oil && fin(oil.p1m) && oil.p1m >= 10;
+      st = spike ? "a" : "n";
+      tx = [oil && fin(oil.close) ? `Oil ${oil.close.toFixed(2)} (${mcPct(oil.p1m)} 1M)${spike ? " — a spike: inflation and rates risk" : ""}` : "", au && fin(au.close) ? `gold ${mcPct(au.p1m)} 1M${fin(au.pos1y) ? ` (${Math.round(au.pos1y)}% of its 1-yr range)` : ""}` : "", cu && fin(cu.vs50) ? `copper/gold ${cu.vs50 > 0 ? "above" : "below"} its 50-day` : "", bt && fin(bt.vs50) ? `bitcoin ${mcPct(bt.vs50)} vs 50-day` : ""].filter(Boolean).join("; ") + ".";
+    }
+    L.push({k: "cmd", name: "Commodities & crypto", sub: "context", st, tx, nums: ""}); }
+  // 15 · yesterday's unusual moves (|move| ≥ 2 × a normal day)
+  { const mv = [...D.got.entries()].map(([k, o]) => ({k, o, s: MC_BYK.get(k)})).filter(x => fin(x.o.z) && Math.abs(x.o.z) >= 2).sort((a, b) => Math.abs(b.o.z) - Math.abs(a.o.z)).slice(0, 8);
+    L.push({k: "moves", name: "What moved yesterday", sub: "moves of 2× a normal day or more", st: D.v3 ? "n" : null,
+      tx: !D.v3 ? "Needs the v3 file (Move_Z column)." : mv.length ? mv.map(x => `${x.s.n} ${mcChg(x.o, x.s.u, "1d").t} (${mcTimes(x.o.z)})`).join(" · ") : "Nothing unusual — every line moved within twice its normal daily range.", nums: ""}); }
+  return L;
+}
+// ---- one model per file: lines, the change since the previous stored breadth date, the headline (history written once)
+const MC_W = {g: "healthy", a: "caution", r: "weak", n: "context"}, MC_RANK = {r: 0, a: 1, g: 2};
+function mcModel(){
+  const D = mcData(); if (!D) return null;
+  const tk = JSON.stringify(CFG.tape);
+  if (MC.model && MC.model.D === D && MC.model.tk === tk) return MC.model;
+  const L = mcLines(D), d = String(D.asOf || "").slice(0, 10);
+  let H = store.get("adrb.mcHist", []); if (!Array.isArray(H)) H = [];
+  const prev = H.filter(x => x && x.d < d).pop() || null;
+  const ch = prev ? L.filter(l => Object.prototype.hasOwnProperty.call(prev.l, l.k) && (prev.l[l.k] || null) !== (l.st || null))
+    .map(l => ({k: l.k, name: l.name, from: prev.l[l.k] || null, to: l.st || null,
+      dir: MC_RANK[l.st] != null && MC_RANK[prev.l[l.k]] != null ? Math.sign(MC_RANK[l.st] - MC_RANK[prev.l[l.k]]) : 0})) : [];
+  if (d && D.v3) {                                                    // forward only; an old v2 file isn't recorded
+    const o = {d, l: Object.fromEntries(L.map(x => [x.k, x.st || null]))}, i = H.findIndex(x => x && x.d === d);
+    if (i >= 0) H[i] = o; else H.push(o);
+    H.sort((a, b) => a.d < b.d ? -1 : a.d > b.d ? 1 : 0); store.set("adrb.mcHist", H.slice(-120));
+  }
+  const nm = st => L.filter(l => l.st === st).map(l => l.name);
+  const head = [nm("r").length ? `Weak: ${nm("r").join(", ")}` : "", nm("g").length ? `Holding up: ${nm("g").join(", ")}` : ""].filter(Boolean).join(" · ") || "Nothing weak, nothing clearly healthy — a middling tape.";
+  MC.model = {D, tk, L, prev: prev ? prev.d : null, ch, chBy: new Map(ch.map(c => [c.k, c])), head};
+  return MC.model;
+}
+const mcChTxt = c => `${c.name} ${MC_W[c.from] || "no data"} → ${MC_W[c.to] || "no data"}`;
+function mcSummary(){
+  const M = mcModel(); if (!M) return null;
+  const {D, L} = M, W = {g: "Healthy", a: "Caution", r: "Weak", n: "Context"};
+  return {asOf: D.asOf, file: D.name, version: D.v3 ? "v3" : "v2 (old export)", lines_found: D.got.size, lines_expected: MC_SPECS.length,
+    note: "Display only — a cross-check, not a verdict. MAP decides; the six-line tape read is separate and unchanged.",
+    headline: M.head, since: M.prev ? {previous_file: M.prev, changes: M.ch.map(mcChTxt)} : null,
+    lines: L.map(l => ({name: l.name, read: W[l.st] || null, text: l.tx, nums: l.nums || null}))};
+}
+// ---- the card
+function mcTable(D, all){
+  const C = [["Last", (o, s) => mcLast(o, s.u)], ["1D", (o, s) => mcChg(o, s.u, "1d")], ["1W", (o, s) => mcChg(o, s.u, "1w")], ["1M", (o, s) => mcChg(o, s.u, "1m")],
+    ["vs 50-day", o => ({t: mcPct(o.vs50), v: o.vs50})], ["vs 200-day", o => ({t: mcPct(o.vs200), v: o.vs200})], ["Stage", o => mcSt(o.stage)],
+    ["1-yr position", o => fin(o.pos1y) ? Math.round(o.pos1y) + "" : "—"], ["Move size", o => fin(o.z) ? mcF(o.z, 1) + "×" : "—"]];
+  const X = [["5-day slope", o => fin(o.slope5) ? mcF(o.slope5, 3) : "—"], ["10-day EMA", o => fin(o.ema10) ? (+o.ema10.toFixed(3)).toLocaleString() : "—"], ["vs 150-day", o => ({t: mcPct(o.vs150), v: o.vs150})],
+    ["150-day slope", o => ({t: mcPct(o.ma150, 2), v: o.ma150})], ["Days vs 50", o => fin(o.d50) ? mcF(o.d50, 0) : "—"], ["Days in 45–65", o => fin(o.band) ? Math.round(o.band) + "" : "—"],
+    ["5-day sum", o => fin(o.adSum5) ? (+o.adSum5.toFixed(2)).toLocaleString() : "—"], ["McClellan (raw)", o => fin(o.mcc) ? mcF(o.mcc, 2) : "—"], ["Running total", o => fin(o.adCum) ? Math.round(o.adCum).toLocaleString() : "—"],
+    ["Running total 1-yr pos", o => fin(o.cumPos) ? Math.round(o.cumPos) + "" : "—"], ["Ratio osc.", o => ({t: fin(o.mco) ? mcF(o.mco, 1) : "—", v: o.mco})], ["Osc. 1D chg", o => ({t: fin(o.mcoChg) ? mcF(o.mcoChg, 1) : "—", v: o.mcoChg})],
+    ["Summation", o => fin(o.sum) ? Math.round(o.sum).toLocaleString() : "—"], ["Summation vs 50-day", o => ({t: fin(o.sumVs50) ? mcF(o.sumVs50, 0) : "—", v: o.sumVs50})], ["Summation 5-day chg", o => ({t: fin(o.sumChg5) ? mcF(o.sumChg5, 0) : "—", v: o.sumChg5})],
+    ["Share up", o => fin(o.share) ? o.share.toFixed(1) + "%" : "—"], ["Zweig", o => fin(o.zw) ? o.zw.toFixed(3) : "—"], ["Zweig 10-day low", o => fin(o.zwLo) ? o.zwLo.toFixed(3) : "—"],
+    ["Since thrust", o => fin(o.thr) ? Math.round(o.thr) + "" : "—"], ["90% up days (10)", o => fin(o.n90u) ? Math.round(o.n90u) + "" : "—"], ["90% down days (10)", o => fin(o.n90d) ? Math.round(o.n90d) + "" : "—"]];
+  const cols = all ? [...C, ...X] : C;
+  const cell = (f, o, s) => { const r = f(o, s); return typeof r === "string" ? `<td>${esc(r)}</td>` : `<td class="${mcCls(r.v, ["vx", "yd", "sofr"].includes(s.u))}">${esc(r.t)}</td>`; };
+  const groups = MC_SEC.map(([g, L]) => [g, L.map(([k]) => ({s: MC_BYK.get(k), o: D.got.get(k)})).filter(x => x.o)]);
+  if (D.other.length) groups.push(["Other lines in the file", D.other.map(o => ({s: {k: o.sym, n: o.sym, u: "px"}, o}))]);
+  return `<div class="tscroll" style="max-height:640px"><table><thead><tr><th class="l">Line</th><th class="l">What it is</th>${cols.map(([h]) => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${
+    groups.filter(([, a]) => a.length).map(([g, a]) => `<tr><td class="l" colspan="${cols.length + 2}" style="background:var(--surface-2);font-weight:600;font-size:11.5px">${esc(g)}</td></tr>` +
+      a.map(({s, o}) => `<tr><td class="l sym" title="${esc(o.sym)}">${esc(s.n)}</td><td class="l small">${esc(o.desc || o.sym)}</td>${cols.map(([, f]) => cell(f, o, s)).join("")}</tr>`).join("")).join("")}</tbody></table></div>
+    <div class="small dim" style="margin-top:6px">Native units: breadth in points, yields and spreads in basis points, SOFR as the implied rate (100 − price), prices and ratios in %. Move size = yesterday's move ÷ a normal daily move (last 20 sessions). Stage on the 150-day average (Stage 2 = above a rising average). Red = against stocks: volatility, yields and spreads are coloured the other way. Summation, oscillator, share and Zweig columns only mean something on the A/D and up/down-volume ratio rows; the running total only on NYSE net advances.</div>`;
+}
+function renderMacro(){
+  if (window.ASIA) return;
+  const tape = $("mkTape"); if (!tape) return;
+  let el = $("mkMacro");
+  if (!el) { el = document.createElement("div"); el.className = "card g1"; el.id = "mkMacro"; tape.after(el); }
+  const M = mcModel(), D = M && M.D;
+  if (!D) { el.innerHTML = `<div class="hd"><h2>Macro checklist</h2><span class="sub">from your breadth screener file · display only</span></div><div class="bd"><div class="empty" style="padding:6px 0">Load the breadth screener CSV (v3, Macro Checklist watchlist) to fill this.</div></div>`; return; }
+  const L = M.L, W = {g: "Healthy", a: "Caution", r: "Weak", n: "Context"}, cnt = k => L.filter(l => l.st === k).length;
+  const all = store.get("adrb.mcCols", "key") === "all", open = !!store.get("adrb.mcOpen", 0);
+  const newMiss = D.missing.filter(k => !BR_EXPECTED.includes(k)), oldMiss = D.missing.filter(k => BR_EXPECTED.includes(k));
+  const cov = !D.v3 ? `Old (v2) breadth file — load the v3 export for stage, summation, thrust, 1-day and move-size columns. ` : "";
+  const miss = D.v3 && newMiss.length ? `${newMiss.length} of the new lines aren't in this file: ${newMiss.map(k => esc(MC_BYK.get(k).n)).join(", ")} — check the Macro Checklist watchlist in TradingView. ` : "";
+  el.innerHTML = `<div class="hd"><h2>Macro checklist</h2><span class="sub">${esc(D.asOf || "")} · ${D.got.size} of ${MC_SPECS.length} lines · every column of your breadth file · display only — MAP decides, the tape read above is unchanged</span></div>
+    <div class="tape">
+      <div class="verdict">
+        <div class="small">Macro checklist · ${esc(D.asOf || "")}</div>
+        <div class="tally">${L.map(l => `<i class="${l.st && l.st !== "n" ? l.st : ""}" title="${esc(l.name)}: ${l.st ? W[l.st] : "no data"}"></i>`).join("")}</div>
+        <div class="small">${cnt("g")} healthy · ${cnt("a")} caution · ${cnt("r")} weak · ${cnt("n")} context</div>
+        <div class="mchead">${esc(M.head)}</div>
+        ${M.prev ? `<div class="small">Since ${esc(M.prev)}: ${M.ch.length ? M.ch.map(c => `<span class="${c.dir > 0 ? "pos" : c.dir < 0 ? "neg" : ""}">${esc(mcChTxt(c))}</span>`).join(" · ") : "no line changed"}</div>` : `<div class="small dim">Changes since the last file show from the next breadth file on.</div>`}
+        <div class="agree">Not a verdict and not a vote — it feeds no size, list or plan. Use it to see which part of the market MAP's call rests on.</div>
+        ${cov || miss || oldMiss.length ? `<div class="disagree">${cov}${miss}${oldMiss.length ? `${oldMiss.length} usual lines missing.` : ""}</div>` : ""}
+      </div>
+      <div class="lines">${L.map(l => `<div class="ln"><div class="dot ${l.st && l.st !== "n" ? l.st : ""}"></div><div><div class="nm">${esc(l.name)}<span>${l.st ? W[l.st] : "no data"}${M.chBy.has(l.k) ? ` (was ${esc(MC_W[M.chBy.get(l.k).from] || "no data")})` : ""} · ${esc(l.sub)}</span></div><div class="tx">${esc(l.tx)}</div>${l.nums ? `<div class="nums">${esc(l.nums)}</div>` : ""}</div></div>`).join("")}</div>
+    </div>
+    <details class="bd" id="mcFold" ${open ? "open" : ""}><summary style="cursor:pointer;font-weight:600">Every line, every column <span class="small dim">(${D.n} lines)</span></summary>
+      <div style="margin:8px 0"><button class="btn sm ${all ? "" : "on"}" data-mccols="key">Key columns</button> <button class="btn sm ${all ? "on" : ""}" data-mccols="all">All columns</button></div>
+      ${open ? mcTable(D, all) : ""}</details>`;
+  const fold = el.querySelector("#mcFold");
+  fold.addEventListener("toggle", () => { store.set("adrb.mcOpen", fold.open ? 1 : 0); if (fold.open && !fold.querySelector("table")) renderMacro(); });
+  el.querySelectorAll("[data-mccols]").forEach(b => b.onclick = () => { store.set("adrb.mcCols", b.dataset.mccols); renderMacro(); });
+}
+// the existing "Breadth file, every line" table: file the new lines under their own headings instead of "Other"
+(function(){
+  if (window.ASIA) return;
+  const add = (g, keys, before) => { const e = BR_GROUPS.find(x => x[0] === g); if (e) keys.forEach(k => { if (!e[1].includes(k)) e[1].push(k); }); else BR_GROUPS.splice(before ?? BR_GROUPS.length, 0, [g, keys]); };
+  add("Advances, declines, highs & lows", ["HIGQ", "LOWQ"]);
+  add("Risk appetite & leadership ratios", ["QQQE/NASDAQ", "ARKK/AMEX"]);
+  add("Volatility & sentiment", ["VIX9D/TVC"]);
+  add("Rates, credit & dollar", ["HYG/AMEX"]);
+  add("Sectors", ["XLK", "XLC", "XLF", "XLI", "XLB", "XLU", "XLV", "XLE", "XLRE"], 3);
+  add("Summation, thrust & up/down volume", ["ADVN/INDEX", "ADVN.NQ/USI", "UPVOL.NY/USI", "UPVOL.NQ/USI"], 3);
+})();
+// Today: a compact strip under the tape read — dots, headline, changes since the last file; click opens Market
+function renderMacroToday(){
+  if (window.ASIA) return;
+  const tape = $("tapeBox"); if (!tape) return;
+  let el = $("tdMacro");
+  const M = mcModel();
+  if (!M) { if (el) el.remove(); return; }
+  if (!el) { el = document.createElement("div"); el.className = "card g1"; el.id = "tdMacro"; tape.after(el); }
+  const L = M.L, cnt = k => L.filter(l => l.st === k).length;
+  el.innerHTML = `<div class="hd"><h2>Macro checklist</h2><span class="sub">${esc(M.D.asOf || "")} · breadth file · display only, MAP decides</span><button class="btn sm" data-goto="market" style="margin-left:auto">Open on Market ›</button></div>
+    <div class="bd mcstrip"><div class="tally" style="display:flex;gap:4px">${L.map(l => `<i class="${l.st && l.st !== "n" ? l.st : ""}" title="${esc(l.name)}: ${esc(l.st ? MC_W[l.st] : "no data")} — ${esc(l.tx)}"></i>`).join("")}</div>
+      <div class="small">${cnt("g")} healthy · ${cnt("a")} caution · ${cnt("r")} weak</div>
+      <div class="mchead">${esc(M.head)}</div>
+      ${M.prev && M.ch.length ? `<div class="small">Since ${esc(M.prev)}: ${M.ch.map(c => `<span class="${c.dir > 0 ? "pos" : c.dir < 0 ? "neg" : ""}">${esc(mcChTxt(c))}</span>`).join(" · ")}</div>` : ""}
+      ${!M.D.v3 ? `<div class="small dim">Old (v2) breadth file — the v3 export fills every line.</div>` : ""}</div>`;
+}
+(function(){ const st = document.createElement("style");
+  st.textContent = ".mchead{font-size:12.5px;font-weight:600;color:var(--ink)}.mcstrip{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px}.mcstrip .tally i{width:18px;height:6px;border-radius:3px;background:var(--surface-3)}.mcstrip .tally i.g{background:var(--st1)}.mcstrip .tally i.a{background:var(--warn)}.mcstrip .tally i.r{background:var(--crit)}";
+  document.head.appendChild(st); })();
+hookOn("tab", "macro", t => { if (t === "market") renderMacro(); else if (t === "today") renderMacroToday(); });
 </script>
 <script>
 "use strict";
