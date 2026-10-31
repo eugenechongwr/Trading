@@ -120,6 +120,9 @@ svg.plot text{fill:var(--ink-3);font-size:11px}
 /* tables */
 .tablehd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px}
 .tscroll{overflow:auto;max-height:78vh}
+/* 31 Oct (speed only): a big ranked table (60+ rows, always the full 78vh box tall) that is off screen isn't laid out until
+   you scroll near it — every row stays on the page (find-in-page, copy, clicks work). Browsers without it draw as before. */
+.tscroll.cvis{content-visibility:auto;contain-intrinsic-size:auto 78vh}
 table{border-collapse:separate;border-spacing:0;width:100%;font-variant-numeric:tabular-nums}
 th,td{padding:5px 8px;border-bottom:1px solid var(--line);white-space:nowrap;text-align:right}
 th{position:sticky;top:0;background:var(--surface-2);z-index:2;font-size:10.5px;font-weight:600;color:var(--ink-2);text-transform:uppercase;letter-spacing:.03em;cursor:pointer;user-select:none;vertical-align:bottom}
@@ -1061,7 +1064,7 @@ document.documentElement.classList.add("ws", "mob");
       <div class="kpis" id="mkKpis"></div>
       <div class="g2e">
         <div class="card"><div class="hd"><h2>Benchmarks &amp; ETFs in this file</h2><span class="sub">add QQQ, SPY, IWM, RSP, sector ETFs and a growth/value pair to your export to fill this</span></div><div class="bd" id="mkBench"></div></div>
-        <div class="card"><div class="hd"><h2>Read of the tape</h2></div><div class="bd" id="mkRead"></div></div>
+        <div class="card"><div class="hd"><h2>Your list at a glance</h2><span class="sub">benchmark trend, growth vs value, your list's breadth and today's moves — from your stock file</span></div><div class="bd" id="mkRead"></div></div>
       </div>
       <div class="card g1"><div class="hd"><h2>Breadth by sector</h2><span class="sub">share of stocks above each line · stocks only</span></div><div class="bd" id="mkSector"></div></div>
     </section>
@@ -1550,6 +1553,7 @@ const store = {
     return o;
   },
   get(k, d){ try { const o = this._raw(k); return o.raw == null ? d : o.prim ? o.v : JSON.parse(o.raw); } catch (e) { return d; } },
+  _g: 0,                                                            // bumped when a saved value changes (31 Oct: the self-check reuses a run only while nothing changed)
   set(k, v){
     this._c.delete(k);
     try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); return true; }
@@ -1560,8 +1564,17 @@ const store = {
   }
 };
 // any direct localStorage write (older code, a pasted snapshot, another tab's change) drops the remembered reads at once
-for (const m of ["setItem", "removeItem", "clear"]) { const f = Storage.prototype[m]; Storage.prototype[m] = function(...a){ try { store._c.clear(); } catch (e) {} return f.apply(this, a); }; }
-window.addEventListener("storage", () => store._c.clear());
+// 31 Oct: store._g counts real changes only — a write of the same value isn't one, nor a write of page bookkeeping or a
+// tracking record that the self-check never reads (which page is open, the panel tab, TradingView-lists campaign memory)
+const STORE_UI = new Set(["adrb.tab", "adrb.tpTab", "adrb.tvlCamp"]);
+for (const m of ["setItem", "removeItem", "clear"]) { const f = Storage.prototype[m]; Storage.prototype[m] = function(...a){ try { store._c.clear();
+  if (m === "clear" || !(STORE_UI.has(a[0]) || this.getItem(a[0]) === (m === "setItem" ? String(a[1]) : null))) store._g++; } catch (e) {} return f.apply(this, a); }; }
+window.addEventListener("storage", () => { store._c.clear(); store._g++; });
+// Hook points (BOARD HOOKS script, 28 Oct; moved up here 31 Oct so every section can use them — the installers that call
+// hookRun stay in BOARD HOOKS). Hooks run in the order they were added (= file order), each in its own try/catch.
+const HOOK = {panel: [], tab: [], chart: []};
+function hookOn(point, name, fn){ if (!HOOK[point]) throw new Error("No hook point " + point); HOOK[point] = HOOK[point].filter(h => h.name !== name); HOOK[point].push({name, fn}); }
+function hookRun(point, ...a){ for (const h of HOOK[point] || []) { try { h.fn(...a); } catch (e) { console.error(`hook ${point}/${h.name}:`, e); } } }
 const parseTickers = s => [...new Set(String(s || "").toUpperCase().split(/[\s,;|]+/).map(t => t.includes(":") ? t.split(":").pop() : t).map(t => t.replace(/[^A-Z0-9.\-]/g, "")).filter(Boolean))];
 const LISTS = {focus: new Set(), held: new Set(), focusTxt: "", heldTxt: ""};
 function setLists(focusTxt, heldTxt){
@@ -2203,14 +2216,20 @@ class Table {
       if (f.type === "chk") return `<label class="tog"><input type="checkbox" data-f="${f.k}" ${v ? "checked" : ""}>${f.label}</label>`;
     }).join("") : "";
     const avail = new Set(COLS().filter(okCol).map(c => c.g));
-    this.el.innerHTML = `
+    const html = `
       <div class="tablehd"><h2>${this.o.title}</h2><span class="small">${this.o.sub ? this.o.sub() : ""}</span><span class="spacer"></span>
         <span class="small">${rows.length} of ${this.o.rows().length}</span>
         <button class="btn sm" data-act="copy">Copy table</button><button class="btn sm" data-act="tvc" title="Copies the tickers shown (filters and sort applied) as one line — paste into TradingView's Add symbol box">Copy for TradingView</button><button class="btn sm" data-act="tv">TradingView watchlist</button><button class="btn sm" data-act="csv">Download CSV</button></div>
       ${this.o.filters ? `<div class="tablehd" style="padding-top:0">${fHTML}<button class="btn sm" data-act="clear">Clear filters</button></div>` : ""}
       <div class="tablehd colgroups" style="padding-top:0"><span class="lbl">Columns</span>${COL_GROUPS.filter(([g]) => avail.has(g)).map(([g, l]) => `<label class="tog"><input type="checkbox" data-cg="${g}" ${this.groups.has(g) ? "checked" : ""}>${l}</label>`).join("")}</div>
-      <div class="tscroll"><table><thead><tr>${C.map(c => `<th class="${c.cls || ""} ${c.k === this.sort.k ? "sorted" : ""}" data-k="${c.k}">${c.l}${c.k === this.sort.k ? (d < 0 ? " ↓" : " ↑") : ""}<span class="h">${c.h || "&nbsp;"}</span></th>`).join("")}</tr></thead>
+      <div class="tscroll${rows.length > 60 ? " cvis" : ""}"><table><thead><tr>${C.map(c => `<th class="${c.cls || ""} ${c.k === this.sort.k ? "sorted" : ""}" data-k="${c.k}">${c.l}${c.k === this.sort.k ? (d < 0 ? " ↓" : " ↑") : ""}<span class="h">${c.h || "&nbsp;"}</span></th>`).join("")}</tr></thead>
       <tbody>${rows.length ? rows.map(r => `<tr data-sym="${esc(r.sym)}" class="${r.thin && r.inPlay ? "thin" : ""}">${C.map(c => `<td class="${c.cls || ""}">${tblCell(c, r)}</td>`).join("")}</tr>`).join("") : `<tr><td colspan="${C.length}" class="empty l">No names match.</td></tr>`}</tbody></table></div>`;
+    // 31 Oct (speed only): the same table text as the last draw (same rows, numbers, sort, filters, columns, flags) keeps the
+    // page elements already on screen — rebuilding 600 rows (~39k elements) cost ~0.5 s per page switch and gave the same
+    // result. Any difference at all, or someone else having replaced the table, rebuilds it as before.
+    if (this.el._tblHtml === html && this.el._tblOwner === this && this.el._tblFirst && this.el.firstElementChild === this.el._tblFirst) return;
+    this.el.innerHTML = html;
+    this.el._tblHtml = html; this.el._tblOwner = this; this.el._tblFirst = this.el.firstElementChild;
     this.wire();
   }
   wire(){
@@ -2632,6 +2651,7 @@ function renderTape(el, detail){
   const sel = el.querySelector("[data-mapv]"), inp = el.querySelector("[data-mapc]");
   const save = () => { setMapRegime(sel.value, inp.value); setTimeout(renderAll, 0); };
   sel.onchange = save; inp.onchange = save;
+  if (typeof tapeAfter === "function") tapeAfter(el, detail);       // 31 Oct: one-card Tape read + Macro checklist (display only)
 }
 // Today: stocks in play, reclaims, what's new since the last file
 function renderFlow(){
@@ -4776,6 +4796,9 @@ openDrawer = function(sym){
    COLLAPSIBLE CARDS — click a card's title to fold it; remembered here
    ===================================================================== */
 const COLL = new Set(store.get("adrb.collapsed", []) || []);
+// 31 Oct (display only): Market's "Read of the tape" card is now "Your list at a glance" (it was easy to mistake for the Tape
+// read card); a fold remembered under the old title carries over
+if (COLL.has("Read of the tape") && !COLL.has("Your list at a glance")) { COLL.add("Your list at a glance"); store.set("adrb.collapsed", [...COLL]); }
 const cardKey = c => c.id || ((c.querySelector(":scope > .hd h2") || {}).textContent || "").trim();
 function applyCollapse(){ document.querySelectorAll("#app .card").forEach(c => { const h = c.querySelector(":scope > .hd h2"); if (!h) return; c.classList.toggle("collapsed", COLL.has(cardKey(c))); }); }
 document.addEventListener("click", e => {
@@ -5719,15 +5742,21 @@ function buildSecs(t){
   const out = [];
   const walk = el => { for (const c of el.children) {
     if (c.classList.contains("hidden") || c.matches("p, .controls, #gbar")) continue;
-    if (c.matches(".card, .kpis, #spotlight")) { const l = secLabel(c) || (c.classList.contains("rules") ? "Trade rules" : ""); if (l && c.offsetParent !== null) out.push([c, l]); }
+    if (c.matches(".card, .kpis, #spotlight")) { const l = secLabel(c) || (c.classList.contains("rules") ? "Trade rules" : ""); if (l && secShown(c)) out.push([c, l]); }
     else if (c.matches("div, section")) walk(c);
   } };
   walk(tab);
   WSI.secs = out; WSI.pin = null;
   if (out.length < 2) return;
   b.insertAdjacentHTML("afterend", `<div class="nvsec">${out.map(([c, l], i) => `<a data-sec="${i}" class="${c.classList.contains("collapsed") ? "col" : ""}" title="${esc(l)}">${esc(l)}</a>`).join("")}</div>`);
-  spy();
+  spySoon();
 }
+// 31 Oct (speed only): "is this card shown?" without forcing a page layout. offsetParent made the browser lay out the whole
+// page (40k+ elements on Stocks today / Universe) once per card checked and again on each of the 3–4 buildSecs calls per page
+// switch. checkVisibility() needs styles only; same answer (display:none on the card or a parent → hidden; a fixed-position
+// card has no offsetParent, so it stays out as before). The scroll-spy highlight waits for the next frame (one layout, shared).
+const secShown = c => typeof c.checkVisibility === "function" ? c.checkVisibility() && getComputedStyle(c).position !== "fixed" : c.offsetParent !== null;
+function spySoon(){ if (!WSI._raf) WSI._raf = requestAnimationFrame(() => { WSI._raf = 0; spy(); }); }
 function stickyH(){ const g = $("gbar"), h = document.querySelector("header.top"); return (h ? h.getBoundingClientRect().height : 0) + (g && g.offsetParent ? g.getBoundingClientRect().height : 0) + 10; }
 function jumpTo(el){
   if (el.classList.contains("collapsed")) { const h = el.querySelector(":scope > .hd h2"); if (h) h.click(); }
@@ -6111,7 +6140,7 @@ function scReport(R){
 function renderSelfCheck(){
   let box = $("scBox");
   if (!box) { $("tab-data").querySelector(".lede").insertAdjacentHTML("afterend", `<div class="card g1" id="scBox"></div>`); box = $("scBox"); }
-  const R = SC.res = selfCheck(), ok = !R.fails.length, chg = R.spec.filter(s => !s.ok); SC.at = performance.now();
+  const R = scRun(SC.force), ok = !R.fails.length, chg = R.spec.filter(s => !s.ok); SC.force = false;
   box.innerHTML = `<div class="hd"><h2>Self-check</h2><span class="sub">a separate second pass over the numbers on every load — if this is red, don't trust the levels until it's fixed</span><span class="spacer"></span><button class="btn sm" id="scCopy">Copy report</button><button class="btn sm" id="scRun">Run again</button></div>
     <div class="bd"><div class="scv ${ok ? "ok" : "no"}"><b>${ok ? "✓ All " + R.n.toLocaleString() + " checks passed" : "✗ " + R.fails.length + " problem" + (R.fails.length > 1 ? "s" : "") + " found"}</b>
       <span>Recomputed for all ${S.rows.length.toLocaleString()} tickers from the CSV inputs with a short separate copy of your rules: one ADR in dollars, buy-zone line and zone, entry, widest stop, 2R, state and the SMA size step. Then checked that the plan and on-deck lists obey their filters (RS, list size, group cap, earnings, liquidity) and that no qualifying name was left off.</span></div>
@@ -6120,7 +6149,7 @@ function renderSelfCheck(){
       <div><div class="lbl">Data notes</div>${R.warn.length ? R.warn.map(w => `<div class="scs">· ${esc(w)}</div>`).join("") : `<div class="scs dim">Nothing unusual in the files.</div>`}</div></div>
       <div class="small" style="margin-top:8px">Not covered: price-history signals (RS line, volatility state, short score) and live prices — spot-check those against TradingView. Every ticker panel has a "Show the working" box with the sums written out.</div></div>`;
   $("scCopy").onclick = () => copyText(scReport(R), "Self-check report copied");
-  $("scRun").onclick = () => { renderSelfCheck(); navBadges(); toast(SC.res.fails.length ? `${SC.res.fails.length} problems` : "All checks passed"); };
+  $("scRun").onclick = () => { SC.force = true; renderSelfCheck(); navBadges(); toast(SC.res.fails.length ? `${SC.res.fails.length} problems` : "All checks passed"); };
   box.querySelector("tbody")?.addEventListener("click", e => { const tr = e.target.closest("tr[data-sym]"); if (tr) openDrawer(tr.dataset.sym); });
 }
 const SC = {res: null};
@@ -6135,8 +6164,29 @@ navBadges = function(){
   clearTimeout(SC.t);
   SC.t = setTimeout(() => { SC.t = null; if (!S.snap) return; navBadgeSC(asked); }, 30);
 };
+// 31 Oct (speed only): a redraw or a visit to Data check that changed nothing the self-check reads (a filter, a page
+// switch, a card toggle) reuses the last run instead of repeating it (~0.6 s on test files, more on real ones, blocking the
+// page each time). "Nothing changed" = the same rows and plan objects, every number on every row the same (a checksum over
+// all of them, so a change made in place is still caught), the same price history, settings and saved data (no save since).
+// "Run again" on the Data check card always runs it fresh.
+function scKey(){
+  let h = 0;
+  const mix = x => { h = (Math.imul(h, 31) + x) | 0; };
+  for (const r of S.rows || []) for (const k in r) { if (k.charCodeAt(0) === 95) continue; const v = r[k];   // "_…" = page bookkeeping (table place _i, filter memo _gv / _gok), never read by the self-check
+    if (typeof v === "number") { if (v === v) mix(Math.round(v * 1e6) | 0); else mix(7); }
+    else if (typeof v === "boolean") mix(v ? 3 : 5); else if (typeof v === "string") mix(v.length); }
+  const H = typeof HIST !== "undefined" ? HIST : {};
+  return [h, store._g, JSON.stringify(CFG), S.rows ? S.rows.length : 0, S.plan && S.plan.plan ? S.plan.plan.map(r => r.sym).join(",") : "", H.nD || 0, S.mode, S.snap && S.snap.asOf, mapRegime().v || ""].join("|");
+}
+const scId = () => ({key: scKey(), rows: S.rows, plan: S.plan, hc: typeof HIST !== "undefined" ? HIST.C : null, snap: S.snap});
+// the last result when nothing it reads has changed since that run; otherwise (or force = "Run again") a fresh run
+function scRun(force){
+  const id = scId();
+  if (!force && SC.res && SC.id && Object.keys(id).every(k => id[k] === SC.id[k])) return SC.res;
+  SC.res = selfCheck(); SC.at = performance.now(); SC.id = id; return SC.res;
+}
 function navBadgeSC(asked){
-  if (!(SC.res && SC.at > asked)) { try { SC.res = selfCheck(); SC.at = performance.now(); } catch (e) { SC.res = {n: 0, fails: [{sym: "—", what: "Self-check crashed: " + e.message, board: "", mine: ""}], spec: [], warn: [], at: new Date()}; } }
+  if (!(SC.res && SC.at > asked)) { try { scRun(false); } catch (e) { SC.id = null; SC.res = {n: 0, fails: [{sym: "—", what: "Self-check crashed: " + e.message, board: "", mine: ""}], spec: [], warn: [], at: new Date()}; } }
   document.querySelectorAll('#tabs button[data-tab="data"] .nb').forEach(x => x.remove());
   const b = document.querySelector('#tabs button[data-tab="data"]'), n = SC.res.fails.length;
   if (b) b.insertAdjacentHTML("beforeend", `<span class="nb ${n ? "r" : "g"}" title="${n ? n + " self-check problems — open Data check" : "Self-check: all " + SC.res.n + " checks passed"}">${n ? "✗ " + n : "✓"}</span>`);
@@ -6484,8 +6534,8 @@ function renderS6(){
   box.querySelector("tbody")?.addEventListener("click", e => { const tr = e.target.closest("tr[data-sym]"); if (tr) openDrawer(tr.dataset.sym); });
 }
 $("shortBox").insertAdjacentHTML("beforebegin", `<div class="card g1" id="s6pBox"></div>`);
-const _renderTab4 = renderTab;
-renderTab = function(t){ _renderTab4(t); if (t === "plan" && S.snap) renderS6(); };
+// 31 Oct (structure only): was a renderTab override; now a "tab" hook — same code, same order (BOARD HOOKS, block 1)
+hookOn("tab", "s6p", t => { if (t === "plan" && S.snap) renderS6(); });
 // ticker panel (workspace): the gate table under Plan & checks when the comparison is on
 if (WS) {
   const _tpBuild1 = tpBuild;
@@ -6657,11 +6707,14 @@ const _renderTab5 = renderTab;
 renderTab = function(t){
   if (t === "data" && S.snap) renderStageCheck();
   _renderTab5(t);
+};
+// 31 Oct (structure only): was a renderTab override; now a "tab" hook — same code, same order (BOARD HOOKS, block 1)
+hookOn("tab", "stagesList", t => {
   if (t === "market" && S.snap) {
     let b = $("wsDist"); if (!b) { $("mkTape").insertAdjacentHTML("afterend", `<div class="card g1" id="wsDist"></div>`); b = $("wsDist"); }
     b.innerHTML = `<div class="hd"><h2>Weinstein stages across your list</h2><span class="sub">Deepvue-style labels from the stored bars · stocks only · a reference, not a signal</span></div><div class="bd">${S.has.hist ? stageDistHTML(S.stocks) : `<div class="empty" style="padding:4px 0">Needs the price history.</div>`}</div>`;
   }
-};
+});
 // quick Stage filter in the filter bar — 1 · 2 · 3 · 4, each taking its sub-stages (1A, 2A, 3A, 4B-) along. It sets the same
 // criterion as Filters → Structure → "Weinstein stage is", so it only changes which names show, never ranks or states.
 const _renderGBar1 = renderGBar;
@@ -6805,8 +6858,8 @@ function renderLevCard(){
   $("levMin") && ($("levMin").onchange = e => { LEV.min = Math.max(0, +e.target.value || 0); store.set("adrb.levMin", LEV.min); renderLevCard(); });
   $("levRe") && ($("levRe").onclick = () => levLoad(true));
 }
-const _renderTab6 = renderTab;
-renderTab = function(t){ _renderTab6(t); if (t === "etfs" && S.snap) { renderLevCard(); levLoad(false); } };
+// 31 Oct (structure only): was a renderTab override; now a "tab" hook — same code, same order (BOARD HOOKS, block 1)
+hookOn("tab", "levCard", t => { if (t === "etfs" && S.snap) { renderLevCard(); levLoad(false); } });
 // ticker panel / drawer: the funds right under the header
 const _openDrawer2 = openDrawer;
 openDrawer = function(sym){
@@ -7092,14 +7145,13 @@ sbPaint = function(){
 // cards: Tape read → Market breadth → Market monitor → Stage analysis → stages across your list
 $("mkTape").insertAdjacentHTML("afterend", `<div class="card g1" id="mbBox"></div>`);
 $("sbBox").insertAdjacentHTML("afterend", `<div class="card g1" id="saBox"></div>`);
-const _renderTab7 = renderTab;
-renderTab = function(t){
-  _renderTab7(t);
+// 31 Oct (structure only): was a renderTab override; now a "tab" hook — same code, same order (BOARD HOOKS, block 1)
+hookOn("tab", "breadthCards", t => {
   if (t === "market" && S.snap) {
     mbPaint(); saPaint();
     const d = $("wsDist"); if (d && $("saBox").nextElementSibling !== d) $("saBox").after(d);
   }
-};
+});
 </script>
 <script>
 "use strict";
@@ -7178,8 +7230,8 @@ function renderRulesCard(){
       <span><i>Stop</i> plan: 30-min pullback low, never wider than ½ ADR · pivot: pullback low − 0.05 ADR, entry ≤ 0.6 ADR off the low</span>
       <span><i>Room to resistance</i> pivot only (≥ 2R)</span></div></div>`;
 }
-const _renderTab8 = renderTab;
-renderTab = function(t){ _renderTab8(t); if (t === "plan" && S.snap) renderRulesCard(); };
+// 31 Oct (structure only): was a renderTab override; now a "tab" hook — same code, same order (BOARD HOOKS, block 1)
+hookOn("tab", "rulesCard", t => { if (t === "plan" && S.snap) renderRulesCard(); });
 </script>
 <script>
 "use strict";
@@ -7306,8 +7358,8 @@ function renderMapTrack(){
   $("mlClr") && ($("mlClr").onclick = () => { if (confirm("Delete the MAP lists log from this browser?")) { store.set(MLOG, null); renderMapTrack(); } });
   box.querySelector("tbody")?.addEventListener("click", e => { const tr = e.target.closest("tr[data-sym]"); if (tr) openDrawer(tr.dataset.sym); });
 }
-const _renderTab9 = renderTab;
-renderTab = function(t){ _renderTab9(t); if (t === "plan" && S.snap) { mlCounts(); renderMapTrack(); } };
+// 31 Oct (structure only): was a renderTab override; now a "tab" hook — same code, same order (BOARD HOOKS, block 1)
+hookOn("tab", "mapTrack", t => { if (t === "plan" && S.snap) { mlCounts(); renderMapTrack(); } });
 </script>
 <script>
 "use strict";
@@ -7317,17 +7369,16 @@ renderTab = function(t){ _renderTab9(t); if (t === "plan" && S.snap) { mlCounts(
      script, MAP lists tracker) have drawn, so every card on the page is listed.
    • Setups: the MAP lists cards stay out of the way until there is something in them.
    ===================================================================== */
-const _renderTab10 = renderTab;
-renderTab = function(t){
-  _renderTab10(t);
+// 31 Oct (structure only): was a renderTab override; now a "tab" hook — same code, same order (BOARD HOOKS, block 1)
+hookOn("tab", "layoutTidy", t => {
   if (t === "plan" && S.snap) {
     const any = LISTS.focus.size || LISTS.held.size || MAPL.b.size || MAPL.stalk.size;
     $("focusBox") && $("focusBox").classList.toggle("hidden", !any);
     const log = store.get("adrb.mapLog", {}) || {};
     $("mapTrack") && $("mapTrack").classList.toggle("hidden", !Object.keys(log).length && !any);
   }
-  if (WS && S.snap && typeof buildSecs === "function") buildSecs(t);
-};
+  // the jump list is rebuilt once at the end of every page draw (BOARD HOOKS) — every late card is listed
+});
 // ticker panel: when the Pivot script's gates are shown, the Board plan's checks sit right above them, same layout
 if (WS) {
   const _tpBuild2 = tpBuild;
@@ -7969,7 +8020,7 @@ function dssBars(sym){
   // counts bars per symbol — one missing day must not blank every 20/50-bar average for the next 50 sessions
   const keep = []; for (let t = 0; t < N; t++) if (fin(c[t]) && fin(h[t]) && fin(l[t])) keep.push(t);
   if (!keep.length) return null;
-  const pick = a => Float64Array.from(keep, t => a[t]);
+  const nk = keep.length, pick = a => { const o = new Float64Array(nk); for (let j = 0; j < nk; j++) o[j] = a[keep[j]]; return o; };   // 31 Oct: a plain loop (Float64Array.from with a mapper was the slowest step); same values
   // missing data (20 Oct): benchmark sessions inside the symbol's own span with no bar for it (last 60), and whether its
   // last bar is older than the benchmark's — skipped like Pine, but flagged instead of passing silently
   let miss = 0; for (let t = Math.max(keep[0], N - 60); t < N; t++) if (fin(bc[t]) && !(fin(c[t]) && fin(h[t]) && fin(l[t]))) miss++;
@@ -8389,8 +8440,8 @@ function renderFeedCard(){
     ${themeT}${cmp}</div>`;
 }
 $("tab-data").addEventListener("click", e => { const b = e.target.closest("[data-feed]"); if (!b) return; if (b.dataset.feed === "csv") feedExport(); else if (b.dataset.feed === "plog") s61ParityLog(); else $("fileDss").click(); });
-const _renderTabF = renderTab;
-renderTab = function(t){ _renderTabF(t); if (t === "data") { try { renderFeedCard(); } catch (e) { console.warn("feed card", e); } if (WS && typeof buildSecs === "function") buildSecs(t); } };
+// 31 Oct (structure only): was a renderTab override; now a "tab" hook — same code, same order (BOARD HOOKS, block 1)
+hookOn("tab", "feedCard", t => { if (t === "data") { try { renderFeedCard(); } catch (e) { console.warn("feed card", e); } } });
 </script>
 <script>
 "use strict";
@@ -8816,8 +8867,8 @@ function renderS61Card(){
   box.querySelectorAll("tbody").forEach(tb => tb.addEventListener("click", e => { if (e.target.closest("[data-sym]:not(tr)")) return; const t = e.target.closest("tr[data-sym]"); if (t) openDrawer(t.dataset.sym); }));
   $("s61Tv") && ($("s61Tv").onclick = () => copyText([...L["A-eligible"], ...deck].map(s => s.r.sym).join(","), "Ready to trade + on deck copied"));
 }
-const _renderTab61 = renderTab;
-renderTab = function(t){ _renderTab61(t); if (t === "plan" && S.snap) { try { renderS61Card(); } catch (e) { console.warn("entry check card", e); } if (WS && typeof buildSecs === "function") buildSecs(t); } };
+// 31 Oct (structure only): was a renderTab override; now a "tab" hook — same code, same order (BOARD HOOKS, block 1)
+hookOn("tab", "entryCheckCard", t => { if (t === "plan" && S.snap) { try { renderS61Card(); } catch (e) { console.warn("entry check card", e); } } });
 
 /* ---------------- live switch: the retired hints and Wild go away ---------------- */
 const _flagsHTML61 = flagsHTML;
@@ -8942,12 +8993,11 @@ openDrawer = function(sym){
     const lb = $("dStop") && $("dStop").closest("label"); if (lb && lb.firstChild && lb.firstChild.nodeType === 3) lb.firstChild.textContent = "Low of the day at the trigger ";
   }
 };
-const _renderTabRN = renderTab;
-renderTab = function(t){
-  _renderTabRN(t);
+// 31 Oct (structure only): was a renderTab override; now a "tab" hook — same code, same order (BOARD HOOKS, block 1)
+hookOn("tab", "rulesNow", t => {
   if (t !== "plan" || !S.snap) return;
   const lede = $("planLede"); if (lede && !$("planRnow")) lede.insertAdjacentHTML("afterend", `<div class="note rnow" id="planRnow">${RULES_NOW}</div>`);
-};
+});
 document.head.insertAdjacentHTML("beforeend", `<style>.note.rnow{border-left:3px solid var(--warn, #c88a00)}</style>`);
 </script>
 <script>
@@ -9484,11 +9534,10 @@ document.addEventListener("click", e => {
     const date = dt && /^\d{4}-\d\d-\d\d$/.test(dt.value) ? dt.value : (S.snap && S.snap.asOf) || etParts(Date.now()).d;
     msrcSave(date, syms, "", "pasted"); toast(`MAP source universe saved: ${syms.length} names for ${date}`); msrcPaint(); if (S.ui.tab === "watch") renderTab("watch"); }
 });
-const _renderTabB = renderTab;
-renderTab = function(t){
-  _renderTabB(t);
+// 31 Oct (structure only): was a renderTab override; now a "tab" hook — same code, same order (BOARD HOOKS, block 1)
+hookOn("tab", "mapSources", t => {
   if (t === "data" && S.snap) { let b = $("msrcBox"); if (!b) { const f = $("dataFiles"); f && f.closest(".card").insertAdjacentHTML("afterend", `<div class="card g1" id="msrcBox"></div>`); } msrcPaint(); }
-};
+});
 </script>
 <script>
 "use strict";
@@ -9697,11 +9746,10 @@ function dpCardHTML(compact){
     <div class="small dim" style="margin-top:6px">${S.has.hist ? "" : "The board's lists need the price history — until it's loaded only MAP's lists are in the plan. "}Live status uses the data on screen (Massive is 15 minutes delayed). "In the zone" is a location, not a trigger: the trigger is a 30-min close over the 30-min 21 EMA, from 10:00 ET, checked on the chart.</div></div>`;
 }
 function dpPaint(){ const b = $("dpBox"); if (b) { b.innerHTML = dpCardHTML(); b.querySelectorAll("tbody").forEach(tb => tb.addEventListener("click", e => { const t = e.target.closest("tr[data-sym]"); if (t && S.rowBySym && S.rowBySym.has(t.dataset.sym)) openDrawer(t.dataset.sym); })); } }
-const _renderTabC = renderTab;
-renderTab = function(t){
-  _renderTabC(t);
+// 31 Oct (structure only): was a renderTab override; now a "tab" hook — same code, same order (BOARD HOOKS, block 1)
+hookOn("tab", "dailyPlanBox", t => {
   if (t === "plan" && S.snap) { let b = $("dpBox"); if (!b) { $("tab-plan").querySelector(".lede") ? $("tab-plan").querySelector(".lede").insertAdjacentHTML("afterend", `<div class="card g1" id="dpBox"></div>`) : $("tab-plan").insertAdjacentHTML("afterbegin", `<div class="card g1" id="dpBox"></div>`); } if (JN.loaded) dpPaint(); else JN.ready.then(dpPaint); }
-};
+});
 
 /* ---------------- earnings timing chip (the rule stays: unknown = after the close) ---------------- */
 function erTimingChip(s){
@@ -10085,11 +10133,14 @@ renderTab = function(t){
   if (t === "home") { renderHome(); if (typeof afterTab === "function") afterTab(t); return; }
   if (t === "watch") { renderWatch(); if (typeof afterTab === "function") afterTab(t); return; }
   _renderTabE(t);
+};
+// 31 Oct (structure only): was a renderTab override; now a "tab" hook — same code, same order (BOARD HOOKS, block 1)
+hookOn("tab", "dailyPlanLine", t => {
   // Setups: the Daily Plan's home is Today — here a one-line pointer
   if (t === "plan" && S.snap) { const b = $("dpBox"); if (b && b.closest("#tab-plan")) b.remove(); let l = $("dpLine"); if (!l) { const at = $("tab-plan").querySelector(".lede"); (at || $("tab-plan").firstElementChild).insertAdjacentHTML(at ? "afterend" : "beforebegin", `<div class="card g1" id="dpLine"></div>`); l = $("dpLine"); }
     const p = typeof dpCur === "function" ? dpCur() : null, rec = p ? JN.recs[p] : null, R = rec && rec.plan ? rec.plan.revs[rec.plan.revs.length - 1] : null;
     l.innerHTML = `<div class="bd small">${listsStaleHTML()}${R ? `<b>Daily Plan for ${esc(jnDay(p))}</b> · v${R.n} · ${R.names.length} names · ${dpOpen(p) ? "open until 09:30 ET" : "locked"}${rec.disc ? ` · ${Object.keys(rec.disc).length} new discoveries` : ""} — frozen ranks, why-lines and live status are on <a data-goto="home" style="cursor:pointer">Today</a>. The lists below move with the data.` : `No Daily Plan yet — it's built when you load the files for a plan day before 09:30 ET. See <a data-goto="home" style="cursor:pointer">Today</a>.`}</div>`; }
-};
+});
 // Daily Plan + Spec 6.1 rows get the ☆ pin
 const _dpCardHTMLE = dpCardHTML;
 dpCardHTML = function(){ return _dpCardHTMLE().replace(/<td class="l sym"><b>([A-Z0-9.\-]+)<\/b>/g, (m, s) => `<td class="l sym">${wlPin(s)}<b>${s}</b>`); };
@@ -10461,6 +10512,9 @@ const _renderTabEO = renderTab;
 renderTab = function(t){
   if (S.snap) try { ecGroups(); } catch (e) { console.warn("entry check group counts", e); }
   _renderTabEO(t);
+};
+// 31 Oct (structure only): was a renderTab override; now a "tab" hook — same code, same order (BOARD HOOKS, block 1)
+hookOn("tab", "entryCheckLede", t => {
   if (t !== "plan" || !S.snap) return;
   const lede = $("planLede");
   if (lede) lede.innerHTML = `<b>Entry Check</b> (rules v6.1) for every stock in the file. <b>Ready to trade</b> = in the buy zone, every check passes · <b>On deck</b> = just under the zone, or one thing missing. Click a name for its Entry Check and trade calculator.`;
@@ -10471,7 +10525,7 @@ renderTab = function(t){
       <label>Base grade <select data-ecc="grade">${GRADES.map(g => `<option ${g[0] === CFG.grade ? "selected" : ""} value="${g[0]}">${g[0]} · ${g[1]}%</option>`).join("")}</select></label></span>`);
     bar.querySelectorAll("[data-ecc]").forEach(i => i.addEventListener("change", () => { const k = i.dataset.ecc; CFG[k] = i.tagName === "SELECT" ? i.value : (i.value === "" ? 0 : +i.value); saveCfg(); s61Reset(); computeAll(); renderAll(); }));
   }
-};
+});
 
 /* ---------------- the logging chip (beside Frozen CSV / Live) ---------------- */
 function logChipPaint(){
@@ -10809,8 +10863,8 @@ document.addEventListener("click", e => {
   const t = e.target.closest("#secDrill tr[data-sym]"); if (t && S.rowBySym && S.rowBySym.has(t.dataset.sym)) openDrawer(t.dataset.sym);
 });
 // the pill only on Stocks today
-const _renderTabSD = renderTab;
-renderTab = function(t){ _renderTabSD(t); const p = $("sdBack"); if (p) p.classList.toggle("tabon", t === "today"); };
+// 31 Oct (structure only): was a renderTab override; now a "tab" hook — same code, same order (BOARD HOOKS, block 1)
+hookOn("tab", "sectorBack", t => { const p = $("sdBack"); if (p) p.classList.toggle("tabon", t === "today"); });
 document.head.insertAdjacentHTML("beforeend", `<style>
 #sdBack{position:fixed;right:22px;bottom:22px;z-index:40;display:none;box-shadow:var(--shadow)}
 #sdBack.on.tabon{display:inline-block}
@@ -11012,8 +11066,8 @@ function zlChipPaint(){
 }
 const _renderAllZL = renderAll;
 renderAll = function(){ zlNames(); _renderAllZL(); try { zlChipPaint(); zlText(); zlPlanNote(); } catch (e) { console.warn("lens", e); } };
-const _renderTabZL = renderTab;
-renderTab = function(t){ _renderTabZL(t); try { zlText(); zlPlanNote(); } catch (e) {} };
+// 31 Oct (structure only): was a renderTab override; now a "tab" hook — same code, same order (BOARD HOOKS, block 1)
+hookOn("tab", "zoneLens", t => { try { zlText(); zlPlanNote(); } catch (e) {} });
 function zlPlanNote(){
   const t = $("tab-plan"); if (!t) return; let n = $("zlNote"); const m = zlMode();
   if (m === "band") { if (n) n.remove(); return; }
@@ -13020,12 +13074,11 @@ function pbPlanPaint(){
   const lede = $("planLede"); if (lede) lede.innerHTML = k === 2 ? `<b>Playbook 2 · Shakeout Reclaim (R1)</b> — former leaders flushed under their daily 21 EMA that reclaim. Read from the stored daily bars; the trigger is the Shakeout Reclaim indicator's on the 30-min. Click a name for its Shakeout Reclaim tab, chart levels and Entry Check.`
     : `<b>Playbook 3 · Floor Bounce</b> — fast drops onto a daily price floor (Monis). Paper / watch only. Click a name for its Floor Bounce tab and the level on the chart.`;
 }
-const _renderTabPB = renderTab;
-renderTab = function(t){
-  _renderTabPB(t);
+// 31 Oct (structure only): was a renderTab override; now a "tab" hook — same code, same order (BOARD HOOKS, block 1)
+hookOn("tab", "playbooks", t => {
   if (t !== "plan" || !S.snap) return;
-  try { pbPlanPaint(); if (WS && typeof buildSecs === "function") buildSecs("plan"); } catch (e) { console.warn("playbooks", e); }
-};
+  try { pbPlanPaint(); } catch (e) { console.warn("playbooks", e); }
+});
 const _renderAllPB = renderAll;
 renderAll = function(){ _renderAllPB(); try { pbChipPaint(); } catch (e) { console.warn("playbook chip", e); } };
 document.addEventListener("change", e => { const s = e.target.closest("[data-r1terr]"); if (!s) return; store.set("adrb.r1Terr", s.value === "old" ? "old" : "notion"); R1X.key = ""; renderAll(); });
@@ -13192,21 +13245,25 @@ function pbSelf(){
     const x = r1Of(r);
     if (x) {
       const E9 = ema(c, 9), E21 = ema(c, 21), E50 = ema(c, 50), S50 = sma(c, 50), S200 = sma(c, 200), AD = sma(h.map((x, k) => x / l[k]), 20), DV = sma(c.map((x, k) => x * v[k]), 20), RG = sma(h.map((x, k) => x - l[k]), 20), VA = sma(v, 50);
-      const hiN = (a, p, k) => k - p + 1 < 0 ? NaN : Math.max(...a.slice(k - p + 1, k + 1)), loN = (a, p, k) => k - p + 1 < 0 ? NaN : Math.min(...a.slice(k - p + 1, k + 1));
-      let camp = false, ai = -1, wl = NaN, p1 = [], st = 0, near = [], days = 0;
+      // 31 Oct (speed only): highest high / lowest low over the last p bars, one pass each (a sliding window) instead of
+      // re-scanning p bars at every bar; max / min are exact, so every value is the same as before
+      const roll = (a, p, hi) => { const o = new Float64Array(a.length).fill(NaN), q = new Int32Array(a.length); let f = 0, e = 0;
+        for (let k = 0; k < a.length; k++) { while (e > f && (hi ? a[q[e - 1]] <= a[k] : a[q[e - 1]] >= a[k])) e--; q[e++] = k; if (q[f] <= k - p) f++; if (k - p + 1 >= 0) o[k] = a[q[f]]; } return o; };
+      const H252 = roll(h, 252, true), H20 = roll(h, 20, true), L10 = roll(l, 10, false), at = (A, k) => k < 0 ? NaN : A[k];
+      let camp = false, ai = -1, wl = NaN, p1 = [], st = 0, nearAt = -1, days = 0;
       for (let k = 0; k < n; k++) {
-        const adr = 100 * (AD[k] - 1), aD = adr / 100 * c[k], h52 = hiN(h, 252, k); near.push(isFinite(h52) && c[k] >= 0.85 * h52);
-        const gate = c[k] > 10 && DV[k] >= 100e6 && adr >= 4 && c[k] > S200[k] && S50[k] > S200[k] && near.slice(Math.max(0, k - 59)).some(Boolean);
+        const adr = 100 * (AD[k] - 1), aD = adr / 100 * c[k], h52 = H252[k]; if (isFinite(h52) && c[k] >= 0.85 * h52) nearAt = k;
+        const gate = c[k] > 10 && DV[k] >= 100e6 && adr >= 4 && c[k] > S200[k] && S50[k] > S200[k] && nearAt >= Math.max(0, k - 59);
         const ins = terr === "old" ? c[k] > E9[k] && c[k] > E21[k] : c[k] > E21[k] && k >= 5 && E21[k] > E21[k - 5];
         const pro = terr === "old" ? c[k] > E9[k] && c[k] > E21[k] && c[k] > E50[k] : ins;
-        const rs = aD > 0 && (hiN(h, 20, k) - l[k]) / aD >= 1.5 && (l[k] <= E21[k] || l[k] <= S50[k]);
+        const rs = aD > 0 && (H20[k] - l[k]) / aD >= 1.5 && (l[k] <= E21[k] || l[k] <= S50[k]);
         if (k >= 4 && [l[k - 3], l[k - 4], l[k - 1], l[k]].every(y => l[k - 2] < y)) p1 = [[l[k - 2], k - 2], ...p1].slice(0, 2);
         const ref = (p1.find(([, i]) => k - i >= 3 && k - i <= 40) || [NaN])[0];
         const uar = isFinite(ref) && l[k] < ref && c[k] > ref, rg = h[k] - l[k];
-        const cap = k > 0 && rg > 0 && l[k] < loN(l, 10, k - 1) && rg >= 1.5 * RG[k - 1] && v[k] >= 1.5 * VA[k - 1] && (c[k] - l[k]) / rg >= 0.65;
+        const cap = k > 0 && rg > 0 && l[k] < at(L10, k - 1) && rg >= 1.5 * RG[k - 1] && v[k] >= 1.5 * VA[k - 1] && (c[k] - l[k]) / rg >= 0.65;
         let pr = false;
         if (!camp && gate && rs && !ins) { camp = true; ai = -1; wl = NaN; }
-        if (camp) { if (c[k] < S200[k] || (k > 0 && h[k] > hiN(h, 20, k - 1))) camp = false; else if (pro) { camp = false; pr = true; } }
+        if (camp) { if (c[k] < S200[k] || (k > 0 && h[k] > at(H20, k - 1))) camp = false; else if (pro) { camp = false; pr = true; } }
         if (!camp) { ai = -1; wl = NaN; }
         if (camp && gate && !ins && (uar || cap)) { ai = k; wl = isFinite(wl) ? Math.min(wl, l[k]) : l[k]; } else if (camp && isFinite(wl)) wl = Math.min(wl, l[k]);
         const live = camp && ai >= 0 && k - ai <= 2; st = pr ? 5 : live ? 3 : camp && ai >= 0 ? 4 : camp ? 2 : gate ? 1 : 0; days = live ? 3 - (k - ai) : 0;
@@ -14268,9 +14325,7 @@ mSync();
    number in that test (lower it as old wrappers are retired; never raise it without Eugene's ok).
    Storage: none.
    ===================================================================== */
-const HOOK = {panel: [], tab: [], chart: []};
-function hookOn(point, name, fn){ if (!HOOK[point]) throw new Error("No hook point " + point); HOOK[point] = HOOK[point].filter(h => h.name !== name); HOOK[point].push({name, fn}); }
-function hookRun(point, ...a){ for (const h of HOOK[point] || []) { try { h.fn(...a); } catch (e) { console.error(`hook ${point}/${h.name}:`, e); } } }
+// HOOK / hookOn / hookRun live in block 1 (31 Oct), so sections earlier in the file plug in the same way
 // 31 Oct (reliability only — no number changes): a page or ticker panel that throws while drawing now shows a one-line
 // notice (error in the console) instead of staying blank or half drawn; the next good draw removes it.
 function hookErr(where, e){
@@ -14292,7 +14347,10 @@ const _renderTabHK = renderTab;
 // 31 Oct: hook point "page" — a page of its own (pageOn(t, draw)); renderTab draws it instead of the old page switch
 const PAGES = {};
 function pageOn(t, draw){ PAGES[t] = draw; }
-renderTab = function(t){ let out; try { out = PAGES[t] ? PAGES[t]() : _renderTabHK(t); hookOK(t); } catch (e) { hookErr("page " + t, e); } hookRun("tab", t); return out; };
+// 31 Oct: the workspace jump list is rebuilt once here, after every card (and every "tab" hook) has drawn — the sections
+// that used to rebuild it themselves after their own card are hooks now
+renderTab = function(t){ let out; try { out = PAGES[t] ? PAGES[t]() : _renderTabHK(t); hookOK(t); } catch (e) { hookErr("page " + t, e); } hookRun("tab", t);
+  if (WS && S.snap && typeof buildSecs === "function") buildSecs(t); return out; };
 </script>
 <script>
 "use strict";
@@ -15781,37 +15839,55 @@ function mcTable(D, all){
       a.map(({s, o}) => `<tr><td class="l sym" title="${esc(o.sym)}">${esc(s.n)}</td><td class="l small">${esc(o.desc || o.sym)}</td>${cols.map(([, f]) => cell(f, o, s)).join("")}</tr>`).join("")).join("")}</tbody></table></div>
     <div class="small dim" style="margin-top:6px">Native units: breadth in points, yields and spreads in basis points, SOFR as the implied rate (100 − price), prices and ratios in %. Move size = yesterday's move ÷ a normal daily move (last 20 sessions). Stage on the 150-day average (Stage 2 = above a rising average). Red = against stocks: volatility, yields and spreads are coloured the other way. Summation, oscillator, share and Zweig columns only mean something on the A/D and up/down-volume ratio rows; the running total only on NYSE net advances.</div>`;
 }
-function renderMacro(){
-  if (window.ASIA) return;
-  const tape = $("mkTape"); if (!tape) return;
-  let el = $("mkMacro");
-  if (!el) { el = document.createElement("div"); el.className = "card g1"; el.id = "mkMacro"; tape.after(el); }
-  const M = mcModel(), D = M && M.D;
-  if (!D) { el.innerHTML = `<div class="hd"><h2>Macro checklist</h2><span class="sub">from your breadth screener file · display only</span></div><div class="bd"><div class="empty" style="padding:6px 0">Load the breadth screener CSV (v3, Macro Checklist watchlist) to fill this.</div></div>`; return; }
-  const L = M.L, W = {g: "Healthy", a: "Caution", r: "Weak", n: "Context"}, cnt = k => L.filter(l => l.st === k).length;
+// the checklist's pieces as HTML — shared by the Macro checklist card (two-card layout) and the one-card Tape read (31 Oct)
+function mcParts(M){
+  const D = M.D, L = M.L, W = {g: "Healthy", a: "Caution", r: "Weak", n: "Context"}, cnt = k => L.filter(l => l.st === k).length;
   const all = store.get("adrb.mcCols", "key") === "all", open = !!store.get("adrb.mcOpen", 0);
   const newMiss = D.missing.filter(k => !BR_EXPECTED.includes(k)), oldMiss = D.missing.filter(k => BR_EXPECTED.includes(k));
   const cov = !D.v3 ? `Old (v2) breadth file — load the v3 export for stage, summation, thrust, 1-day and move-size columns. ` : "";
   const miss = D.v3 && newMiss.length ? `${newMiss.length} of the new lines aren't in this file: ${newMiss.map(k => esc(MC_BYK.get(k).n)).join(", ")} — check the Macro Checklist watchlist in TradingView. ` : "";
-  el.innerHTML = `<div class="hd"><h2>Macro checklist</h2><span class="sub">${esc(D.asOf || "")} · ${D.got.size} of ${MC_SPECS.length} lines · every column of your breadth file · display only — MAP decides, the tape read above is unchanged</span></div>
+  return {
+    sub: `${esc(D.asOf || "")} · ${D.got.size} of ${MC_SPECS.length} lines · every column of your breadth file`,
+    summary: `<div class="tally">${L.map(l => `<i class="${l.st && l.st !== "n" ? l.st : ""}" title="${esc(l.name)}: ${l.st ? W[l.st] : "no data"}"></i>`).join("")}</div>
+        <div class="small">${cnt("g")} healthy · ${cnt("a")} caution · ${cnt("r")} weak · ${cnt("n")} context</div>
+        <div class="mchead">${esc(M.head)}</div>
+        ${M.prev ? `<div class="small">Since ${esc(M.prev)}: ${M.ch.length ? M.ch.map(c => `<span class="${c.dir > 0 ? "pos" : c.dir < 0 ? "neg" : ""}">${esc(mcChTxt(c))}</span>`).join(" · ") : "no line changed"}</div>` : `<div class="small dim">Changes since the last file show from the next breadth file on.</div>`}`,
+    agree: `<div class="agree">Not a verdict and not a vote — it feeds no size, list or plan. Use it to see which part of the market MAP's call rests on.</div>`,
+    warn: cov || miss || oldMiss.length ? `<div class="disagree">${cov}${miss}${oldMiss.length ? `${oldMiss.length} usual lines missing.` : ""}</div>` : "",
+    lines: L.map(l => `<div class="ln"><div class="dot ${l.st && l.st !== "n" ? l.st : ""}"></div><div><div class="nm">${esc(l.name)}<span>${l.st ? W[l.st] : "no data"}${M.chBy.has(l.k) ? ` (was ${esc(MC_W[M.chBy.get(l.k).from] || "no data")})` : ""} · ${esc(l.sub)}</span></div><div class="tx">${esc(l.tx)}</div>${l.nums ? `<div class="nums">${esc(l.nums)}</div>` : ""}</div></div>`).join(""),
+    fold: `<details class="bd" id="mcFold" ${open ? "open" : ""}><summary style="cursor:pointer;font-weight:600">Every line, every column <span class="small dim">(${D.n} lines)</span></summary>
+      <div style="margin:8px 0"><button class="btn sm ${all ? "" : "on"}" data-mccols="key">Key columns</button> <button class="btn sm ${all ? "on" : ""}" data-mccols="all">All columns</button></div>
+      ${open ? mcTable(D, all) : ""}</details>`
+  };
+}
+// the fold and its column switch; redraw = whichever card holds them
+function mcWire(el, redraw){
+  const fold = el.querySelector("#mcFold");
+  if (fold) fold.addEventListener("toggle", () => { store.set("adrb.mcOpen", fold.open ? 1 : 0); if (fold.open && !fold.querySelector("table")) redraw(); });
+  el.querySelectorAll("[data-mccols]").forEach(b => b.onclick = () => { store.set("adrb.mcCols", b.dataset.mccols); redraw(); });
+  el.querySelectorAll("[data-tpmerge]").forEach(b => b.onclick = e => { e.stopPropagation(); store.set("adrb.tapeMerge", +b.dataset.tpmerge); renderTab(S.ui.tab); });
+}
+function renderMacro(){
+  if (window.ASIA) return;
+  const tape = $("mkTape"); if (!tape) return;
+  let el = $("mkMacro");
+  if (tapeMerged()) { if (el) el.remove(); return; }                 // one-card layout: the checklist lives in the Tape read card
+  if (!el) { el = document.createElement("div"); el.className = "card g1"; el.id = "mkMacro"; tape.after(el); }
+  const M = mcModel(), D = M && M.D;
+  if (!D) { el.innerHTML = `<div class="hd"><h2>Macro checklist</h2><span class="sub">from your breadth screener file · display only</span></div><div class="bd"><div class="empty" style="padding:6px 0">Load the breadth screener CSV (v3, Macro Checklist watchlist) to fill this.</div></div>`; return; }
+  const P = mcParts(M);
+  el.innerHTML = `<div class="hd"><h2>Macro checklist</h2><span class="sub">${P.sub} · display only — MAP decides, the tape read above is unchanged</span><span class="spacer"></span><button class="btn sm" data-tpmerge="1" title="Show the tape read and this checklist as one card, one set of lines at a time">One card</button></div>
     <div class="tape">
       <div class="verdict">
         <div class="small">Macro checklist · ${esc(D.asOf || "")}</div>
-        <div class="tally">${L.map(l => `<i class="${l.st && l.st !== "n" ? l.st : ""}" title="${esc(l.name)}: ${l.st ? W[l.st] : "no data"}"></i>`).join("")}</div>
-        <div class="small">${cnt("g")} healthy · ${cnt("a")} caution · ${cnt("r")} weak · ${cnt("n")} context</div>
-        <div class="mchead">${esc(M.head)}</div>
-        ${M.prev ? `<div class="small">Since ${esc(M.prev)}: ${M.ch.length ? M.ch.map(c => `<span class="${c.dir > 0 ? "pos" : c.dir < 0 ? "neg" : ""}">${esc(mcChTxt(c))}</span>`).join(" · ") : "no line changed"}</div>` : `<div class="small dim">Changes since the last file show from the next breadth file on.</div>`}
-        <div class="agree">Not a verdict and not a vote — it feeds no size, list or plan. Use it to see which part of the market MAP's call rests on.</div>
-        ${cov || miss || oldMiss.length ? `<div class="disagree">${cov}${miss}${oldMiss.length ? `${oldMiss.length} usual lines missing.` : ""}</div>` : ""}
+        ${P.summary}
+        ${P.agree}
+        ${P.warn}
       </div>
-      <div class="lines">${L.map(l => `<div class="ln"><div class="dot ${l.st && l.st !== "n" ? l.st : ""}"></div><div><div class="nm">${esc(l.name)}<span>${l.st ? W[l.st] : "no data"}${M.chBy.has(l.k) ? ` (was ${esc(MC_W[M.chBy.get(l.k).from] || "no data")})` : ""} · ${esc(l.sub)}</span></div><div class="tx">${esc(l.tx)}</div>${l.nums ? `<div class="nums">${esc(l.nums)}</div>` : ""}</div></div>`).join("")}</div>
+      <div class="lines">${P.lines}</div>
     </div>
-    <details class="bd" id="mcFold" ${open ? "open" : ""}><summary style="cursor:pointer;font-weight:600">Every line, every column <span class="small dim">(${D.n} lines)</span></summary>
-      <div style="margin:8px 0"><button class="btn sm ${all ? "" : "on"}" data-mccols="key">Key columns</button> <button class="btn sm ${all ? "on" : ""}" data-mccols="all">All columns</button></div>
-      ${open ? mcTable(D, all) : ""}</details>`;
-  const fold = el.querySelector("#mcFold");
-  fold.addEventListener("toggle", () => { store.set("adrb.mcOpen", fold.open ? 1 : 0); if (fold.open && !fold.querySelector("table")) renderMacro(); });
-  el.querySelectorAll("[data-mccols]").forEach(b => b.onclick = () => { store.set("adrb.mcCols", b.dataset.mccols); renderMacro(); });
+    ${P.fold}`;
+  mcWire(el, renderMacro);
 }
 // the existing "Breadth file, every line" table: file the new lines under their own headings instead of "Other"
 (function(){
@@ -15830,15 +15906,19 @@ function renderMacroToday(){
   const tape = $("tapeBox"); if (!tape) return;
   let el = $("tdMacro");
   const M = mcModel();
-  if (!M) { if (el) el.remove(); return; }
+  if (!M || tapeMerged()) { if (el) el.remove(); return; }          // one-card layout: the strip is drawn inside the tape card
   if (!el) { el = document.createElement("div"); el.className = "card g1"; el.id = "tdMacro"; tape.after(el); }
-  const L = M.L, cnt = k => L.filter(l => l.st === k).length;
   el.innerHTML = `<div class="hd"><h2>Macro checklist</h2><span class="sub">${esc(M.D.asOf || "")} · breadth file · display only, MAP decides</span><button class="btn sm" data-goto="market" style="margin-left:auto">Open on Market ›</button></div>
-    <div class="bd mcstrip"><div class="tally" style="display:flex;gap:4px">${L.map(l => `<i class="${l.st && l.st !== "n" ? l.st : ""}" title="${esc(l.name)}: ${esc(l.st ? MC_W[l.st] : "no data")} — ${esc(l.tx)}"></i>`).join("")}</div>
+    <div class="bd mcstrip">${mcStrip(M)}</div>`;
+}
+// the strip's contents — the Today card above, or the footer of the one-card Tape read (31 Oct)
+function mcStrip(M){
+  const L = M.L, cnt = k => L.filter(l => l.st === k).length;
+  return `<div class="tally" style="display:flex;gap:4px">${L.map(l => `<i class="${l.st && l.st !== "n" ? l.st : ""}" title="${esc(l.name)}: ${esc(l.st ? MC_W[l.st] : "no data")} — ${esc(l.tx)}"></i>`).join("")}</div>
       <div class="small">${cnt("g")} healthy · ${cnt("a")} caution · ${cnt("r")} weak</div>
       <div class="mchead">${esc(M.head)}</div>
       ${M.prev && M.ch.length ? `<div class="small">Since ${esc(M.prev)}: ${M.ch.map(c => `<span class="${c.dir > 0 ? "pos" : c.dir < 0 ? "neg" : ""}">${esc(mcChTxt(c))}</span>`).join(" · ")}</div>` : ""}
-      ${!M.D.v3 ? `<div class="small dim">Old (v2) breadth file — the v3 export fills every line.</div>` : ""}</div>`;
+      ${!M.D.v3 ? `<div class="small dim">Old (v2) breadth file — the v3 export fills every line.</div>` : ""}`;
 }
 (function(){ const st = document.createElement("style");
   st.textContent = ".mchead{font-size:12.5px;font-weight:600;color:var(--ink)}.mcstrip{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px}.mcstrip .tally i{width:18px;height:6px;border-radius:3px;background:var(--surface-3)}.mcstrip .tally i.g{background:var(--st1)}.mcstrip .tally i.a{background:var(--warn)}.mcstrip .tally i.r{background:var(--crit)}";
@@ -15906,4 +15986,54 @@ hookOn("panel", "hrs", (r, dr) => {
   const at = dr.querySelector("#tvbox") || dr.firstElementChild; if (!at) return;
   at.insertAdjacentHTML("afterend", `<div class="note hrsline small" style="margin:6px 0">Price history restarts on <b>${esc(x.date)}</b> — a different instrument used this ticker before (no bars for ${x.gap} sessions, then ${x.before.toFixed(2)} → ${x.after.toFixed(2)}). The board ignores the bars before ${esc(x.date)}.</div>`);
 });
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   TAPE READ + MACRO CHECKLIST, ONE CARD (31 Oct 2026). Display only — changes no number, list, size, plan, feed or record.
+   Eugene (chat, 31 Oct): "under stock today and market. Tape Read appears twice. Look at resolving the above" — the
+   six-line Tape read and the new 15-line Macro checklist sat one under the other on both pages and repeated the same reads
+   (index trend, breadth, risk appetite, volatility, rates / dollar). Then: "Defaults." = the card opens on the six lines.
+   - Market: one card. Left: the tape verdict, MAP's call box (unchanged) and the checklist's dots, headline and changes.
+     Right: "Tape read · 6 lines" (the lines that set the Supportive / Mixed / Defensive verdict — default) or
+     "Macro checklist · 15 lines" (with its notes and the "Every line, every column" fold). One set of lines at a time.
+   - Stocks today: the checklist strip (dots, headline, changes, Open on Market) is the footer of the tape card instead of
+     a card of its own.
+   - "Two cards" in the card header brings back the old layout (both cards exactly as before, plus a "One card" button).
+   Never changes: the six-line tape read (computeTape, S.tape), MAP's call box, the checklist reads (mcModel / mcLines), the
+   connector's market.macro_checklist, the jump-list name ("Tape read").
+   Plugs in: one call line at the end of renderTape (in place: tapeAfter(el, detail)), so every redraw of the tape card —
+   including the Stocks today sector / group clicks that redraw only that page — keeps the merged card. No function override.
+   Storage NEW: adrb.tapeMerge (1 = one card, default; 0 = two cards), adrb.tapeView ("tape" default | "macro").
+   Test: tools/board-tape-merge-test.js.
+   ===================================================================== */
+function tapeMerged(){ return !window.ASIA && store.get("adrb.tapeMerge", 1) !== 0; }
+const tapeView = () => store.get("adrb.tapeView", "tape") === "macro" ? "macro" : "tape";
+function tapeAfter(el, detail){
+  if (!tapeMerged() || !S.tape || typeof mcModel !== "function") return;
+  const M = mcModel(); if (!M) return;
+  const wrap = el.querySelector(":scope > .tape"); if (!wrap) return;
+  const two = `<button class="btn sm" data-tpmerge="0" title="Show the tape read and the Macro checklist as two cards (the layout before 31 Oct)">Two cards</button>`;
+  if (!detail) {                                                      // Stocks today: the checklist strip as the card's footer
+    wrap.insertAdjacentHTML("afterend", `<div class="bd mcstrip tpfoot"><span class="lbl">Macro checklist · ${esc(M.D.asOf || "")}</span>${mcStrip(M)}
+      <span class="spacer"></span><button class="btn sm" data-goto="market">Open on Market ›</button>${two}</div>`);
+    mcWire(el, () => renderTape(el, detail));
+    return;
+  }
+  const v = tapeView(), P = mcParts(M), lines = wrap.querySelector(".lines");
+  el.insertAdjacentHTML("afterbegin", `<div class="hd"><h2>Tape read</h2><span class="sub">${v === "tape" ? "the six lines that set the verdict · cross-check, MAP decides" : `Macro checklist · ${P.sub} · display only, MAP decides`}</span><span class="spacer"></span>
+    <span class="seg"><button data-tpv="tape" class="${v === "tape" ? "on" : ""}" title="The six lines that set Supportive / Mixed / Defensive">Tape read · ${S.tape.lines.length} lines</button><button data-tpv="macro" class="${v === "macro" ? "on" : ""}" title="Every read of the breadth file — a cross-check, not a verdict">Macro checklist · ${M.L.length} lines</button></span>${two}</div>`);
+  wrap.querySelector(".verdict").insertAdjacentHTML("beforeend", `<div class="mcmini"><span class="lbl">Macro checklist</span>${P.summary}</div>`);
+  if (v === "macro" && lines) {
+    const wl = lines.querySelector(".warnline");                     // the tape read's own file warnings stay in view
+    lines.innerHTML = P.lines + (wl ? wl.outerHTML : "");
+    wrap.insertAdjacentHTML("afterend", `<div class="bd tpnotes">${P.agree}${P.warn}</div>${P.fold}`);
+  }
+  el.querySelectorAll("[data-tpv]").forEach(b => b.onclick = e => { e.stopPropagation(); store.set("adrb.tapeView", b.dataset.tpv); renderTape(el, detail); });
+  mcWire(el, () => renderTape(el, detail));
+}
+(function(){ const st = document.createElement("style");
+  st.textContent = ".tape .mcmini{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:8px}.tape .mcmini .tally{gap:3px}.tape .mcmini .tally i{width:10px}" +
+    ".tpfoot{border-top:1px solid var(--line)}.tpfoot .lbl{margin-right:2px}.tpnotes{display:flex;flex-direction:column;gap:6px;padding-top:0}";
+  document.head.appendChild(st); })();
 </script>
