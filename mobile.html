@@ -11856,17 +11856,23 @@ document.addEventListener("click", e => {
 }, true);
 
 /* ---------------- ETF feed CSV (MAP S5.4's input — a new interface: add columns at the end only) ---------------- */
+const ES_FEED_EXT = [];   // 1 Nov 2026: columns added at the end by later sections (see esFeedCSV)
 const ES_FEED_H = ["Session", "Rank", "Symbol", "Side", "Group", "Status", "Location", "Dist ADR", "Nearer EMA", "RS5", "RS20", "Vehicle", "Grade", "Why not", "Close", "ADR%", "ADR $", "EMA9", "EMA21", "SMA50", "Ext ADR", "Avg $Vol 20D $M", "Worst day 20D $M", "In ETF file"];
 function esFeedCSV(){
   const R = esRun(); const q = v => { const s = String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
   const L = [ES_FEED_H.join(",")]; if (!R) return L.join("\n");
   const n = (v, d) => fin(v) ? +v.toFixed(d) : "";
   const order = [...R.rows].sort((a, b) => (a.rank || 9) - (b.rank || 9) || ((a.j.status === "Out") - (b.j.status === "Out")) || (!!a.cutBy - !!b.cutBy) || (a.g < b.g ? -1 : a.g > b.g ? 1 : a.sym < b.sym ? -1 : 1));
+  // 1 Nov 2026: ES_FEED_EXT columns ({h, cells: sym => [values], prep}) go at the end of every line (header, funds, unmapped, missing)
+  let EP = []; try { EP = ES_FEED_EXT.map(e => e.prep ? e.prep(R) : null); } catch (er) { console.warn("ETF feed columns", er); }
+  const ext = sym => ES_FEED_EXT.flatMap((e, i) => { let c = null; try { c = e.cells(sym, EP[i]); } catch (er) { console.warn("ETF feed columns", sym, er); } return (c || e.h.map(() => "")).map(v => q(feedFx(v))); });
+  if (ES_FEED_EXT.length) L[0] += "," + ES_FEED_EXT.flatMap(e => e.h).map(q).join(",");
+  const add = (sym, line) => ES_FEED_EXT.length ? line + "," + ext(sym).join(",") : line;
   for (const r of order) { const o = r.o;
-    L.push([o.to || R.to, r.rank || "", r.sym, r.j.side || "", r.g, r.j.status, r.near.t, n(r.near.v, 3), r.near.e || "", n(o.rs5, 3), n(o.rs20, 3), r.veh ? r.veh.t : "", r.j.status === "Out" ? "" : "C (experiment)", esWhy(r),
-      n(o.close, 4), n(o.adr * 100, 3), n(o.D, 4), n(o.e9, 4), n(o.e21, 4), n(o.s50, 4), n(o.ext, 3), n(o.avg / 1e6, 2), n(o.worst / 1e6, 2), R.noFile ? "no file" : "yes"].map(q).join(",")); }
-  for (const s of R.unmapped) L.push([R.to, "", s, "", "Unmapped", "Unmapped", "", "", "", "", "", "", "", "not on the ETF map — never a candidate", ...Array(9).fill(""), "yes"].map(q).join(","));
-  for (const s of R.missing) L.push([R.to, "", s, "", ETFU.get(s).g, "Not in the ETF file", "", "", "", "", "", "", "", "add it to the ETF list", ...Array(9).fill(""), "no"].map(q).join(","));
+    L.push(add(r.sym, [o.to || R.to, r.rank || "", r.sym, r.j.side || "", r.g, r.j.status, r.near.t, n(r.near.v, 3), r.near.e || "", n(o.rs5, 3), n(o.rs20, 3), r.veh ? r.veh.t : "", r.j.status === "Out" ? "" : "C (experiment)", esWhy(r),
+      n(o.close, 4), n(o.adr * 100, 3), n(o.D, 4), n(o.e9, 4), n(o.e21, 4), n(o.s50, 4), n(o.ext, 3), n(o.avg / 1e6, 2), n(o.worst / 1e6, 2), R.noFile ? "no file" : "yes"].map(q).join(","))); }
+  for (const s of R.unmapped) L.push(add(s, [R.to, "", s, "", "Unmapped", "Unmapped", "", "", "", "", "", "", "", "not on the ETF map — never a candidate", ...Array(9).fill(""), "yes"].map(q).join(",")));
+  for (const s of R.missing) L.push(add(s, [R.to, "", s, "", ETFU.get(s).g, "Not in the ETF file", "", "", "", "", "", "", "", "add it to the ETF list", ...Array(9).fill(""), "no"].map(q).join(",")));
   return L.join("\n");
 }
 const esFeedName = () => { const R = esRun(); return `deep-space-etf-feed-${(R && R.to) || fmtDate(new Date())}.csv`; };
@@ -12095,12 +12101,19 @@ function raxOf(sym){
   let x = null; try { x = raxCalc(dssBars(sym)); } catch (e) { x = null; }
   RAX.map.set(sym, x); return x;
 }
+// 1 Nov 2026: later sections add feed columns at the END through FEED_EXT ({h: [headers], cells: (o, rows) => [values]},
+// o = a feedRows() row) — appended here, after every older column, so the old columns stay byte-identical. No override.
+const FEED_EXT = [];
+const feedFx = v => v == null || (typeof v === "number" && !isFinite(v)) ? "" : typeof v === "boolean" ? (v ? 1 : 0) : v;   // values already rounded by the section
 const _feedCSVRax = feedCSV;
 feedCSV = function(){
   const L = _feedCSVRax().split("\n"), rows = feedRows();
   L[0] += "," + RAX_H.join(",");
   for (let i = 0; i < rows.length; i++) { const x = rows[i].d ? raxOf(rows[i].sym) : null;
     L[i + 1] += "," + (x ? [fv(x.ext, 3), x.a21, x.a50, x.a200] : ["", "", "", ""]).join(","); }
+  const q = v => { const t = String(v); return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  for (const e of FEED_EXT) { L[0] += "," + e.h.map(q).join(","); let P = null; try { P = e.prep ? e.prep(rows) : null; } catch (er) { console.warn("feed columns", er); }
+    for (let i = 0; i < rows.length; i++) { let c; try { c = e.cells(rows[i], P); } catch (er) { console.warn("feed columns", rows[i].sym, er); c = null; } L[i + 1] += "," + (c || e.h.map(() => "")).map(v => q(feedFx(v))).join(","); } }
   return L.join("\n");
 };
 </script>
@@ -16254,4 +16267,72 @@ document.addEventListener("change", e => {
   if (k) r1sSet({[k.dataset.r1sk]: !!k.checked}); else if (v) r1sSet({[v.dataset.r1sv]: +v.value}); else return;
   renderAll();
 });
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   SHAKEOUT RECLAIM + FLOOR BOUNCE IN THE FEEDS (1 Nov 2026). Display / tracking only — exports what the Playbook 2 and 3
+   cards already compute; changes no state, status, level, list, size, the Board log or any older feed column.
+   Eugene (chat, 1 Nov): "Does the deepspace board feed export csv have the tickers output for shakeout reclaim and floor
+   bounce? … im only pending the feed for these 2." → "Yes proceed. Ensure deep space board. Map/brief template/ notion are
+   updated accordingly. i only want map/brief to display max 5 tickers for R1 and OB respectively. 3 ETFs each max. Only if
+   they meet the strictest. It's Max not must." Rulings (1 Nov, chat): strictest = the Strict preset (fixed here, never the
+   board's on-screen switches) · R1 strict-only in MAP during the freeze, noted on the R1 page · R1 ETFs: stock-only.
+   Deep Space feed (3b), at the end:
+     R1 State · R1 Armed Type · R1 Sessions Left · R1 Washout Low · R1 Above 50 SMA · R1 Max Stop $ · R1 Earnings Block ·
+     R1 Campaign Since · R1 Strict Pass · R1 Strict Rank · R1 Strict Misses
+     OB Status · OB Level · OB Zone Low · OB Zone High · OB vs Level ADR · OB Drop ADR · OB Sessions Since High ·
+     OB Up Closes · OB Tests · OB Sources · OB Test-Day Volume x · OB Strict Pass · OB Strict Rank · OB Strict Misses
+   ETF feed (3c), at the end: the same OB columns for every map fund (unmapped / missing funds blank).
+   Strict Pass (Y / N; blank when not a candidate):
+     R1 = Armed + the Shakeout Reclaim Strict preset (R1S_PRESET: stop fits · closed above the 50 SMA · within 10% of the
+          52-week high · group not weak) + no earnings block (the R1 5-session earnings gate).
+     OB = a Floor Bounce candidate (Undercut & reclaim / First test / Approaching) + the Floor Bounce Strict preset
+          (OBS_PRESET: touched only · drop ≥ 4 ADR · no up close since the high · no volume surge on the test).
+   Strict Rank = 1, 2, … among the passers on the whole file (filters change visibility only): R1 by sessions left, then
+   RS, then ticker (the card's order); OB by obRank (status, distance to the level, drop, ticker). Stocks in 3b (ETF rows
+   of the stock file get no rank), map funds in 3c. MAP lists Rank ≤ 5 (stocks) / ≤ 3 (ETFs); none = "none".
+   Storage: none. Plugs in: FEED_EXT / ES_FEED_EXT (registries at the last feed wrapper / the ETF feed). No override.
+   Test: tools/board-feed-pb-test.js.
+   ===================================================================== */
+const PBF_R1_H = ["R1 State", "R1 Armed Type", "R1 Sessions Left", "R1 Washout Low", "R1 Above 50 SMA", "R1 Max Stop $", "R1 Earnings Block", "R1 Campaign Since", "R1 Strict Pass", "R1 Strict Rank", "R1 Strict Misses"];
+const PBF_OB_H = ["OB Status", "OB Level", "OB Zone Low", "OB Zone High", "OB vs Level ADR", "OB Drop ADR", "OB Sessions Since High", "OB Up Closes", "OB Tests", "OB Sources", "OB Test-Day Volume x", "OB Strict Pass", "OB Strict Rank", "OB Strict Misses"];
+// the presets, fixed — never the on-screen switches
+function pbfR1Why(r, x){
+  if (!x || x.state !== 3) return null; const c = {...R1S_DEF, ...R1S_PRESET, on: true}, o = {r, x}, w = [];
+  for (const f of R1S_F) if (c[f.k]) { const s = f.cut(o, c); if (s) w.push(s); }
+  const er = r1Earn(r, x); if (er.n != null && er.n < S61.erMin) w.push(`earnings in ${er.n} session${er.n === 1 ? "" : "s"} (no new R1 entry)`);
+  return w;
+}
+function pbfOBWhy(o){
+  if (!o || !o.x || !OB_CAND.has(o.x.st)) return null; const c = {...OBS_DEF, ...OBS_PRESET, on: true}, R = obRun(), w = [];
+  for (const f of OBS_F) if (c[f.k]) { const s = f.cut(o, R, c); if (s) w.push(s); }
+  return w;
+}
+function pbfOBCells(x, why, rank){
+  if (!x) return null; const has = fin(x.L), st = OB_ST[x.st] ? OB_ST[x.st].n : x.st;
+  return [st, has ? +x.L.toFixed(4) : "", has ? +(x.L - x.z).toFixed(4) : "", has ? +(x.L + x.z).toFixed(4) : "", fin(x.dA) ? +x.dA.toFixed(3) : "", fin(x.dropA) ? +x.dropA.toFixed(3) : "",
+    x.days ?? "", x.ups ?? "", x.tests ?? "", x.lvl ? x.lvl.src.length : "", fin(x.rv) ? +x.rv.toFixed(2) : "", why == null ? "" : why.length ? "N" : "Y", rank || "", why && why.length ? why.join(" · ") : ""];
+}
+FEED_EXT.push({h: PBF_R1_H,
+  prep: rows => { if (!pbHH()) return null; const pass = [];
+    for (const o of rows) { const r = o.r; if (!r || r.etf) continue; const x = r1Of(r), w = pbfR1Why(r, x); if (w && !w.length) pass.push({r, x}); }
+    pass.sort((a, b) => b.x.daysLeft - a.x.daysLeft || (b.r.rs ?? -1) - (a.r.rs ?? -1) || (a.r.sym < b.r.sym ? -1 : 1));
+    return new Map(pass.map((p, i) => [p.r.sym, i + 1])); },
+  cells: (o, P) => { const r = o.r; if (!r || r.etf || !P) return null; const x = r1Of(r); if (!x) return null;
+    const arm = x.state === 3 || x.state === 4, w = pbfR1Why(r, x), er = r1Earn(r, x);
+    return [R1_ST[x.state] === "—" ? "" : R1_ST[x.state], arm ? (x.armType === 1 ? "U&R" : "CAP") : "", x.state === 3 ? x.daysLeft : "", arm && fin(x.wash) ? +x.wash.toFixed(4) : "",
+      x.state === 3 ? yn(x.close > x.s50) : "", fin(x.adrD) ? +(R1C.maxStop * x.adrD).toFixed(4) : "", x.state === 3 ? yn(er.n != null && er.n < S61.erMin) : "", x.campDate || "",
+      w == null ? "" : w.length ? "N" : "Y", P.get(r.sym) || "", w && w.length ? w.join(" · ") : ""]; }});
+FEED_EXT.push({h: PBF_OB_H,
+  prep: rows => { if (!pbHH()) return null; const pass = [];
+    for (const o of rows) { const r = o.r; if (!r || r.etf) continue; const x = obOf(r); if (!x) continue; const row = {sym: r.sym, r, x, etf: false}, w = pbfOBWhy(row); if (w && !w.length) pass.push(row); }
+    pass.sort(obRank); return new Map(pass.map((p, i) => [p.sym, i + 1])); },
+  cells: (o, P) => { const r = o.r; if (!r || !P) return null; const x = obOf(r); if (!x) return null; const row = obRowOf(r, x);
+    return pbfOBCells(x, pbfOBWhy(row), r.etf ? "" : P.get(r.sym)); }});
+ES_FEED_EXT.push({h: PBF_OB_H,
+  prep: () => { const R = obRun(); if (!R) return null; const by = new Map(), pass = [];
+    for (const o of R.rows) if (o.etf) { const w = pbfOBWhy(o); by.set(o.sym, {o, w}); if (w && !w.length) pass.push(o); }
+    pass.sort(obRank); const rank = new Map(pass.map((p, i) => [p.sym, i + 1])); return {by, rank}; },
+  cells: (sym, P) => { if (!P) return null; const e = P.by.get(sym); return e ? pbfOBCells(e.o.x, e.w, P.rank.get(sym)) : null; }});
 </script>
