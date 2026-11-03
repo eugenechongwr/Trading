@@ -4006,6 +4006,7 @@ function gOK(r){
   let ok = true;
   if (GF.on) {
     if (!(FOCUS[GF.focus] || FOCUS.all).t(r)) ok = false;
+    if (ok && GF.ex && typeof sxOut === "function" && sxOut(r)) ok = false;   // 3 Nov: unticked sectors / industries (SECTOR / INDUSTRY TOGGLES script)
     if (ok) for (const g of GATES) { const v = GF.gates[g.k]; if (v === "" || v == null || !isFinite(+v)) continue; if (!g.t(r, +v)) { ok = false; break; } }
     if (ok) { const A = gfActive(); if (A.length) { let n = 0; for (const [c, p] of A) if (c.t(r, p) === true) n++; ok = GF.mode === "score" ? n >= Math.min(GF.k, A.length) : n === A.length; } }
   }
@@ -4021,7 +4022,7 @@ const GF_PRESETS = {
   "Short watch": {gates: {dvMin: 20}, crit: {sscore: {on: 1, p: 5}, noER: {on: 1, p: 7}}}
 };
 const userPresets = () => store.get("adrb.gfPresets", {}) || {};
-function gfLoad(p){ GF = {...structuredClone(GF_DEF), on: true, focus: p.focus || "all", mode: p.mode || "all", k: p.k || 3, gates: {...GF_DEF.gates, ...(p.gates || {})}, crit: structuredClone(p.crit || {})}; gfApply(); }
+function gfLoad(p){ const ex = p.ex || GF.ex; GF = {...structuredClone(GF_DEF), on: true, focus: p.focus || "all", mode: p.mode || "all", k: p.k || 3, gates: {...GF_DEF.gates, ...(p.gates || {})}, crit: structuredClone(p.crit || {})}; if (ex) GF.ex = structuredClone(ex); gfApply(); }   // 3 Nov: a preset keeps your sector / industry ticks unless it has its own
 function critLabel(c, p, inputs){
   if (c.type === "num") return c.l.replace("{p}", inputs ? `<input type="number" step="${c.step}" data-cp="${c.k}" value="${esc(p)}">` : `<b>${esc(p)}</b>`);
   if ((c.type === "multi" || c.type === "pick") && !inputs) { const o = Object.fromEntries(c.opts().map(([v, l]) => [String(v), l])); const ps = (p || []).map(v => o[String(v)] || v); return `${c.l} <b>${ps.length ? esc(ps.slice(0, 3).join(", ")) + (ps.length > 3 ? ` +${ps.length - 3}` : "") : "any"}</b>`; }
@@ -4031,8 +4032,10 @@ function renderGBar(){
   GFV++;
   const el = $("gbar"); if (!el || !S.snap) return;
   const A = gfActive(), gs = GATES.filter(g => GF.gates[g.k] !== "" && GF.gates[g.k] != null && isFinite(+GF.gates[g.k]));
-  const pass = S.stocks.filter(gOK).length, nOn = A.length + gs.length + (GF.focus !== "all" ? 1 : 0);
+  const sxN = typeof sxCount === "function" ? sxCount() : 0;   // 3 Nov: sector / industry ticks
+  const pass = S.stocks.filter(gOK).length, nOn = A.length + gs.length + (GF.focus !== "all" ? 1 : 0) + (sxN ? 1 : 0);
   const chips = [
+    ...(sxN ? [`<span class="gchip" title="Unticked in Filters → Sectors &amp; industries">Sectors / industries: <b>${esc(sxSumTxt())}</b><i data-gfx="sx">×</i></span>`] : []),
     ...(GF.focus !== "all" ? [`<span class="gchip" title="${esc(FOCUS[GF.focus].d)}">Tighten: <b>${FOCUS[GF.focus].l}</b><i data-gfx="focus">×</i></span>`] : []),
     ...gs.map(g => `<span class="gchip">${esc(g.l)} <b>${esc(GF.gates[g.k])}${g.u === "$M" ? "M" : g.u === "$B" ? "B" : g.u === "%" ? "%" : ""}</b><i data-gfx="g:${g.k}">×</i></span>`),
     ...A.map(([c, p]) => `<span class="gchip">${critLabel(c, p, false)}<i data-gfx="c:${c.k}">×</i></span>`)
@@ -4063,8 +4066,8 @@ function gfPanelHTML(){
   return `<div class="gpanel">
     <div class="ggates"><span class="lbl">Always required</span>${GATES.map(g => `<label class="small">${esc(g.l)} <input type="number" data-gg="${g.k}" value="${esc(GF.gates[g.k] ?? "")}" placeholder="—" style="width:70px"> <span class="dim">${g.u}</span></label>`).join("")}</div>
     <div class="gbody">
-      <div class="gcats">${CRIT_CATS.map(c => `<button class="${c === cat ? "on" : ""}" data-gcat="${esc(c)}">${esc(c)}${cnt(c) ? ` <b>${cnt(c)}</b>` : ""}</button>`).join("")}</div>
-      <div class="glist">${CRIT.filter(c => c.cat === cat).map(row).join("")}</div>
+      <div class="gcats">${CRIT_CATS.map(c => `<button class="${c === cat ? "on" : ""}" data-gcat="${esc(c)}">${esc(c)}${cnt(c) ? ` <b>${cnt(c)}</b>` : ""}</button>`).join("")}${typeof sxPanelHTML === "function" ? `<button class="${cat === SX_CAT ? "on" : ""}" data-gcat="${esc(SX_CAT)}">${esc(SX_CAT)}${sxCount() ? ` <b>${sxCount()}</b>` : ""}</button>` : ""}</div>
+      <div class="glist">${cat === "Sectors & industries" && typeof sxPanelHTML === "function" ? sxPanelHTML() : CRIT.filter(c => c.cat === cat).map(row).join("")}</div>
       <div class="gside">
         <div class="lbl">Active (${A.length})</div>
         ${A.length ? A.map(([c, p]) => `<div class="gact">${critLabel(c, p, false)}<i data-gfx="c:${c.k}">×</i></div>`).join("") : `<div class="small">Tick a criterion on the left.</div>`}
@@ -4088,10 +4091,10 @@ document.addEventListener("click", e => {
     const a = b.dataset.gf;
     if (a === "panel") { S.ui.gfOpen = !S.ui.gfOpen; renderGBar(); return; }
     if (a === "clear") { GF = {...structuredClone(GF_DEF)}; gfApply(); return; }
-    if (a === "save") { const nm = (document.querySelector("[data-gpname]") || {}).value; if (!nm || !nm.trim()) { toast("Type a name for this set first"); return; } const up = userPresets(); up[nm.trim()] = {focus: GF.focus, mode: GF.mode, k: GF.k, gates: GF.gates, crit: GF.crit}; store.set("adrb.gfPresets", up); toast(`Saved "${nm.trim()}"`); renderGBar(); return; }
+    if (a === "save") { const nm = (document.querySelector("[data-gpname]") || {}).value; if (!nm || !nm.trim()) { toast("Type a name for this set first"); return; } const up = userPresets(); up[nm.trim()] = {focus: GF.focus, mode: GF.mode, k: GF.k, gates: GF.gates, crit: GF.crit, ...(GF.ex ? {ex: GF.ex} : {})}; store.set("adrb.gfPresets", up); toast(`Saved "${nm.trim()}"`); renderGBar(); return; }
   }
   const x = t.closest("[data-gfx]");
-  if (x) { const v = x.dataset.gfx; if (v === "focus") GF.focus = "all"; else if (v.startsWith("g:")) GF.gates[v.slice(2)] = ""; else if (v.startsWith("c:")) { const k = v.slice(2); GF.crit[k] = {...(GF.crit[k] || {}), on: false}; } gfApply(); return; }
+  if (x) { const v = x.dataset.gfx; if (v === "focus") GF.focus = "all"; else if (v === "sx") delete GF.ex; else if (v.startsWith("g:")) GF.gates[v.slice(2)] = ""; else if (v.startsWith("c:")) { const k = v.slice(2); GF.crit[k] = {...(GF.crit[k] || {}), on: false}; } gfApply(); return; }
   const fo = t.closest("[data-gfocus]"); if (fo) { GF.focus = fo.dataset.gfocus; gfApply(); return; }
   const gc = t.closest("[data-gcat]"); if (gc) { S.ui.gfCat = gc.dataset.gcat; renderGBar(); return; }
   const gm = t.closest("[data-gmode]"); if (gm) { GF.mode = gm.dataset.gmode; gfApply(); return; }
@@ -8133,7 +8136,8 @@ function tasCells(sym, d, th){
     j && !j.missing ? j.state : "", j && !j.missing ? j.health : "", j && !j.missing ? (j.newLeader ? 1 : 0) : "", j && !j.missing ? (j.pick ? 1 : 0) : ""];
 }
 function feedRows(){
-  const plan = S.plan || {plan: [], deck: []}, inPlan = new Map(plan.plan.map(r => [r.sym, r.state === 1 ? "In zone" : "Wait"])); plan.deck.forEach(d => inPlan.set(d.r.sym, "On deck"));
+  // 3 Nov (Eugene: "Board plan should ignore filters. For the feed."): the whole-file plan + on deck, filter bar and "Buy zone only" off (jnSurface, as the Board log) — was S.plan, which followed the filters
+  const plan = (typeof jnSurface === "function" ? jnSurface() : S.plan) || {plan: [], deck: []}, inPlan = new Map(plan.plan.map(r => [r.sym, r.state === 1 ? "In zone" : "Wait"])); plan.deck.forEach(d => inPlan.set(d.r.sym, "On deck"));
   const out = [], have = new Set();
   for (const r of S.rows) {
     have.add(r.sym);
@@ -9590,10 +9594,10 @@ function dpCardHTML(compact){
       <td class="l small"><div>${esc(e.why)}</div>${e.now ? `<div class="dim">${esc(e.now)}</div>` : ""}${e.map ? `<div class="mapwhy">MAP: ${esc(e.map)}</div>` : ""}</td>
       <td>${e.f && e.f.last != null ? f2(e.f.last) : "—"}</td><td>${lv.px != null ? f2(lv.px) : "—"}${lv.chg != null ? `<div class="small ${cls(lv.chg)}">${pc(lv.chg, 1)}</div>` : ""}</td>
       <td class="l">${lv.flags.map(f => `<span class="pill ${f.c}">${esc(f.t)}</span>`).join(" ")}</td></tr>`; };
-  const D = rec.disc ? Object.values(rec.disc).sort((a, b) => a.at - b.at) : [];
-  const disc = !open ? `<h4 style="margin:12px 0 2px">New Discoveries <span class="small dim">after the lock · never added to the plan</span></h4>${D.length ? `<div class="tscroll" style="max-height:none"><table class="mini dpt"><thead><tr><th class="l">First seen</th><th class="l">Ticker</th><th class="l">List · why</th><th>Then</th><th>Now</th><th class="l">Status now</th></tr></thead><tbody>${D.map(e => { const lv = dpLive(e);
+  const D0 = rec.disc ? Object.values(rec.disc).sort((a, b) => a.at - b.at) : [], D = typeof ndxKeep === "function" ? D0.filter(e => ndxKeep(e.s)) : D0;   // 3 Nov: sector / industry ticks (display only; SECTOR / INDUSTRY TOGGLES script)
+  const disc = !open ? `<h4 style="margin:12px 0 2px">New Discoveries <span class="small dim">after the lock · never added to the plan</span></h4>${typeof ndxBarHTML === "function" ? ndxBarHTML(D0) : ""}${D.length ? `<div class="tscroll" style="max-height:none"><table class="mini dpt"><thead><tr><th class="l">First seen</th><th class="l">Ticker</th><th class="l">List · why</th><th>Then</th><th>Now</th><th class="l">Status now</th></tr></thead><tbody>${D.map(e => { const lv = dpLive(e);
       return `<tr data-sym="${esc(e.s)}"><td class="l small">${esc(etParts(e.at).hm)} ET<div class="dim">${esc(e.src)}</div></td><td class="l sym"><b>${esc(e.s)}</b></td><td class="l small"><b>${esc(DP_L[e.l] || e.l)}</b> · ${esc(e.why)}${e.now ? `<div class="dim">${esc(e.now)}</div>` : ""}</td><td>${e.f && e.f.last != null ? f2(e.f.last) : "—"}</td><td>${lv.px != null ? f2(lv.px) : "—"}</td><td class="l">${lv.flags.map(f => `<span class="pill ${f.c}">${esc(f.t)}</span>`).join(" ")}</td></tr>`; }).join("")}</tbody></table></div>`
-      : `<div class="small dim">None yet. ${S.snap.live ? "Watching the live refreshes." : "Turn on Live mode (or load an intraday file) during the session to catch names that qualify after the open."}</div>`}` : "";
+      : D0.length ? `<div class="small dim">All ${D0.length} hidden by the sector / industry filter above.</div>` : `<div class="small dim">None yet. ${S.snap.live ? "Watching the live refreshes." : "Turn on Live mode (or load an intraday file) during the session to catch names that qualify after the open."}</div>`}` : "";
   return hd + `<div class="bd">${tsStrip()}
     <div class="small" style="margin:4px 0 8px"><b>Plan for ${jnDay(p)}</b> · v${R.n} of ${pl.revs.length} · ${lockTxt} · data to the ${jnDay(R.d0)} close${pl.revs.length > 1 || R.ed ? `<details class="tp-fold" style="display:inline-block;margin-left:8px"><summary>revisions</summary><div class="small">${revTxt}</div></details>` : ""}</div>
     ${order.map(k => `<h4 style="margin:8px 0 2px">${esc(DP_L[k])} <span class="small dim">${groups[k].length}</span></h4><div class="tscroll" style="max-height:none"><table class="mini dpt"><thead><tr><th>#</th><th class="l">Ticker</th><th class="l">Why · why now / what could fail (frozen)</th><th>At plan</th><th>Now</th><th class="l">Live status</th></tr></thead><tbody>${groups[k].map(row).join("")}</tbody></table></div>`).join("") || `<div class="empty">The plan is empty — nothing qualified and no MAP lists typed. That's a valid plan.</div>`}
@@ -9910,7 +9914,7 @@ function wlGroups(){
   G.push(["MAP On deck / Stalk", [...(typeof MAPL !== "undefined" ? MAPL.stalk : [])].map(s => mk(s, "S"))]);
   let bq = [];
   if (S.has.hist && typeof s61Lists === "function") bq = s61Lists(true)["A-eligible"].slice(0, 5).map(x => mk(x.r.sym, "q"));
-  const disc = rec && rec.disc ? Object.values(rec.disc).map(e => mk(e.s, "nd")) : [];
+  const disc = rec && rec.disc ? Object.values(rec.disc).filter(e => typeof ndxKeep !== "function" || ndxKeep(e.s)).map(e => mk(e.s, "nd")) : [];   // 3 Nov: sector / industry filter (display only)
   G.push(["Ready to trade (first 5) and New Discoveries", [...bq, ...disc.filter(d => !bq.some(b => b.s === d.s))]]);
   G.push(["My Favourites / Research", wlAll().items.map(x => mk(x.s, "fav"))]);
   G.push(["Held", [...LISTS.held].map(s => mk(s, "H"))]);
@@ -10530,10 +10534,11 @@ function ndCarry(){
 }
 function ndCarryHTML(){
   const c = ndCarry(); if (!c) return "";
-  const rows = c.list.map(e => { const lv = dpLive(e);
+  const shown = typeof ndxKeep === "function" ? c.list.filter(e => ndxKeep(e.s)) : c.list;   // 3 Nov: sector / industry filter (display only)
+  const rows = shown.map(e => { const lv = dpLive(e);
     return `<tr data-sym="${esc(e.s)}"><td class="l small">${esc(etParts(e.at).hm)} ET${e.conf ? `<div class="dim">held to ${esc(etParts(e.conf).hm)}</div>` : ""}</td><td class="l sym"><b>${esc(e.s)}</b></td><td class="l small"><b>${esc(DP_L[e.l] || e.l)}</b> · ${esc(e.why)}</td><td>${e.f && e.f.last != null ? f2(e.f.last) : "—"}</td><td>${lv.px != null ? f2(lv.px) : "—"}${lv.chg != null ? `<div class="small ${cls(lv.chg)}">${pc(lv.chg, 1)}</div>` : ""}</td><td class="l">${lv.flags.map(f => `<span class="pill ${f.c}">${esc(f.t)}</span>`).join(" ")}</td></tr>`; }).join("");
-  return `<div class="ndc"><h4 style="margin:12px 0 2px">New Discoveries from ${esc(jnDay(c.p))} <span class="small dim">kept until the next plan locks at 09:30 ET · where each one is now · never added to the plan</span></h4>
-    <div class="tscroll" style="max-height:none"><table class="mini dpt"><thead><tr><th class="l">First seen</th><th class="l">Ticker</th><th class="l">List · why</th><th>Then</th><th>Now</th><th class="l">Status now</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+  return `<div class="ndc"><h4 style="margin:12px 0 2px">New Discoveries from ${esc(jnDay(c.p))} <span class="small dim">kept until the next plan locks at 09:30 ET · where each one is now · never added to the plan</span></h4>${typeof ndxBarHTML === "function" ? ndxBarHTML(c.list) : ""}
+    ${shown.length ? `<div class="tscroll" style="max-height:none"><table class="mini dpt"><thead><tr><th class="l">First seen</th><th class="l">Ticker</th><th class="l">List · why</th><th>Then</th><th>Now</th><th class="l">Status now</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="small dim">All ${c.list.length} hidden by the sector / industry filter above.</div>`}</div>`;
 }
 const _dpCardHTMLND = dpCardHTML;
 dpCardHTML = function(compact){
@@ -10550,7 +10555,7 @@ wlGroups = function(){
   if (!c) return G;
   WL_SRC.ndc = `New Discovery · ${jnDay(c.p)}`;
   const g = G.find(x => x[0].startsWith("Ready to trade")), rowBy = S.rowBySym || new Map();
-  if (g) { const have = new Set(g[1].map(e => e.s)); for (const e of c.list) if (!have.has(e.s)) g[1].push({s: e.s, r: rowBy.get(e.s) || null, src: "ndc"}); }
+  if (g) { const have = new Set(g[1].map(e => e.s)); for (const e of c.list) if (!have.has(e.s) && (typeof ndxKeep !== "function" || ndxKeep(e.s))) g[1].push({s: e.s, r: rowBy.get(e.s) || null, src: "ndc"}); }   // 3 Nov: sector / industry filter
   return G;
 };
 </script>
@@ -16108,5 +16113,124 @@ function rtDraw(){
 document.head.insertAdjacentHTML("beforeend", `<style>
 .shgt td{vertical-align:middle}.shgt tr[data-g] td{border-bottom:0;padding-bottom:1px}.shgt tr.shgsub td{white-space:normal;text-align:left;padding-top:0}
 #rotTrail button{font-size:11px;padding:1px 7px}
+</style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   SECTOR / INDUSTRY TOGGLES — FILTERS + NEW DISCOVERIES (3 Nov 2026). Display only — filters decide which names you SEE.
+   No zone, stop, target, state, RS, group strength, list, size, frozen plan, feed, Board-log / Decision-log or MAP-import
+   value changes: those are worked out on the whole file (the Entry Check lists the plan, New Discoveries and the feeds read
+   are s61Lists(true), which never applies the filters).
+   Eugene (chat, 3 Nov): "I need to be able to exclude certain groups or sectors from new discoveries. Like toggles in the
+   filter. For example I might want to exclude biotech from my new discoveries in deep space board. Toggles for sector to be
+   selected. Select all. Toggles for industry." Then: "Not only new discoveries just toggles in general for entire filters."
+   - Filters panel → new tab "Sectors & industries": one tick box per sector in the stock file (with its stock count) and,
+     under each, one per industry (always the file's Industry column, whatever "Group by" says). Unticked = hidden.
+     Select all / Clear all. Bar chip "Sectors / industries: … off ×"; it counts as one filter in "Filters · N"; the "On"
+     switch and "Clear" work on it like every other filter.
+   - Applied in gOK (always required, like the gates; stocks only — ETF rows never carry a stock sector), so every page,
+     table, map, count and list that follows the filters follows it.
+   - New Discoveries (Daily Plan card today + carried over, and the Watchlist group "Ready to trade (first 5) and New
+     Discoveries" → My lists map, TradingView lists' Watchlist item, connector board_lists): hidden by the same ticks via
+     ndxKeep (they're not filtered by gOK otherwise). A fold under each New Discoveries heading edits the same ticks.
+     Detection, rec.disc / rec.discP and the Board log are unchanged — an unticked name is still found and logged.
+     Ready to trade, MAP's lists, favourites and held names are never hidden.
+   - Stored in the filter set: GF.ex = {sec: [...], ind: [...]} (inside adrb.gf; absent = nothing unticked, so a board
+     with no ticks saves exactly what it saved before). Like every other filter it belongs to the playbook's filter set
+     (adrb.pbGF), travels in snapshots / sync (filters), and saved presets keep it; loading a preset without one keeps
+     your current ticks.
+   - In place (typeof-guarded, no function override): gOK, gfLoad, renderGBar, gfPanelHTML, the filter-bar click handler and
+     preset save; dpCardHTML, ndCarryHTML, wlGroups (+ its carry wrapper). Page memory: NDX.openSec, S.ui.ndxOpen.
+   Test: tools/board-ndx-test.js.
+   ===================================================================== */
+const SX_CAT = "Sectors & industries";
+const NDX = {openSec: new Set()};
+const ndxKey = v => String(v == null || v === "" ? "—" : v);
+let SXC = {v: -1, sec: new Set(), ind: new Set()};
+function sxSets(){
+  if (SXC.v === GFV && SXC.ex === GF.ex) return SXC;
+  const x = GF.ex || {};
+  SXC = {v: GFV, ex: GF.ex, sec: new Set(Array.isArray(x.sec) ? x.sec.map(String) : []), ind: new Set(Array.isArray(x.ind) ? x.ind.map(String) : [])};
+  return SXC;
+}
+const sxCount = () => { const x = sxSets(); return x.sec.size + x.ind.size; };
+// true = this stock's sector or industry is unticked
+function sxOut(r){ if (!r || r.etf) return false; const x = sxSets(); if (!x.sec.size && !x.ind.size) return false; return x.sec.has(ndxKey(r.sector)) || x.ind.has(ndxKey(r.industry)); }
+function sxSumTxt(){ const x = sxSets(); return [x.sec.size ? `${x.sec.size} sector${x.sec.size > 1 ? "s" : ""}` : "", x.ind.size ? `${x.ind.size} industr${x.ind.size > 1 ? "ies" : "y"}` : ""].filter(Boolean).join(", ") + " off"; }
+function sxPut(sec, ind){
+  const S2 = [...new Set(sec)].sort(), I2 = [...new Set(ind)].sort();
+  if (!S2.length && !I2.length) delete GF.ex; else GF.ex = {sec: S2, ind: I2};
+  gfApply();
+}
+// true = show this New Discovery (filters off, nothing unticked, not in the file, or its sector and industry are ticked)
+function ndxKeep(sym){
+  if (!GF.on || !GF.ex) return true;
+  const r = S.rowBySym && S.rowBySym.get(sym); return !r || !sxOut(r);
+}
+// sectors → industries → stock counts in the file, plus anything still unticked that this file doesn't have
+function ndxTree(){
+  const T = new Map();
+  for (const r of S.stocks || []) { const s = ndxKey(r.sector), i = ndxKey(r.industry);
+    if (!T.has(s)) T.set(s, {n: 0, ind: new Map()}); const t = T.get(s); t.n++; t.ind.set(i, (t.ind.get(i) || 0) + 1); }
+  const x = sxSets();
+  for (const s of x.sec) if (!T.has(s)) T.set(s, {n: 0, ind: new Map()});
+  const known = new Set([...T.values()].flatMap(t => [...t.ind.keys()]));
+  const lost = [...x.ind].filter(i => !known.has(i));
+  if (lost.length) { T.set("Not in this file", {n: 0, ind: new Map(lost.map(i => [i, 0])), lost: true}); }
+  return [...T.entries()].sort((a, b) => (a[1].lost ? 1 : 0) - (b[1].lost ? 1 : 0) || a[0].localeCompare(b[0]));
+}
+// the tick boxes (Filters tab and the New Discoveries fold share them)
+function sxTreeHTML(){
+  const x = sxSets();
+  const body = ndxTree().map(([s, t]) => {
+    const sOff = x.sec.has(s), I = [...t.ind.entries()].sort((a, b) => a[0].localeCompare(b[0])), iOff = I.filter(([i]) => x.ind.has(i)).length;
+    const head = t.lost ? `<b>${esc(s)}</b> <span class="dim">industries you unticked earlier</span>`
+      : `<label><input type="checkbox" data-ndx-sec="${esc(s)}" ${sOff ? "" : "checked"}> <b>${esc(s)}</b> <span class="dim">${t.n}</span></label>`;
+    const inds = I.map(([i, n]) => `<label class="${sOff ? "dim" : ""}"><input type="checkbox" data-ndx-ind="${esc(i)}" ${!sOff && !x.ind.has(i) ? "checked" : ""} ${sOff ? "disabled" : ""}> ${esc(i)}${t.lost ? "" : ` <span class="dim">${n}</span>`}</label>`).join("");
+    return `<div class="ndxsec">${head}${I.length ? `<details data-ndx-s="${esc(s)}" ${NDX.openSec.has(s) || t.lost ? "open" : ""}><summary>industries${sOff ? " · all off with the sector" : iOff ? ` · ${iOff} of ${I.length} off` : ` · ${I.length}`}</summary><div class="ndxi">${inds}</div></details>` : ""}</div>`;
+  }).join("");
+  return `<div style="margin:0 0 6px"><button class="btn sm" data-ndx="all">Select all</button> <button class="btn sm" data-ndx="none">Clear all</button></div><div class="ndxg">${body}</div>`;
+}
+function sxPanelHTML(){
+  const n = (S.stocks || []).filter(sxOut).length;
+  return `<div class="sxp"><div class="small" style="margin:0 0 6px">Untick a sector or an industry to hide its stocks everywhere the filters apply — tables, maps, lists, counts — and from New Discoveries. Display only: RS, states, group strength, the Entry Check lists, the Daily Plan and the Board log are still worked out on the whole file. Numbers = stocks in this file.${n ? ` <b>${n.toLocaleString()} stocks hidden by these ticks.</b>` : ""}</div>${sxTreeHTML()}</div>`;
+}
+// the fold under each New Discoveries heading
+function ndxBarHTML(list){
+  if (!S.snap) return "";
+  const n = sxCount(), hid = (list || []).filter(e => !ndxKeep(e.s)).map(e => e.s);
+  const sum = `Sector / industry filter · <b>${n ? esc(sxSumTxt()) : "all on"}</b>${n && !GF.on ? " · filters switched off" : ""}${hid.length ? ` · ${hid.length} hidden: ${hid.map(esc).join(", ")}` : ""}`;
+  return `<details class="tp-fold ndx" ${S.ui.ndxOpen ? "open" : ""}><summary>${sum}</summary>
+    <div class="small dim" style="margin:2px 0 4px">The same tick boxes as Filters → Sectors &amp; industries (they hide these stocks on every page too). Unticked New Discoveries are hidden here and on the Watchlist, but still found and kept in the Board log. Ready to trade, MAP's lists, favourites and held names are never hidden. Numbers = stocks in this file.</div>
+    ${sxTreeHTML()}</details>`;
+}
+document.addEventListener("change", ev => {
+  const t = ev.target; if (!t || !t.matches || !t.matches("[data-ndx-sec],[data-ndx-ind]")) return;
+  const x = sxSets(), sec = [...x.sec], ind = [...x.ind], isS = t.dataset.ndxSec != null, arr = isS ? sec : ind, k = isS ? t.dataset.ndxSec : t.dataset.ndxInd;
+  const i = arr.indexOf(k); if (t.checked) { if (i >= 0) arr.splice(i, 1); } else if (i < 0) arr.push(k);
+  if (t.closest("details.ndx")) S.ui.ndxOpen = true;
+  sxPut(sec, ind);
+});
+document.addEventListener("click", ev => {
+  const b = ev.target && ev.target.closest && ev.target.closest("[data-ndx]"); if (!b) return;
+  ev.preventDefault();
+  if (b.closest("details.ndx")) S.ui.ndxOpen = true;
+  if (b.dataset.ndx === "all") sxPut([], []);
+  else if (b.dataset.ndx === "none") sxPut(ndxTree().filter(([, t]) => !t.lost).map(([s]) => s), [...sxSets().ind]);
+});
+// fold memory for this page visit: the New Discoveries fold and each sector's industry list
+document.addEventListener("toggle", ev => {
+  const d = ev.target; if (!d || !d.matches) return;
+  if (d.matches("details.ndx")) S.ui.ndxOpen = d.open;
+  else if (d.matches("details[data-ndx-s]")) { const s = d.dataset.ndxS; if (d.open) NDX.openSec.add(s); else NDX.openSec.delete(s); }
+}, true);
+document.head.insertAdjacentHTML("beforeend", `<style>
+.ndxg{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:4px 14px;max-height:420px;overflow:auto;padding:2px 0}
+.ndxsec{min-width:0}.ndxsec > label{display:block;cursor:pointer}
+.ndxsec details{margin:0 0 2px 20px}.ndxsec summary{cursor:pointer;color:var(--ink-3);font-size:11px}
+.ndxi label{display:block;cursor:pointer;font-size:11.5px;line-height:1.5;overflow-wrap:anywhere}
+.ndxg input[type=checkbox]{vertical-align:-2px;margin:0 3px 0 0}
+.sxp .ndxg{max-height:460px}
 </style>`);
 </script>
