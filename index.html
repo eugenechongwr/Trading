@@ -62,7 +62,9 @@ label.tog{display:inline-flex;align-items:center;gap:5px;color:var(--ink-2);curs
 .tabs button{border:0;background:transparent;padding:8px 12px;cursor:pointer;color:var(--ink-2);border-bottom:2px solid transparent;white-space:nowrap;font-weight:500}
 .tabs button.on{color:var(--ink);border-bottom-color:var(--accent)}
 .tabs button .cnt{font-size:11px;color:var(--ink-3);margin-left:4px}
-.tab{display:none}.tab.on{display:block}
+/* 3 Nov (speed only): a page you leave keeps its layout instead of being thrown away (display:none), so coming back is ~5x
+   faster on big pages (Universe ~480 → ~90 ms on 600 names). Hidden pages are still unseen, unsearchable, unfocusable, take no room. */
+.tab{display:block;content-visibility:hidden;height:0;overflow:hidden}.tab.on{content-visibility:visible;height:auto;overflow:visible}
 .lede{color:var(--ink-2);max-width:980px;margin:0 0 12px;font-size:12.5px}
 #drop{border:2px dashed var(--line-strong);border-radius:14px;padding:44px 20px;text-align:center;background:var(--surface);cursor:pointer}
 #drop h2{font-size:17px;margin-bottom:6px}
@@ -120,7 +122,8 @@ th,td{padding:5px 8px;border-bottom:1px solid var(--line);white-space:nowrap;tex
 th{position:sticky;top:0;background:var(--surface-2);z-index:2;font-size:10.5px;font-weight:600;color:var(--ink-2);text-transform:uppercase;letter-spacing:.03em;cursor:pointer;user-select:none;vertical-align:bottom}
 th:hover{color:var(--ink)}
 th.sorted{color:var(--accent)}
-th .h{display:block;font-size:10px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--ink-3)}
+th .h{display:block;font-size:10px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--ink-3);white-space:normal;max-width:14em;line-height:1.25}
+th:not(.l) .h{margin-left:auto}
 td.l,th.l{text-align:left}
 tbody tr{cursor:pointer}
 tbody tr:hover td{background:var(--surface-2)}
@@ -1387,6 +1390,9 @@ window.addEventListener("storage", () => { store._c.clear(); store._g++; });
 // Hook points (BOARD HOOKS script, 28 Oct; moved up here 31 Oct so every section can use them — the installers that call
 // hookRun stay in BOARD HOOKS). Hooks run in the order they were added (= file order), each in its own try/catch.
 const HOOK = {panel: [], tab: [], chart: []};
+// 3 Nov (display only): sort keys a Table can sort on that aren't one of its own columns — {key: row => value}; a value of
+// null always sorts last. Used by the Ext. hours column (it's added after each draw, so it isn't in COLS).
+const TBL_XSORT = {};
 function hookOn(point, name, fn){ if (!HOOK[point]) throw new Error("No hook point " + point); HOOK[point] = HOOK[point].filter(h => h.name !== name); HOOK[point].push({name, fn}); }
 function hookRun(point, ...a){ for (const h of HOOK[point] || []) { try { h.fn(...a); } catch (e) { console.error(`hook ${point}/${h.name}:`, e); } } }
 const parseTickers = s => [...new Set(String(s || "").toUpperCase().split(/[\s,;|]+/).map(t => t.includes(":") ? t.split(":").pop() : t).map(t => t.replace(/[^A-Z0-9.\-]/g, "")).filter(Boolean))];
@@ -1886,8 +1892,11 @@ function COLS(){
   ];
   if (S.prev) C.push({k: "dToday", l: "Δ RS today", h: "vs last file", g: "today", v: r => r.dToday, f: r => `<span class="${cls(r.dToday)}">${r.dToday == null ? "—" : (r.dToday > 0 ? "▲" : r.dToday < 0 ? "▼" : "") + Math.abs(r.dToday)}</span>`},
                   {k: "dRs", l: "Δ RS", h: "composite", g: "rs", v: r => r.dRs, f: r => `<span class="${cls(r.dRs)}">${r.dRs == null ? "—" : (r.dRs > 0 ? "▲" : r.dRs < 0 ? "▼" : "") + Math.abs(r.dRs)}</span>`});
-  C.push({k: "last", l: "Last", h: pm ? "PM / close" : "", g: "today", v: r => r.last, f: r => f2(r.last)},
-         {k: "adr", l: "ADR%", g: "today", v: r => r.adr, f: r => f1(r.adr)});
+  C.push({k: "last", l: "Last", h: pm ? "PM / close" : "", g: "today", v: r => r.last, f: r => f2(r.last)});
+  // 3 Nov (display only): Ext. hours is a real column (sortable, in Copy table / CSV) — was added after each draw by a page
+  // watcher (EXTENDED HOURS script, which defines ehCell / EH_TIP; TBL_XSORT.eh = the PM / AH % move, blanks last)
+  if (!window.ASIA && typeof ehCell === "function") C.push({k: "eh", l: "Ext. hours", h: "PM / AH", g: "today", cls: "eh", thc: "ehh", tip: EH_TIP, td: r => ` data-ehs="${esc(r.sym)}"`, v: r => TBL_XSORT.eh(r), f: r => ehCell(r.sym)});
+  C.push({k: "adr", l: "ADR%", g: "today", v: r => r.adr, f: r => f1(r.adr)});
   if (pm) C.push(
     {k: "pmPct", l: "PM %", g: "today", v: r => r.pmPct, f: r => `<span class="${cls(r.pmPct)}">${pc(r.pmPct)}</span>`},
     {k: "pmU", l: "PM move", h: "ADR", g: "today", v: r => r.pmU, f: r => cellbar(r.pmU)},
@@ -1909,7 +1918,8 @@ function COLS(){
     {k: "trend", l: "Trend", h: "9/21/50", g: "struct", cls: "l", v: r => ({Lead: 3, Mediocre: 2, Lag: 1})[r.trend] || 0, f: r => trendHTML(r.trend)},
     // 31 Oct (display only): Structure = Lead / Repairing / Cooling / Lag from the stored daily bars + since when (STRUCTURE LABELS script)
     {k: "lml", l: "Structure", h: "9/21/50 · since", g: "struct", cls: "l", v: r => typeof lmlSortV === "function" ? lmlSortV(r) : 0, f: r => typeof lmlCellHTML === "function" ? lmlCellHTML(r) : "—"},
-    {k: "zx", l: "vs 9/21 band", h: "ADR from the top of the daily 9/21 band (Entry Check) · buy zone 0 to +0.5", g: "struct", v: r => ecX(r) ? ecX(r).dB : null, f: r => { const x = ecX(r); if (!x || !isFinite(x.dB)) return "—"; const iz = x.loc === "L1"; return `<span class="${iz ? "pos" : ""}" style="font-weight:${iz ? 650 : 400}">${sg(x.dB)}</span>`; }},
+    // 3 Nov (display only): sub-label shortened so the wrapped header stays ~3 lines (was "ADR from the top of the daily 9/21 band (Entry Check) · buy zone 0 to +0.5")
+    {k: "zx", l: "vs 9/21 band", h: "ADR from the band top · buy zone 0 to +0.5", g: "struct", v: r => ecX(r) ? ecX(r).dB : null, f: r => { const x = ecX(r); if (!x || !isFinite(x.dB)) return "—"; const iz = x.loc === "L1"; return `<span class="${iz ? "pos" : ""}" style="font-weight:${iz ? 650 : 400}">${sg(x.dB)}</span>`; }},
     {k: "extU", l: "From 50", h: "ADR", g: "struct", v: r => r.extU, f: r => r.extU == null ? "—" : `<span class="${r.extU > CFG.extCap ? "neg" : ""}" style="font-weight:${r.extU > CFG.extCap ? 650 : 400}">${sg(r.extU, 1)}</span>`},
     {k: "smaStep", l: "SMA gate", h: "grade step", g: "struct", v: r => r.smaStep, f: r => r.smaStep ? `<span class="neg">−${r.smaStep}</span>` : `<span class="dim">0</span>`},
     {k: "offHigh", l: "Off 52W", h: "high %", g: "struct", v: r => r.offHigh, f: r => pc(r.offHigh, 1)},
@@ -2017,7 +2027,7 @@ class Table {
     const okCol = c => this.o.etf ? (c.g === "id" || ["etf", "rs", "perf"].includes(c.g)) : !c.etfOnly;
     const C = COLS().filter(c => okCol(c) && (c.g === "id" || this.groups.has(c.g)));
     const rows = this.rows();
-    const col = C.find(c => c.k === this.sort.k) || C.find(c => c.k === "rs");
+    const col = C.find(c => c.k === this.sort.k) || (TBL_XSORT[this.sort.k] ? {v: TBL_XSORT[this.sort.k]} : null) || C.find(c => c.k === "rs");
     const d = this.sort.d;
     rows.sort((a, b) => { const va = col.v(a), vb = col.v(b); if (va == null && vb == null) return 0; if (va == null) return 1; if (vb == null) return -1; return typeof va === "string" ? d * va.localeCompare(vb) : d * (va - vb); });
     rows.forEach((r, i) => r._i = i + 1);
@@ -2036,8 +2046,8 @@ class Table {
         <button class="btn sm" data-act="copy">Copy table</button><button class="btn sm" data-act="tvc" title="Copies the tickers shown (filters and sort applied) as one line — paste into TradingView's Add symbol box">Copy for TradingView</button><button class="btn sm" data-act="tv">TradingView watchlist</button><button class="btn sm" data-act="csv">Download CSV</button></div>
       ${this.o.filters ? `<div class="tablehd" style="padding-top:0">${fHTML}<button class="btn sm" data-act="clear">Clear filters</button></div>` : ""}
       <div class="tablehd colgroups" style="padding-top:0"><span class="lbl">Columns</span>${COL_GROUPS.filter(([g]) => avail.has(g)).map(([g, l]) => `<label class="tog"><input type="checkbox" data-cg="${g}" ${this.groups.has(g) ? "checked" : ""}>${l}</label>`).join("")}</div>
-      <div class="tscroll${rows.length > 60 ? " cvis" : ""}"><table><thead><tr>${C.map(c => `<th class="${c.cls || ""} ${c.k === this.sort.k ? "sorted" : ""}" data-k="${c.k}">${c.l}${c.k === this.sort.k ? (d < 0 ? " ↓" : " ↑") : ""}<span class="h">${c.h || "&nbsp;"}</span></th>`).join("")}</tr></thead>
-      <tbody>${rows.length ? rows.map(r => `<tr data-sym="${esc(r.sym)}" class="${r.thin && r.inPlay ? "thin" : ""}">${C.map(c => `<td class="${c.cls || ""}">${tblCell(c, r)}</td>`).join("")}</tr>`).join("") : `<tr><td colspan="${C.length}" class="empty l">No names match.</td></tr>`}</tbody></table></div>`;
+      <div class="tscroll${rows.length > 60 ? " cvis" : ""}"><table${C.some(c => c.k === "eh") ? ' data-eh="1"' : ""}><thead><tr>${C.map(c => `<th class="${c.cls || ""}${c.thc ? " " + c.thc : ""} ${c.k === this.sort.k ? "sorted" : ""}" data-k="${c.k}"${c.tip ? ` title="${esc(c.tip)}"` : ""}>${c.l}${c.k === this.sort.k ? (d < 0 ? " ↓" : " ↑") : ""}<span class="h">${c.h || "&nbsp;"}</span></th>`).join("")}</tr></thead>
+      <tbody>${rows.length ? rows.map(r => `<tr data-sym="${esc(r.sym)}" class="${r.thin && r.inPlay ? "thin" : ""}">${C.map(c => `<td class="${c.cls || ""}"${c.td ? c.td(r) : ""}>${tblCell(c, r)}</td>`).join("")}</tr>`).join("") : `<tr><td colspan="${C.length}" class="empty l">No names match.</td></tr>`}</tbody></table></div>`;
     // 31 Oct (speed only): the same table text as the last draw (same rows, numbers, sort, filters, columns, flags) keeps the
     // page elements already on screen — rebuilding 600 rows (~39k elements) cost ~0.5 s per page switch and gave the same
     // result. Any difference at all, or someone else having replaced the table, rebuilds it as before.
@@ -2547,6 +2557,7 @@ function renderToday(){
   const sec = gs("sector"), scS = Math.max(1, ...sec.map(x => Math.abs(x.med)));
   $("sectors").innerHTML = sec.map(s => `<div class="br ${T.today && T.today.F.sector === s.name ? "sel" : ""}" data-sector="${esc(s.name)}" title="${s.up}/${s.n} up · leaders ${s.top.join(", ")}"><div class="nm">${esc(s.name)} <small>${s.top.slice(0, 2).join(" ")}</small></div>${dbar(s.med, scS)}<div class="val ${cls(s.med)}">${sg(s.med)}</div><div class="cnt">${s.n}</div></div>`).join("");
   const cl = gs("group").filter(x => x.n >= 3), scC = Math.max(1, ...cl.map(x => Math.abs(x.med)));
+  if (typeof tdAsOfSubs === "function") tdAsOfSubs();   // 3 Nov: what "today" means on these cards (display only)
   $("clusters").innerHTML = cl.length ? cl.map(s => `<div class="br ${T.today && T.today.F.group === s.name ? "sel" : ""}" data-group="${esc(s.name)}" title="${s.up}/${s.n} up"><div class="nm">${esc(s.name)} <small>${s.top.slice(0, 2).join(" · ")}</small></div>${dbar(s.med, scC)}<div class="val ${cls(s.med)}">${sg(s.med)}</div><div class="cnt">${s.n}</div></div>`).join("") : `<div class="empty">No group has 3+ names in this file.</div>`;
   renderTape($("tapeBox"), false);
   renderFlow();
@@ -4397,6 +4408,10 @@ document.addEventListener("click", e => {
 });
 
 /* ---------------- short watch (Setups) ---------------- */
+// Short watch sort keys (3 Nov, display only): first click = weakest first where that has a direction (RS / From 50 low → high,
+// weakness score / blockers high → low), names A → Z
+const SW_SORT = {sym: r => r.sym, ss: r => r.ss ? r.ss.n : null, loc: r => r.sLoc || null, rs: r => r.rs ?? null, grp: r => r.group || null,
+  last: r => r.last ?? null, stop: r => r.sStop ?? null, tgt: r => r.sTgt ?? null, ext: r => r.extU ?? null, blk: r => r.sBlock ? r.sBlock.length : null};
 function renderShortWatch(box = $("shortBox")){
   if (!box) return;
   const tp = S.tape, mr = mapRegime();
@@ -4406,6 +4421,12 @@ function renderShortWatch(box = $("shortBox")){
   const min = CFG.shortMin;
   const L = S.stocks.filter(r => r.ss && r.ss.n >= min && !r.thin)
     .sort((a, b) => ((!!a.sBlock.length) - (!!b.sBlock.length)) || (b.ss.n - a.ss.n) || ((!!b.sLoc) - (!!a.sLoc)) || ((a.rs ?? 99) - (b.rs ?? 99)));
+  // 3 Nov (display only; Eugene: "Short watch … table is not sortable when i click the individual columns"): click a column
+  // to sort the whole list by it (click again to flip; nameless values last), "Board order" puts the board's ranking back.
+  // The first 20 are shown, as before. S.ui.swSort (page memory only); same on Setups and Shorts.
+  const so = S.ui.swSort, sk = so && SW_SORT[so.k];
+  if (sk) L.sort((a, b) => { const va = sk(a), vb = sk(b); if (va == null && vb == null) return 0; if (va == null) return 1; if (vb == null) return -1; return typeof va === "string" ? so.d * va.localeCompare(vb) : so.d * (va - vb); });
+  const swTh = (k, t, c = "") => `<th class="${c}${so && so.k === k ? " sorted" : ""}" data-swk="${k}" title="Click to sort">${t}${so && so.k === k ? (so.d < 0 ? " ↓" : " ↑") : ""}</th>`;
   const shown = L.slice(0, 20);
   const dots = n => `<span class="sdots" title="${n} of 7 weakness signs">${[0, 1, 2, 3, 4, 5, 6].map(i => `<i class="${i < n ? "on" : ""}"></i>`).join("")}</span>`;
   box.innerHTML = `<div class="hd"><h2>Short watch — relative weakness</h2><span class="sub">${live ? `<b class="neg">Live</b> — the tape read and MAP both say Defensive. C size (0.1% NLV), tagged EXPERIMENT.` : `<b>Watch only</b> — shorts go live only when the tape read and MAP both say Defensive (tape: ${esc(tp ? tp.bucket : "no breadth file")}, MAP: ${esc(mr.v || "not set")}).`}</span>
@@ -4413,11 +4434,15 @@ function renderShortWatch(box = $("shortBox")){
     <div class="bd">
     ${washed ? `<div class="note"><b>The market looks washed out</b> (breadth and volatility both weak). That is when short positions get hit by the sharpest rebounds — no new shorts on these readings.</div>` : ""}
     <div class="small" style="margin-bottom:6px">Seven weakness signs, one dot each: behind the benchmark over 2, 4 and 10 weeks · getting weaker faster · RS line new low before price · down while the benchmark is up · selling volume heavier than buying · 9 EMA under the 21 with price under the 21 · bottom quarter of its group. Entry only on a failed bounce: into a falling 21 EMA, up to the 50 SMA from below, or a rejection today. Stop half an ADR above, first trim at 2R.</div>
-    ${shown.length ? `<div class="tscroll" style="max-height:520px"><table class="mini"><thead><tr><th class="l">Ticker</th><th class="l">Weakness</th><th class="l">Where it is</th><th>RS</th><th class="l">Group</th><th>Last</th><th>Stop (½ ADR)</th><th>2R</th><th>From 50</th><th class="l">Blockers</th></tr></thead><tbody>
+    ${shown.length ? `<div class="tscroll" style="max-height:520px">${so ? `<div class="small" style="margin-bottom:4px">Sorted by a column · <a href="#" data-swreset>Board order</a></div>` : ""}<table class="mini"><thead><tr>${swTh("sym", "Ticker", "l")}${swTh("ss", "Weakness", "l")}${swTh("loc", "Where it is", "l")}${swTh("rs", "RS")}${swTh("grp", "Group", "l")}${swTh("last", "Last")}${swTh("stop", "Stop (½ ADR)")}${swTh("tgt", "2R")}${swTh("ext", "From 50")}${swTh("blk", "Blockers", "l")}</tr></thead><tbody>
       ${shown.map(r => `<tr data-sym="${esc(r.sym)}" class="${r.sBlock.length ? "thin" : ""}"><td class="l sym">${esc(r.sym)}</td><td class="l">${dots(r.ss.n)} <span class="small">${r.ss.n}/7</span></td><td class="l small">${r.sLoc ? `<b>${esc(r.sLoc)}</b>` : `<span class="dim">no failed bounce yet</span>`}</td><td>${rsBadge(r.rs)}</td><td class="l small">${esc(r.group)}${r.gState && r.gState !== "—" ? ` · ${esc(r.gState.toLowerCase())}` : ""}</td><td>${f2(r.last)}</td><td class="neg">${f2(r.sStop)}</td><td class="pos">${f2(r.sTgt)}</td><td>${sg(r.extU, 1)}</td><td class="l small">${r.sBlock.length ? esc(r.sBlock.join(" · ")) : `<span class="dim">none</span>`}</td></tr>`).join("")}</tbody></table></div>
       ${L.length > shown.length ? `<div class="small" style="margin-top:4px">${L.length - shown.length} more — Screens → Short watch lists them all.</div>` : ""}` : `<div class="empty">No liquid name scores ${min}+ of 7 right now.</div>`}
     </div>`;
   box.querySelector("tbody")?.addEventListener("click", e => { const tr = e.target.closest("tr[data-sym]"); if (tr) openDrawer(tr.dataset.sym); });
+  box.querySelector("thead")?.addEventListener("click", e => { const th = e.target.closest("th[data-swk]"); if (!th) return; const k = th.dataset.swk, o = S.ui.swSort;
+    S.ui.swSort = o && o.k === k ? {k, d: -o.d} : {k, d: ["sym", "grp", "loc"].includes(k) ? 1 : k === "rs" || k === "ext" ? 1 : -1}; renderShortWatch(box); });
+  box.querySelector("[data-swreset]")?.addEventListener("click", e => { e.preventDefault(); S.ui.swSort = null; renderShortWatch(box); });
+  if (typeof xcols === "function") xcols(box);   // 3 Nov: Ext. hours painted with the table, not a beat later
   box.querySelector("[data-shmin]").onchange = e => { CFG.shortMin = clamp(+e.target.value || 5, 1, 7); saveCfg(); renderShortWatch(box); };
 }
 
@@ -4431,7 +4456,7 @@ function renderTodayPlot(){
   $("scTitle").textContent = pm ? "Premarket gappers — move vs stretch" : "Gap · go · fade";
   const ctl = $("scCtl");
   if (pm) {
-    $("scSub").textContent = "across: premarket move (ADR) · up: distance above the 50 SMA (ADR) — gap & go / fade sorts itself out after the open";
+    $("scSub").textContent = "across: premarket move (ADR) · up: distance above the 50 SMA (ADR) — gap & go / fade sorts itself out after the open" + (typeof tdGapWhen === "function" ? tdGapWhen() : "");
     ctl.innerHTML = "";
     let pts = rows0.filter(r => r.pmU != null && r.extU != null);
     pts = thin(pts, r => Math.abs(r.pmU));
@@ -4456,7 +4481,7 @@ function renderTodayPlot(){
   let pts = S.ui.gapOnly ? gapped : all;
   if (sel) pts = pts.filter(r => gapBucket(r) === sel);
   pts = thin(pts, r => Math.abs(r.gapU) * 100 + (r.rs ?? 0) / 100);
-  $("scSub").textContent = `across: the gap (ADR) · up: move since the open (ADR) · shaded = gaps of ${th}+ ADR`;
+  $("scSub").textContent = `across: the gap (ADR) · up: move since the open (ADR) · shaded = gaps of ${th}+ ADR` + (typeof tdGapWhen === "function" ? tdGapWhen() : "");
   ctl.innerHTML = `<span class="seg" id="gapOnly"><button data-k="1" class="${S.ui.gapOnly ? "on" : ""}">Gappers only</button><button data-k="0" class="${S.ui.gapOnly ? "" : "on"}">Every name</button></span>`;
   scatter($("todayPlot"), pts, {
     x: r => r.gapU, y: r => r.openU, id: r => r.sym, color: r => { const b = gapBucket(r); return b ? GAPB[b].c : "var(--ink-3)"; }, auto: true,
@@ -4881,19 +4906,22 @@ function renderGLB(){
   const hd = `<div class="hd"><h2>Group leaderboards (price history)</h2><span class="sub">median member vs ${esc(bs)} · groups with 3+ names in the history · separate from the group RS and states above, which come from your file</span></div>`;
   const G = (S.groups || []).filter(g => g.hx);
   if (!S.has.hist || !G.length) { el.innerHTML = hd + `<div class="bd"><div class="empty">Needs the price history (Screens tab → load price history).</div></div>`; return; }
-  const N = S.ui.glbN || 10;
-  const col = (t, key, tip) => `<div><h3>${t}</h3>${[...G].filter(g => g.hx[key] != null).sort((a, b) => b.hx[key] - a.hx[key]).slice(0, N).map((g, i) => `<div class="gr"><span class="rk">${i + 1}</span>
+  // 3 Nov (display only; Eugene: "add Show Bottom 5/10/20 … weakest over 2 weeks, Fastest Deproving (RS Speed) and Weakest over
+  // 10 weeks"): Bottom N = the same three lists read from the other end (weakest first). S.ui.glbBot, page memory only.
+  const N = S.ui.glbN || 10, bot = !!S.ui.glbBot, dir = bot ? -1 : 1;
+  const col = (t, key, tip) => `<div><h3>${t}</h3>${[...G].filter(g => g.hx[key] != null).sort((a, b) => dir * (b.hx[key] - a.hx[key])).slice(0, N).map((g, i) => `<div class="gr"><span class="rk">${i + 1}</span>
       <span class="nm" data-gopen="${esc(g.name)}" title="${esc(g.name)} · ${g.hx.n} names · file state: ${esc(g.state)}">${esc(g.name)}</span>
       <span class="${cls(g.hx[key])}" title="${esc(tip)}">${key === "accel" ? (g.hx[key] > 0 ? "▲ " : "▼ ") + Math.abs(g.hx[key]).toFixed(1) : sg(g.hx[key], 1)}</span>${hqHTML(g.hx.hq)}</div>`).join("")}</div>`;
   el.innerHTML = hd + `<div class="bd">
-    <div class="mw-ctl"><span class="lbl">Show</span><select data-glb="n">${[5, 10, 20].map(v => `<option value="${v}" ${N === v ? "selected" : ""}>Top ${v}</option>`).join("")}</select>
+    <div class="mw-ctl"><span class="lbl">Show</span><select data-glb="n">${[5, 10, 20].map(v => `<option value="${v}" ${!bot && N === v ? "selected" : ""}>Top ${v}</option>`).join("")}${[5, 10, 20].map(v => `<option value="-${v}" ${bot && N === v ? "selected" : ""}>Bottom ${v}</option>`).join("")}</select>
       <span class="small">Squares = the group's last 5 weeks (oldest → this week): <span style="color:var(--st1)">■</span> Leading · <span style="color:var(--st2)">■</span> Improving · <span style="color:var(--st3)">■</span> Weakening · <span style="color:var(--st5)">■</span> Lagging</span></div>
-    <div class="glb">${col("Strongest over 2 weeks", "rs2w", "median member vs the benchmark over 2 weeks, % points")}${col("Fastest improving (RS speed)", "accel", "median of 2-week pace − 10-week pace")}${col("Strongest over 10 weeks", "rs10w", "median member vs the benchmark over 10 weeks, % points")}</div>
-    <div class="small" style="margin-top:6px">A theme showing up on the RS-speed list before the 10-week list is often the early sign of rotation. Click a group to open it.</div></div>`;
-  el.querySelector("[data-glb='n']").onchange = e => { S.ui.glbN = +e.target.value; renderGLB(); };
+    <div class="glb">${bot ? col("Weakest over 2 weeks", "rs2w", "median member vs the benchmark over 2 weeks, % points") + col("Fastest deteriorating (RS speed)", "accel", "median of 2-week pace − 10-week pace") + col("Weakest over 10 weeks", "rs10w", "median member vs the benchmark over 10 weeks, % points")
+      : col("Strongest over 2 weeks", "rs2w", "median member vs the benchmark over 2 weeks, % points") + col("Fastest improving (RS speed)", "accel", "median of 2-week pace − 10-week pace") + col("Strongest over 10 weeks", "rs10w", "median member vs the benchmark over 10 weeks, % points")}</div>
+    <div class="small" style="margin-top:6px">${bot ? "Weakest first. A group showing up on the RS-speed list before the 10-week list is often the early sign of money leaving it — a short-side or avoid list, not a buy list." : "A theme showing up on the RS-speed list before the 10-week list is often the early sign of rotation."} Click a group to open it.</div></div>`;
+  el.querySelector("[data-glb='n']").onchange = e => { const v = +e.target.value; S.ui.glbN = Math.abs(v); S.ui.glbBot = v < 0; renderGLB(); };
 }
 const _renderThemes1 = renderThemes;
-renderThemes = function(){ _renderThemes1(); renderMoney(); renderGLB(); };
+renderThemes = function(){ _renderThemes1(); renderMoney(); renderGLB(); if (typeof rtDraw === "function") { try { rtDraw(); } catch (e) { console.error("rotation trail", e); } } };   // 3 Nov: + the rotation-map trail (TIMING + WEAK SIDE script)
 
 /* ---------------- drawer ---------------- */
 const _openDrawer41 = openDrawer;
@@ -5486,11 +5514,24 @@ function renderShorts(){
       <li>Codex backtest of the short archetypes is still required before any live use.</li></ol></div></div>`;
   renderShortWatch($("shortBox2"));
   // weakest groups — same group RS as the Themes tab, read from the bottom
+  // 3 Nov (display only; Eugene: "Weakest Groups. No RS displayed. for composite/ w/m/3m etc. i want it similar to … the longs"):
+  // the same composite + RS-by-timeframe badges as the Themes group table, short − long, then the chips. Still the 10 lowest
+  // composite group RS; the columns sort the 10 (click again to flip). S.ui.shgSort (page memory only).
+  const shGroupsDraw = () => {
   const G = S.groups.filter(g => g.grs != null).sort((a, b) => a.grs - b.grs).slice(0, 10);
-  $("shGroups").innerHTML = `<div class="hd"><h2>Weakest groups</h2><span class="sub">bottom of the group RS table · click a group for its members · chips = its weakest liquid names with their weakness score</span></div><div class="bd">
-    ${G.length ? G.map(g => { const w = g.members.filter(r => !r.thin).sort((a, b) => (a.rs ?? 99) - (b.rs ?? 99)).slice(0, 6);
-      return `<div class="shg"><div class="nm" data-gopen="${esc(g.name)}" title="${esc(g.sector || "")}">${esc(g.name)}</div><div>${gStateHTML(g.state)}</div><div>${rsBadge(g.grs)}</div><div>${w.map(r => tkChip(r, r.ss ? r.ss.n + "/7" : (r.rs ?? ""), r.ss && r.ss.n >= CFG.shortMin ? "hi" : "")).join("") || `<span class="dim">no liquid names</span>`}</div></div>`; }).join("")
+  const ghz = S.hzAvail || [], gso = S.ui.shgSort || {k: "grs", d: 1};
+  const gv = k => k === "grs" ? (g => g.grs) : k === "mom" ? (g => g.mom) : (g => g[k]);
+  { const f = gv(gso.k); G.sort((a, b) => { const va = f(a), vb = f(b); if (va == null && vb == null) return 0; if (va == null) return 1; if (vb == null) return -1; return gso.d * (va - vb) || a.grs - b.grs; }); }
+  const gth = (k, t, tip = "") => `<th data-shgk="${k}" title="${esc(tip || "Click to sort")}" class="${gso.k === k ? "sorted" : ""}">${t}${gso.k === k ? (gso.d < 0 ? " ↓" : " ↑") : ""}</th>`;
+  $("shGroups").innerHTML = `<div class="hd"><h2>Weakest groups</h2><span class="sub">bottom 10 of the group RS table · RS 1–99 against the other groups (composite, then each timeframe) · click a group for its members · chips = its weakest liquid names with their weakness score</span></div><div class="bd">
+    ${G.length ? `<div class="tscroll" style="max-height:none"><table class="mini shgt"><thead><tr><th class="l">Group</th><th class="l">State</th>${gth("grs", "RS", "Composite group RS")}${ghz.map(h => gth("grs_" + h.k, h.short, `Group RS over ${h.label}`)).join("")}${gth("mom", "Short − long", "short-term group RS minus longer-term — negative = getting weaker")}</tr></thead><tbody>
+      ${G.map(g => { const w = g.members.filter(r => !r.thin).sort((a, b) => (a.rs ?? 99) - (b.rs ?? 99)).slice(0, 6);
+      return `<tr data-g="1"><td class="l"><span class="nm" data-gopen="${esc(g.name)}" title="${esc(g.sector || "")}" style="cursor:pointer;font-weight:600">${esc(g.name)}</span></td><td class="l">${gStateHTML(g.state)}</td><td>${rsBadge(g.grs)}</td>${ghz.map(h => `<td>${rsBadge(g["grs_" + h.k], `${h.label}: median ${pc(g["med_" + h.k])}`)}</td>`).join("")}<td class="${cls(g.mom)}">${g.mom == null ? "—" : sg(g.mom, 0)}</td></tr><tr class="shgsub"><td colspan="${4 + ghz.length}" class="l shgc"><span class="small dim">weakest liquid names · </span>${w.map(r => tkChip(r, r.ss ? r.ss.n + "/7" : (r.rs ?? ""), r.ss && r.ss.n >= CFG.shortMin ? "hi" : "")).join("") || `<span class="dim">none</span>`}</td></tr>`; }).join("")}</tbody></table></div>`
       : `<div class="empty">No ranked groups.</div>`}</div>`;
+  $("shGroups").querySelector("thead")?.addEventListener("click", e => { const th = e.target.closest("th[data-shgk]"); if (!th) return; const k = th.dataset.shgk, o = S.ui.shgSort || {k: "grs", d: 1};
+    S.ui.shgSort = o.k === k ? {k, d: -o.d} : {k, d: 1}; shGroupsDraw(); });
+  };
+  shGroupsDraw();
   // weakness scans — the Screens tab's "Weakness (shorts)" set
   const base = (CFG.inclETF ? S.rows : S.stocks).filter(gOK);
   const sc = SCREENS.filter(s => SC_CAT[s.k] === "Weakness (shorts)");
@@ -10541,13 +10582,13 @@ function lcCell(sym){
   if (x && fin(x.entry) && fin(x.D) && x.D > 0) { const g = (r.last - x.entry) / x.D; gap = `<div class="small dim" title="Last minus the planned entry, in ADR">${g >= 0 ? "+" : "−"}${Math.abs(g).toFixed(2)} ADR vs entry</div>`; }
   return {last: `<span title="${tip}">${f2(r.last)}</span>${gap}`, entry: x && fin(x.entry) ? f2(x.entry) : "—"};
 }
-function lcPaint(){
-  document.querySelectorAll("table.s61t:not([data-lc])").forEach(t => {
+function lcPaint(root = document){
+  root.querySelectorAll("table.s61t:not([data-lc])").forEach(t => {
     const hs = [...t.querySelectorAll("thead th")], i = hs.findIndex(h => h.getAttribute("title") === "Planned entry"); t.dataset.lc = 1; if (i < 0) return;
     hs[i].insertAdjacentHTML("beforebegin", `<th title="Last price — the file's, or Massive's in Live mode (15 minutes delayed)">Last</th>`);
     t.querySelectorAll("tbody tr[data-sym]").forEach(tr => { if (tr.children.length !== hs.length || tr.querySelector("td[colspan]")) return; tr.children[i].insertAdjacentHTML("beforebegin", `<td class="lc">${lcCell(tr.dataset.sym).last}</td>`); });
   });
-  document.querySelectorAll("table.wlt:not([data-lc])").forEach(t => {
+  root.querySelectorAll("table.wlt:not([data-lc])").forEach(t => {
     const hs = [...t.querySelectorAll("thead th")], i = hs.findIndex(h => h.textContent.trim() === "Status"); t.dataset.lc = 1; if (i < 0) return;
     hs[i].insertAdjacentHTML("afterend", `<th title="Last price — the file's, or Massive's in Live mode (15 minutes delayed)">Last</th><th title="Entry Check's planned entry">Entry</th>`);
     t.querySelectorAll("tbody tr[data-sym]").forEach(tr => {
@@ -10557,7 +10598,7 @@ function lcPaint(){
     });
   });
 }
-{ let tm = null; new MutationObserver(() => { clearTimeout(tm); tm = setTimeout(() => { try { lcPaint(); } catch (e) { console.warn("last price", e); } }, 30); }).observe(document.body, {childList: true, subtree: true}); }
+// 3 Nov (speed only): run by xcols() (EXTENDED HOURS script) right after a page / panel draws, plus one shared fallback watcher — was a page watcher of its own
 document.head.insertAdjacentHTML("beforeend", `<style>td.lc{white-space:nowrap}</style>`);
 </script>
 <script>
@@ -10667,7 +10708,7 @@ renderToday = function(){
   _renderTodaySD();
   const anchor = $("sectors") && $("sectors").closest(".g2e"); if (!anchor) return;
   let c = $("secDrill"); if (!c) { anchor.insertAdjacentHTML("afterend", `<div class="card g1" id="secDrill"></div>`); c = $("secDrill"); }
-  const h = sdHTML(); c.innerHTML = h; c.classList.toggle("hidden", !h);
+  const h = sdHTML(); c.innerHTML = h; c.classList.toggle("hidden", !h); if (typeof xcols === "function") xcols(c);   // 3 Nov: Ext. hours painted with the table
   let pill = $("sdBack"); if (!pill) { document.body.insertAdjacentHTML("beforeend", `<button class="btn sm" id="sdBack">↑ Back to sectors</button>`); pill = $("sdBack"); pill.onclick = () => { const a = $("sectors"); if (a) a.closest(".card").scrollIntoView({behavior: "smooth", block: "start"}); }; }
   pill.classList.toggle("on", !!h);
 };
@@ -10861,7 +10902,7 @@ function zlNames(){
   if (m === "e9") { ECSK[1].d = "0 to +0.5 ADR over the daily 9 EMA, above the 21 (9 EMA lens). The Setups lists still use the 9/21 band."; ECSK[3].d = "More than 0.5 ADR over the daily 9 EMA (9 EMA lens)."; ECSK[2].d = "Up to 0.25 ADR under the daily 9 EMA, above the 21 (9 EMA lens)."; ECSK[4].d = "More than 0.25 ADR under the daily 9 EMA (9 EMA lens)."; }
 }
 const _COLSZL = COLS;
-COLS = function(){ const C = _COLSZL(), m = zlMode(); if (m !== "band") { const z = C.find(c => c.k === "zx"); if (z) { z.l = `vs ${ZL.modes[m]}`; z.h = `ADR from the daily ${ZL.modes[m]} (buy-zone lens) · buy zone 0 to +0.5`; } } return C; };
+COLS = function(){ const C = _COLSZL(), m = zlMode(); if (m !== "band") { const z = C.find(c => c.k === "zx"); if (z) { z.l = `vs ${ZL.modes[m]}`; z.h = `ADR from the daily ${ZL.modes[m]} · buy zone 0 to +0.5`; } } return C; };
 // words on the maps
 function zlText(){
   const m = zlMode(); if (m === "band") return;
@@ -10937,15 +10978,15 @@ envHTML = function(){
   const i = h.lastIndexOf("</div>"); return i < 0 ? h + line : h.slice(0, i) + line + h.slice(i);
 };
 // Watchlist: AS beside RS
-function asPaint(){
-  document.querySelectorAll("table.wlt:not([data-as])").forEach(t => {
+function asPaint(root = document){
+  root.querySelectorAll("table.wlt:not([data-as])").forEach(t => {
     const hs = [...t.querySelectorAll("thead th")], i = hs.findIndex(h => h.textContent.trim() === "RS"); t.dataset.as = 1; if (i < 0) return;
     hs[i].insertAdjacentHTML("afterend", `<th title="Absolute strength — own return %, RS timeframes and weights">AS</th>`);
     t.querySelectorAll("tbody tr[data-sym]").forEach(tr => { const cs = tr.querySelector("td[colspan]"); if (cs) { cs.colSpan += 1; return; } if (tr.children.length !== hs.length && tr.children.length !== hs.length + 2) return;
       const r = S.rowBySym && S.rowBySym.get(tr.dataset.sym); tr.children[i].insertAdjacentHTML("afterend", `<td>${asHTML(r ? r.as : null)}</td>`); });
   });
 }
-{ let tm = null; new MutationObserver(() => { clearTimeout(tm); tm = setTimeout(() => { try { asPaint(); } catch (e) { console.warn("AS", e); } }, 40); }).observe(document.body, {childList: true, subtree: true}); }
+// 3 Nov (speed only): run by xcols() (EXTENDED HOURS script) right after a page / panel draws, plus one shared fallback watcher — was a page watcher of its own
 </script>
 <script>
 "use strict";
@@ -12428,7 +12469,10 @@ function tmThemes(c){
   }
   return S.groups.filter(g => g.grs != null).map(g => ({key: g.name, name: g.name, sub: g.sector && CFG.groupBy !== "sector" ? g.sector : "", m: g.members, cols: ["p1w", "p1m", "p3m"].map(k => g["grs_" + k] ?? NaN), tag: g.state, tagC: gStateColor(g.state), last: g.grs, grp: true}));
 }
-function tmSel(c, T){ const s = c.sel[c.src]; return Array.isArray(s) ? T.filter(t => s.includes(t.key)) : T.slice(0, TM_PICK); }
+// 3 Nov (display only; Eugene: "there's a strongest 12. can you add one more for weakest 12"): sel "weak" = the 12 weakest themes
+// that have a strength read (TAS: not "no bars"), weakest first. An older board reading "weak" falls back to the strongest 12.
+const tmWeak = (c, T) => T.filter(t => c.src !== "tas" || t.tag !== "no bars").slice(-TM_PICK).reverse();
+function tmSel(c, T){ const s = c.sel[c.src]; return Array.isArray(s) ? T.filter(t => s.includes(t.key)) : s === "weak" ? tmWeak(c, T) : T.slice(0, TM_PICK); }
 function tmListMap(){ const mp = new Map(); try { mlNames().forEach(e => mp.set(e.s, e)); } catch (e) {} return mp; }
 // draw: W wide; H = the room in full screen (rows grow to fill it), else the height comes from the rows
 function tmDraw(svg, W, H, st = {}){
@@ -12510,8 +12554,8 @@ function tmRender(){
       <div class="grp"><span class="lbl">RS ≥</span><input type="number" id="tmRS" value="${c.rs}" style="width:52px"></div>
       <label class="tog"><input type="checkbox" id="tmLiq" ${c.liq ? "checked" : ""}>Liquid only</label>
       <label class="tog" title="Off: labels go on names in or under the buy zone and names on your lists"><input type="checkbox" id="tmAll" ${c.all ? "checked" : ""}>Label every name</label></div>
-    <details class="tmpick" id="tmPick" ${FSM.tmOpen ? "open" : ""}><summary><b>Pick themes</b> <span class="small">${sel.size} of ${T.length} ticked${Array.isArray(c.sel[c.src]) ? "" : ` — the strongest ${TM_PICK} until you tick your own`}</span></summary>
-      <div class="tmbtns"><button class="btn sm" data-tmq="top">Strongest ${TM_PICK}</button><button class="btn sm" data-tmq="all">All</button><button class="btn sm" data-tmq="none">Clear</button><input type="text" id="tmQ" placeholder="Filter the list…" style="width:150px"></div>
+    <details class="tmpick" id="tmPick" ${FSM.tmOpen ? "open" : ""}><summary><b>Pick themes</b> <span class="small">${sel.size} of ${T.length} ticked${Array.isArray(c.sel[c.src]) ? "" : c.sel[c.src] === "weak" ? ` — the weakest ${TM_PICK}, weakest first, until you tick your own` : ` — the strongest ${TM_PICK} until you tick your own`}</span></summary>
+      <div class="tmbtns"><button class="btn sm${c.sel[c.src] == null ? " primary" : ""}" data-tmq="top">Strongest ${TM_PICK}</button><button class="btn sm${c.sel[c.src] === "weak" ? " primary" : ""}" data-tmq="weak" title="The ${TM_PICK} weakest themes, weakest first">Weakest ${TM_PICK}</button><button class="btn sm" data-tmq="all">All</button><button class="btn sm" data-tmq="none">Clear</button><input type="text" id="tmQ" placeholder="Filter the list…" style="width:150px"></div>
       <div class="tmgrid">${T.map(t => `<label class="tmopt" data-nm="${esc(t.name.toLowerCase())}"><input type="checkbox" data-tmk="${esc(t.key)}" ${sel.has(t.key) ? "checked" : ""}><span>${esc(t.name)}</span> <span class="small" style="color:${t.tagC}">${esc(t.tag || "")}</span> <span class="small dim">${t.m.length}</span></label>`).join("")}</div></details>`;
   const save = () => { tmSave(c); tmRender(); };
   $("tmSrc").onclick = e => { const b = e.target.closest("button"); if (!b) return; c.src = b.dataset.k; save(); };
@@ -12520,7 +12564,7 @@ function tmRender(){
   $("tmLiq").onchange = e => { c.liq = e.target.checked; save(); };
   $("tmAll").onchange = e => { c.all = e.target.checked; save(); };
   $("tmPick").ontoggle = e => { FSM.tmOpen = e.target.open; };
-  $("tmPick").querySelectorAll("[data-tmq]").forEach(b => b.onclick = () => { const k = b.dataset.tmq; c.sel[c.src] = k === "top" ? null : k === "all" ? T.map(t => t.key) : []; save(); });
+  $("tmPick").querySelectorAll("[data-tmq]").forEach(b => b.onclick = () => { const k = b.dataset.tmq; c.sel[c.src] = k === "top" ? null : k === "weak" ? "weak" : k === "all" ? T.map(t => t.key) : []; save(); });
   $("tmPick").querySelectorAll("[data-tmk]").forEach(i => i.onchange = () => { const cur = new Set(tmSel(c, T).map(t => t.key)); i.checked ? cur.add(i.dataset.tmk) : cur.delete(i.dataset.tmk); c.sel[c.src] = T.map(t => t.key).filter(k => cur.has(k)); save(); });
   $("tmQ").oninput = e => { const q = e.target.value.trim().toLowerCase(); $("tmPick").querySelectorAll(".tmopt").forEach(l => l.classList.toggle("hidden", !!q && !l.dataset.nm.includes(q))); };
   $("tmMsg").innerHTML = !S.has.hist ? `<div class="empty">${ECS_NONE} — the Themes map is empty until then.</div>` : c.src === "tas" && !dssOf("QQQ") ? `<div class="empty">TAS theme strength needs QQQ and the theme ETFs in the stored price history.</div>` : "";
@@ -12528,7 +12572,7 @@ function tmRender(){
   svg.style.width = W + "px";
   const o = tmDraw(svg, W, 0, {});
   attachTips(svg, id => S.rows.find(r => r.sym === id), tmTip, openDrawer);
-  $("tmSub").textContent = `${o.rows.length} theme${o.rows.length === 1 ? "" : "s"} · ${o.n} names · ${o.inZ} in the buy zone · ${o.onL} on your lists · strongest theme first · theme strength is context, not a filter`;
+  $("tmSub").textContent = `${o.rows.length} theme${o.rows.length === 1 ? "" : "s"} · ${o.n} names · ${o.inZ} in the buy zone · ${o.onL} on your lists · ${c.sel[c.src] === "weak" ? "weakest theme first" : "strongest theme first"} · theme strength is context, not a filter`;
   $("tmLegend").innerHTML = ECS.map(s => `<span><span class="sw" style="background:${s.c}"></span>${esc(s.name)}</span>`).join("") + `<span><span class="sw" style="background:transparent;border:1.8px solid var(--st1)"></span>ring = on your lists (list colour)</span><span class="small">· dot size = RS · shaded = buy zone · ${c.src === "tas" ? "TAS: proxy ETF vs QQQ in % points; Strong = 4W ahead of QQQ and the proxy in Stage 2" : "group RS 1–99 by timeframe; " + tmGrpBy()} · names in each row follow the filter bar, strongest RS first</span>`;
   if (FSM.id === "tmPlot") fsSoon();
 }
@@ -14142,6 +14186,9 @@ table.nct td.ncbest{font-weight:700;box-shadow:inset 0 -2px 0 var(--good)} table
    - Column: "Ext. hours" right after every table's "Last" column (the main tables, plan tables, held, inverse ETFs …);
      in the Entry Check list and Watchlist tables right after "Entry", so Last stays next to Entry (23 Oct layout), added after each render by a MutationObserver like the Last price column (data-eh on
      the table). Not sortable, not in Copy table / CSV.
+     3 Nov (Eugene: "yes ok for csv, go ahead"): on the board tables (Table — Ranked universe, Stock universe, Screens …) Ext.
+     hours is a real column ("eh" in COLS, right after Last): sortable, in Copy table / Download CSV. The small list tables
+     are still painted here, now by xcols() straight after a page / panel draw + one shared fallback watcher (was its own).
    - Chart: on the board chart (any interval), with Live mode on and a premarket print for the name, an orange dotted line
      across the chart at that price with the price on the right axis, like TradingView's pre-market line. Kept up to date
      after each refresh; gone at the open. Hook point "chart" (BOARD HOOKS). Not on the embedded TradingView chart.
@@ -14149,6 +14196,7 @@ table.nct td.ncbest{font-weight:700;box-shadow:inset 0 -2px 0 var(--good)} table
    ===================================================================== */
 const EH = {snaps: new Map(), at: 0, busy: false};
 const EH_ORANGE = "#ff9800";
+const EH_TIP = "Ext. hours: premarket (before 09:30 New York) or after-hours (from 16:00) price and move — Massive in Live mode, 15 minutes delayed; a premarket file's own premarket price. Overnight (20:00–04:00) there are no trades on Massive: the 8 pm after-hours close stays.";   // the Ext. hours header tooltip (painted tables + the board tables' real column)
 // one name's extended-hours price: {p, chg, ref, tag "PM" | "AH" | "AH close", t, day, src "live" | "file"} · {rth: true} · null
 function ehOf(sym){
   if (LV.cfg.on) {
@@ -14174,16 +14222,16 @@ function ehCell(sym){
   return `<span title="${esc(tip)}"><b>${f2(e.p)}</b>${e.chg != null ? ` <span class="${e.chg >= 0 ? "pos" : "neg"}">${e.chg >= 0 ? "+" : "−"}${Math.abs(e.chg).toFixed(1)}%</span>` : ""}<div class="small dim">${esc(e.tag)} · ${esc(when)}</div></span>`;
 }
 const ehLastIdx = hs => hs.findIndex(h => h.dataset.k === "last" || (h.firstChild && h.firstChild.nodeType === 3 ? h.firstChild.textContent.trim() : h.textContent.trim()) === "Last");
-function ehPaint(){
+function ehPaint(root = document){
   if (window.ASIA) return;                                                                   // Asia board: no US extended hours
-  document.querySelectorAll("table:not([data-eh])").forEach(t => {
+  root.querySelectorAll("table:not([data-eh])").forEach(t => {
     if ((t.classList.contains("s61t") || t.classList.contains("wlt")) && !t.dataset.lc) return;      // the Last column goes in first
     const hs = [...t.querySelectorAll(":scope > thead > tr > th")]; if (!hs.length) return;
     // Entry Check list + Watchlist tables keep Last right before Entry (23 Oct layout): Ext. hours goes after Entry there
     const ec = t.classList.contains("s61t") || t.classList.contains("wlt"), li = ehLastIdx(hs), i = ec && li >= 0 && hs[li + 1] && /^Entry/.test(hs[li + 1].textContent.trim()) ? li + 1 : li;
     if (i < 0 || !t.querySelector(":scope > tbody > tr[data-sym]")) return;
     t.dataset.eh = 1;
-    hs[i].insertAdjacentHTML("afterend", `<th class="ehh" title="Ext. hours: premarket (before 09:30 New York) or after-hours (from 16:00) price and move — Massive in Live mode, 15 minutes delayed; a premarket file's own premarket price. Overnight (20:00–04:00) there are no trades on Massive: the 8 pm after-hours close stays.">Ext. hours<span class="h">PM / AH</span></th>`);
+    hs[i].insertAdjacentHTML("afterend", `<th class="ehh" title="${EH_TIP}">Ext. hours<span class="h">PM / AH</span></th>`);
     t.querySelectorAll(":scope > tbody > tr").forEach(tr => {
       if (!tr.dataset.sym) { const cs = tr.children.length === 1 && tr.querySelector(":scope > td[colspan]"); if (cs) cs.colSpan = cs.colSpan + 1; return; }
       const cs = tr.querySelector(":scope > td[colspan]"); if (cs) { cs.colSpan = cs.colSpan + 1; return; }
@@ -14210,7 +14258,19 @@ function ehCharts(){
   try { if (typeof popLive === "function" && popLive()) ehLineSync(POP.w.document.getElementById("pTvBox")); } catch (e) {}
 }
 hookOn("chart", "ehline", c => { c.box._ehc = {cs: c.cs, w: c.w, sym: c.r.sym, own: c.own, pl: null}; ehLineSync(c.box); });
-{ let tm = null; new MutationObserver(() => { clearTimeout(tm); tm = setTimeout(() => { try { ehPaint(); ehCharts(); } catch (e) { console.warn("ext hours", e); } }, 40); }).observe(document.body, {childList: true, subtree: true}); }
+// 3 Nov (speed only): the columns added to the small list tables after drawing — Last (+ Entry on the Watchlist), AS, Ext. hours —
+// are painted in one pass, in that order (Ext. hours goes after Last), straight after a page or the ticker panel draws (hooks
+// below) and by the few re-draws outside a page draw (Short watch sort, sector drill-in). The board's own tables (Table) carry
+// Last, AS and Ext. hours as real columns. One shared fallback watcher replaces the three page watchers this used to take
+// (Last price, AS, Ext. hours): it catches any table drawn some other way and normally finds nothing left to do.
+function xcols(root = document){
+  try { lcPaint(root); } catch (e) { console.warn("last price", e); }
+  try { asPaint(root); } catch (e) { console.warn("AS", e); }
+  try { ehPaint(root); } catch (e) { console.warn("ext hours", e); }
+}
+hookOn("tab", "xcols", () => xcols());
+hookOn("panel", "xcols", (r, dr) => xcols(dr || document));
+{ let tm = null; new MutationObserver(() => { clearTimeout(tm); tm = setTimeout(() => { xcols(); try { ehCharts(); } catch (e) { console.warn("ext hours", e); } }, 30); }).observe(document.body, {childList: true, subtree: true}); }
 // after-hours: Live mode's refresh stops at 16:25 New York; keep the snapshot coming until 20:20 (prices only)
 async function ehFetch(){
   if (EH.busy || !LV.cfg.on || !newsKey()) return;
@@ -15930,4 +15990,123 @@ ES_FEED_EXT.push({h: PBF_OB_H,
     for (const o of R.rows) if (o.etf) { const w = pbfOBWhy(o); by.set(o.sym, {o, w}); if (w && !w.length) pass.push(o); }
     pass.sort(obRank); const rank = new Map(pass.map((p, i) => [p.sym, i + 1])); return {by, rank}; },
   cells: (sym, P) => { if (!P) return null; const e = P.by.get(sym); return e ? pbfOBCells(e.o.x, e.w, P.rank.get(sym)) : null; }});
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   TIMING LABELS + WEAK-SIDE VIEWS (3 Nov 2026). Display only — no zone, stop, target, state, RS, group strength, list,
+   size, plan, feed, Decision-log or MAP-import value changes. Filters / sorts change what is visible and its order only.
+   Eugene (chat, 3 Nov):
+   · "Sector Strength Today: is this based on today/premarket or last close … groups moving together … Gap.Go.Fade: same
+     thing" → each card now says what its move is measured from and when the prices are from (tdAsOfSubs / tdGapWhen,
+     called from renderToday / renderTodayPlot). Sector strength + Groups moving together follow the "Rank today on" switch
+     (r.move); Gap · go · fade doesn't (gap = open vs prior close, then last vs open; premarket = PM price vs prior close).
+   · "Rotation map … a dotted trail which shows historical positioning 1W/1M/3M before vs today … selectable 1W/1M/3M/none"
+     → Trail switch on the Themes rotation map: a faint dot + dotted line from where each group sat 5 / 21 / 63 sessions
+     before the file's session. Past positions are recomputed from the stored daily bars with the board's own group-RS
+     maths (member returns → group median → rank 1–99 among the same ranked groups → mean of the longer horizons across,
+     shorter minus longer up), using only the horizons the file has. Horizons are in sessions (1W 5, 1M 21, 3M 63, 6M 126,
+     1Y 252; WTD / MTD from the last close of the previous week / month), so the file's own Perf columns can differ a little.
+     A group needs bars for at least half its members. Today's dot is unchanged (the file).
+   · "Group Leaderboards: add Show Bottom 5/10/20 … weakest over 2 weeks, Fastest Deproving (RS Speed) and Weakest over 10
+     weeks" → renderGLB (Bottom N, weakest first).
+   · "Themes Map. Pick Themes … add one more for weakest 12" → tmSel / tmWeak ("weak" in adrb.thMap.sel; older boards read it
+     as the strongest 12).
+   · "Short watch … not sortable" → renderShortWatch (SW_SORT; whole list sorted, first 20 shown; Board order resets).
+   · "Weakest Groups. No RS displayed … similar to … the longs" → renderShorts: composite + RS by timeframe + short − long,
+     like the Themes group table; the columns sort the 10.
+   · "Universe … ext. Hours. if i click it can it sort … ignore the ones with dashes" → TBL_XSORT.eh (block 1 registry, key set
+     below): the board tables' Ext. hours column (a real column since 3 Nov, COLS) sorts by the PM / AH % move, dashes last.
+   · "vs 9/21 band, description under it is too long … can we wrap text" → th .h wraps at 14em (every table header).
+   Storage (new): localStorage adrb.rotTrail ("none" default | "w1" | "m1" | "m3"). Page memory only: S.ui.glbBot,
+   S.ui.swSort, S.ui.shgSort. Test: tools/board-weakside-test.js.
+   ===================================================================== */
+const TD_BASIS = {pm: "premarket price vs yesterday's close", yday: "yesterday's session (its close vs the close before)",
+  comp: "today so far: the change from yesterday's close plus the move since today's open", day: "today so far: the change from yesterday's close",
+  open: "today so far: the move since today's open"};
+// when the prices on Stocks today are from
+function tdAsOf(){
+  if (!S.snap) return "";
+  const c = fileClock(), t = c ? hhmm(c.m) + " ET" : "";
+  if (c && c.src === "live") return `prices: Massive to ${t}, 15 minutes delayed`;
+  const late = S.mode !== "pm" && c && c.m >= 16 * 60 ? " (after the close, so the full session)" : "";
+  return `prices: ${S.mode === "pm" ? "premarket file" : "file"} for ${S.snap.asOf}${t ? (c.src === "typed" ? ` at ${t} (time you set)` : ` saved ${t}`) : ""}${late}`;
+}
+function tdAsOfSubs(){
+  const b = TD_BASIS[S.basis] || "", w = tdAsOf();
+  const sub = id => { const el = $(id), c = el && el.closest(".card"), s = c && c.querySelector(".hd .sub"); return s; };
+  const a = sub("sectors"); if (a) a.textContent = `median move in ADR units · measured on ${b} (the "Rank today on" switch) · ${w} · click to filter the table`;
+  const g = sub("clusters"); if (g) g.textContent = `groups with 3+ names · median move in ADR units, same measure as Sector strength · ${w} · a theme is only a theme when 3+ move together — trade the #1–2, not the sympathy laggard`;
+}
+const tdGapWhen = () => S.snap ? (S.mode === "pm" ? ` · premarket price vs yesterday's close · ${tdAsOf()}` : ` · gap = today's open vs yesterday's close, then the last price vs today's open · ${tdAsOf()} · not affected by the "Rank today on" switch`) : "";
+
+// Ext. hours sort key (the board tables' Ext. hours column, COLS): the PM / AH % move, dashes (no extended-hours price) always last
+TBL_XSORT.eh = r => { if (typeof ehOf !== "function") return null; const e = ehOf(r.sym); return e && !e.rth && fin(e.chg) ? e.chg : null; };
+
+// ---- rotation-map trail
+const RT = {key: "", past: {}};
+const RT_LAG = {w1: [5, "1W"], m1: [21, "1M"], m3: [63, "3M"]};
+const RT_HZ = {p1w: 5, p1m: 21, p3m: 63, p6m: 126, p1y: 252};
+const rtMode = () => { try { const v = store.get("adrb.rotTrail", "none"); return RT_LAG[v] ? v : "none"; } catch (e) { return "none"; } };
+const rtWeek = s => { const d = new Date(s + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() - (d.getUTCDay() + 6) % 7); return d.toISOString().slice(0, 10); };
+// every ranked group's rotation-map position `lag` sessions before the file's session: Map name → {lvl, mom}, + the date
+function rtPast(lag){
+  if (!HIST.nD || !S.snap || !S.groups) return null;
+  const key = [HIST.nD, HIST.dates[HIST.nD - 1], rowsGen(), CFG.groupBy, CFG.minGroup, S.snap.asOf, (S.hzAvail || []).map(h => h.k).join(",")].join("|");
+  if (RT.key !== key) { RT.key = key; RT.past = {}; }
+  if (RT.past[lag] !== undefined) return RT.past[lag];
+  const D = HIST.dates, nD = HIST.nD, asOf = S.snap.asOf;
+  let i0 = -1; for (let t = nD - 1; t >= 0; t--) if (D[t] <= asOf) { i0 = t; break; }
+  const now = i0 >= 0 && D[i0] === asOf ? i0 : i0 + 1;          // the file's session isn't stored yet (today) → one past the last stored
+  const a = now - lag;
+  if (a < 1 || a > nD - 1) return (RT.past[lag] = null);
+  const want = (S.hzAvail || []).map(h => h.k).filter(k => SHORT_HZ.includes(k) || LONG_HZ.includes(k));
+  const base = {}; for (const k in RT_HZ) base[k] = a - RT_HZ[k];
+  { const wa = rtWeek(D[a]), ma = D[a].slice(0, 7); base.wtd = base.mtd = -1;
+    for (let t = a - 1; t >= 0 && (base.wtd < 0 || base.mtd < 0); t--) { if (base.wtd < 0 && rtWeek(D[t]) !== wa) base.wtd = t; if (base.mtd < 0 && D[t].slice(0, 7) !== ma) base.mtd = t; } }
+  const G = S.groups.filter(g => g.grs != null).map(g => {
+    const o = {name: g.name}, ix = g.members.map(r => HIST.idx.get(r.sym)).filter(i => i != null), need = Math.max(1, Math.ceil(g.n / 2));
+    for (const k of want) {
+      const b = base[k]; o[k] = null; if (!(b >= 0) || ix.length < need) continue;
+      const v = []; for (const i of ix) { const c1 = HIST.C[i * nD + a], c0 = HIST.C[i * nD + b]; if (c1 > 0 && c0 > 0) v.push((c1 / c0 - 1) * 100); }
+      if (v.length >= need) o[k] = median(v);
+    }
+    return o;
+  });
+  for (const k of want) rate(G, o => o[k], "r_" + k);
+  const map = new Map();
+  for (const o of G) { const sh = mean(SHORT_HZ.map(k => o["r_" + k])), lg = mean(LONG_HZ.map(k => o["r_" + k])); if (sh != null && lg != null) map.set(o.name, {lvl: lg, mom: sh - lg}); }
+  return (RT.past[lag] = {map, date: D[a]});
+}
+function rtDraw(){
+  const svg = $("rotPlot"), card = svg && svg.closest(".card"), hd = card && card.querySelector(".hd"); if (!hd) return;
+  const m = rtMode();
+  if (!hd.querySelector("#rotTrail")) {
+    hd.insertAdjacentHTML("beforeend", `<span class="spacer"></span><span class="lbl" title="Where each group sat before, as a faint dot and a dotted line to today">Trail</span><span class="seg" id="rotTrail"></span>`);
+    hd.querySelector("#rotTrail").addEventListener("click", e => { const b = e.target.closest("button[data-rt]"); if (!b) return; try { store.set("adrb.rotTrail", b.dataset.rt); } catch (e2) {} rtDraw(); });
+  }
+  hd.querySelector("#rotTrail").innerHTML = [["none", "None"], ...Object.entries(RT_LAG).map(([k, v]) => [k, v[1]])].map(([k, l]) => `<button data-rt="${k}" class="${m === k ? "on" : ""}">${l}</button>`).join("");
+  svg.querySelectorAll(".rtr").forEach(x => x.remove());
+  let note = card.querySelector(".rtnote"); if (!note) { svg.parentElement.insertAdjacentHTML("afterend", `<div class="legend rtnote"></div>`); note = card.querySelector(".rtnote"); }
+  note.classList.toggle("hidden", m === "none");
+  if (m === "none") { note.innerHTML = ""; return; }
+  if (!HIST.nD) { note.innerHTML = `<span class="small">The trail needs the price history (Screens → load price history).</span>`; return; }
+  const [lag, lab] = RT_LAG[m], P = rtPast(lag), R = svg._scR;
+  if (!P || !R) { note.innerHTML = `<span class="small">Not enough stored history for a ${lab} trail.</span>`; return; }
+  const X = v => R.m.l + (clamp(v, R.x0, R.x1) - R.x0) / (R.x1 - R.x0) * (R.W - R.m.l - R.m.r);
+  const Y = v => R.H - R.m.b - (clamp(v, R.y0, R.y1) - R.y0) / (R.y1 - R.y0) * (R.H - R.m.t - R.m.b);
+  let s = "", n = 0;
+  svg.querySelectorAll("circle[data-id]").forEach(c => {
+    const id = c.getAttribute("data-id"), p = P.map.get(id); if (!p) return;
+    const col = c.getAttribute("fill"), x1 = +c.getAttribute("cx"), y1 = +c.getAttribute("cy"), x0 = X(p.lvl), y0 = Y(p.mom); n++;
+    s += `<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" stroke="${col}" stroke-width="1.3" stroke-dasharray="2 3" opacity=".55"/><circle cx="${x0}" cy="${y0}" r="3.5" fill="${col}" opacity=".35"/>`;
+  });
+  const g = document.createElementNS("http://www.w3.org/2000/svg", "g"); g.setAttribute("class", "rtr"); g.setAttribute("pointer-events", "none"); g.innerHTML = s;
+  svg.insertBefore(g, svg.querySelector("circle[data-id]"));
+  note.innerHTML = `<span class="small">Faint dot + dotted line = where each group sat ${lab} ago (${esc(P.date)}), ${n} group${n === 1 ? "" : "s"}. Recomputed from the stored daily bars with the same group RS maths; horizons in sessions, so small differences from the file's own Perf columns are possible.</span>`;
+}
+document.head.insertAdjacentHTML("beforeend", `<style>
+.shgt td{vertical-align:middle}.shgt tr[data-g] td{border-bottom:0;padding-bottom:1px}.shgt tr.shgsub td{white-space:normal;text-align:left;padding-top:0}
+#rotTrail button{font-size:11px;padding:1px 7px}
+</style>`);
 </script>
