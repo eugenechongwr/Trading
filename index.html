@@ -7160,6 +7160,7 @@ renderFocus = function(){
     ${addable.length ? ecListHTML(addable) : `<div class="fmiss">${!H.length ? "No held names typed." : S.has.hist ? "No held name is in or just under the buy zone right now." : "Load the price history to see where your held names sit."}</div>`}
     ${other.length ? `<div class="fmiss">Other held names: ${other.map(r => tkChip(r, ecsName(r))).join("")}</div>` : ""}
     ${hm.length ? `<div class="fmiss">Held but not in this file: ${hm.map(esc).join(", ")}</div>` : ""}`;
+  if (typeof lpPaint === "function") try { lpPaint(box); } catch (e) {}   /* 4 Nov: stage badges (STAGE AGE at the end; display only) */
 };
 // ---------- tracker
 const MLOG = "adrb.mapLog";
@@ -13088,6 +13089,7 @@ renderWatch = function(){
   let c = $("pbWatch"); if (!c) { box.insertAdjacentHTML("beforeend", `<div class="card g1" id="pbWatch"></div>`); c = $("pbWatch"); }
   const es = $("esBox"); if (es && es.nextElementSibling !== c) es.after(c);
   try { c.innerHTML = pbWatchHTML(); } catch (e) { console.warn("playbooks watch", e); c.innerHTML = ""; }
+  if (typeof lpPaint === "function") try { lpPaint(box); } catch (e) {}   /* 4 Nov: stage badges on every Watchlist group (STAGE AGE at the end; display only) */
 };
 
 /* ---------------- MAP import: O lines (the oversold watch) ---------------- */
@@ -16273,7 +16275,8 @@ document.head.insertAdjacentHTML("beforeend", `<style>
      name only fills a slot nothing earlier took. On deck / Not yet / Out keep the old order.
    - Entry Check card (in place): Ready to trade shows EARLY / MID / untagged; LATE ready names move to a "Late" table under
      On deck (still Ready to trade — list code, Board log and feed "Spec61 List" unchanged). Badge P0 / P1 / P2 / P3 / P4+ ·
-     age next to each name (Entry Check card, Daily Plan, held names; ticker panel line under the Entry Check block). Held
+     age next to each name (Entry Check card, Daily Plan, held names, and — 4 Nov, Eugene: "yes add badges to the watchlist
+     too" — every Watchlist group and the MAP-lists card; ticker panel line under the Entry Check block). Display only. Held
      names: shown only — no list or exit logic changes.
    - Deep Space feed: 7 columns appended at the very end (FEED_EXT): Stage Age, Pullback #, Ext 200, RS Turn, RS 1M Chg,
      Stage Tag, R0 Date. Older columns byte-identical.
@@ -16360,7 +16363,7 @@ function lpBadge(sym){
 }
 // badges on ticker cells (tr[data-sym] td.sym) inside a box
 function lpPaint(root){ if (!root || !S.has || !S.has.hist) return; root.querySelectorAll("tr[data-sym] td.sym").forEach(td => { if (td.querySelector(".lpb")) return; const h = lpBadge(td.closest("tr").dataset.sym); if (!h) return; const b = td.querySelector("b"); (b || td).insertAdjacentHTML(b ? "afterend" : "beforeend", " " + h); }); }
-hookOn("tab", "stageAge", () => { for (const id of ["s61Box", "dpBox", "homeHeld"]) try { lpPaint($(id)); } catch (e) { console.warn("stage age badges", e); } });
+hookOn("tab", "stageAge", () => { for (const id of ["s61Box", "dpBox", "homeHeld", "watchBody", "listsBox"]) try { lpPaint($(id)); } catch (e) { console.warn("stage age badges", e); } });   // 4 Nov (Eugene: "yes add badges to the watchlist too"): + Watchlist groups and the MAP-lists card
 hookOn("panel", "stageAge", (r, dr) => {
   if (!r || r.etf || !dr) return; const x = lpOf(r.sym); if (!x) return; const box = dr.querySelector(".s61p"); if (!box || box.querySelector(".lppl")) return;
   box.insertAdjacentHTML("beforeend", `<div class="lppl small">${lpBadge(r.sym)} ${x.tag ? `<span class="lpt ${LP_TAGS[x.tag].c}">${x.tag}</span> ` : ""}${esc(lpTip(x))}</div>`);
