@@ -8538,7 +8538,7 @@ const s61Rej = s => s && s.x.rej ? `${s.x.rej.type} ${s.x.rej.age}` : "none";
 function s61Lists(all){
   const L = {"A-eligible": [], "OnDeck-L2": [], "OnDeck-1blocker": [], "OnDeck-L3": [], Background: [], Out: []}, def = s61Reg().v === "Defensive";
   for (const r of S.stocks) { if (!all && !gOK(r)) continue; const s = s61Of(r); if (s) L[s.list].push(s); }
-  for (const k in L) L[k].sort(s61By(def));
+  for (const k in L) L[k].sort(k === "A-eligible" && typeof lpReadyBy === "function" ? lpReadyBy(def) : s61By(def));   // 4 Nov: stage age — Ready to trade ranked stage tag → RS turn → RS 1M change → Setup Quality → old tie-breaks (see STAGE AGE at the end)
   return L;
 }
 
@@ -8698,27 +8698,29 @@ function renderS61Card(){
   const L = s61Lists(false), all = s61Lists(true), RG = s61Reg(), mr = mapRegime().v || "", me = s61Me(), def = RG.v === "Defensive";
   const ffc = {}; all.Out.forEach(s => { const k = [1, 2, 3, 5, 7, 8].find(n => s.ck[n].ok !== true) ?? s.ff; ffc[k] = (ffc[k] || 0) + 1; });
   const tr = (s, i, cap, rows) => { const x = s.x, r = s.r, z = s.size, nx = rows && rows[i + 1];
-    const tie = nx && i < cap && typeof tieWhy === "function" ? `<div class="small dim" style="font-weight:400" title="The tie-break that ranks it above the next row">over ${esc(nx.r.sym)}: ${esc(tieWhy(s, nx, def))}</div>` : "";
+    const tie = nx && i < cap && typeof tieWhy === "function" ? `<div class="small dim" style="font-weight:400" title="The tie-break that ranks it above the next row">over ${esc(nx.r.sym)}: ${esc(rows._lp && typeof lpTieWhy === "function" ? lpTieWhy(s, nx, def) : tieWhy(s, nx, def))}</div>` : "";   // 4 Nov: stage age — ready rows explain the new order
     const erQ = !s.er.bmo && s.er.n != null && s.er.n <= 10 ? `<span class="flag" title="Timing unknown — read as after the close (the rule). ${s.er.alt && s.er.alt.n < S61.erMin && s.er.n >= S61.erMin ? "Before the open it would be inside the 5-session gate." : ""}">${s.er.alt && s.er.alt.n < S61.erMin && s.er.n >= S61.erMin ? "?!" : "?"}</span>` : "";
     const W = typeof ecWhy === "function" ? ecWhy(s) : {}, why = s.blockers.map(n => W[n] ? `<div class="neg">${esc(W[n])}</div>` : "").join("");
-    return `<tr data-sym="${esc(r.sym)}" class="${i < cap ? "" : "dimr"}"><td class="l sym">${esc(r.sym)}${tie}</td><td>${rsBadge(r.rs)}</td><td class="l small">${esc(r.group || "")}<br><span class="dim">${esc(r.gState || "")}</span></td>
+    return `<tr data-sym="${esc(r.sym)}" class="${i < cap ? "" : "dimr"}"><td class="l sym">${esc(r.sym)}${typeof lpBadge === "function" ? " " + lpBadge(r.sym) : ""}${tie}</td><td>${rsBadge(r.rs)}</td><td class="l small">${esc(r.group || "")}<br><span class="dim">${esc(r.gState || "")}</span></td>
       <td><span class="pill ${x.loc ? LOC61[x.loc].c : ""}" title="code ${esc(x.loc || "—")}">${esc(ecLocS(x))}</span></td><td>${sg(x.d9, 2)}</td><td>${fin(x.entry) ? f2(x.entry) : "—"}</td><td>${x.nh ? "NH" : fin(x.fr) ? f2(x.fr) : "—"}</td>
       <td class="${s.ck[10].ok === false ? "dim" : ""}" title="Room is information only">${x.nh ? "NH" : fin(x.room) ? x.room.toFixed(2) + "R" : "—"}</td><td class="${s.ck[9].ok ? "" : "neg"}">${s.er.n == null ? "?" : s.er.n}${erQ}</td>
       <td><b>${z.final[0]}</b>${z.shares != null ? `<br><span class="small">${z.shares.toLocaleString()} sh</span>` : ""}</td><td>${s.sq}</td>
       <td class="l small">${s.blockers.length ? (why || `<span class="neg">${esc(ecPlain(s.ffTxt))}</span> `) : ""}${def && s.exceptional ? `<span class="flag good">exceptional</span>` : ""}${s.compressed ? `<span class="flag">compressed</span>` : ""}${x.rej ? `<span class="flag">rejected 9 (${x.rej.type}) ${x.rej.age}d</span>` : ""}${x.prov ? `<span class="flag">${x.bars} bars</span>` : ""}</td></tr>`; };
   const tbl = (rows, cap, empty) => rows.length ? `<div class="tscroll" style="max-height:420px"><table class="mini s61t"><thead><tr><th class="l">Ticker</th><th>RS</th><th class="l">Group</th><th>Loc</th><th title="Distance from the daily 9 EMA, in ADR (Dist 9EMA ADR)">9 ADR</th><th title="Planned entry">Entry</th><th title="First resistance: the nearest level above the entry still in play — a 5/5 swing high price hasn't traded above since, a swing low it broke below and hasn't reclaimed, or the highest high of the last 5 sessions">1st res.</th><th title="(first res − entry) / 0.6 ADR">Room</th><th title="NYSE sessions to the earnings session">Earn.</th><th title="Final grade after the SMA, regime and personal steps">Grade</th><th title="Setup Quality 0–5">SQ</th><th class="l">Notes</th></tr></thead><tbody>${rows.map((s, i) => tr(s, i, cap, rows)).join("")}</tbody></table></div>` : `<div class="empty" style="padding:4px 0">${empty}</div>`;
+  const LPS = typeof lpSplit === "function" ? lpSplit(L["A-eligible"]) : {ready: L["A-eligible"], late: []}; LPS.ready._lp = LPS.late._lp = typeof lpSplit === "function";   // 4 Nov: stage age — LATE ready names go to the Late table
   const deck = [...L["OnDeck-L2"], ...L["OnDeck-1blocker"], ...L["OnDeck-L3"]].sort(s61By(def));   // 25 Oct: L3 Deep reclaim → On deck (Spec 6.1 check 6 / §2, amended 24 Oct) — see the L3 section at the end
   const n = k => all[k].length, shown = L["A-eligible"].length + deck.length, tot = n("A-eligible") + n("OnDeck-L2") + n("OnDeck-1blocker") + n("OnDeck-L3"), fl = shown < tot ? ` <span class="small">(filters on: ${shown} shown of ${tot})</span>` : "";
   box.innerHTML = hd + `<div class="bd">
     <div class="s61bar"><span>MAP says ${s61MapSel({regSet: RG.src === "map", reg: mr})} → regime step <b>${RG.src ? (REG_STEP[RG.v] ? "−" + REG_STEP[RG.v] : "0") : "−" + REG_STEP.Defensive}</b>${RG.src === "tape" ? ` <span class="small">(MAP not set — the board's tape read says ${esc(RG.v)})</span>` : !RG.src ? ` <span class="neg">(MAP not set and no breadth file — sized as Defensive)</span>` : ""}</span>
       <label class="tog"><input type="checkbox" data-s61me="urge" ${me.urge ? "checked" : ""}>urge ≥ 4 (−1)</label><label class="tog"><input type="checkbox" data-s61me="loss" ${me.loss ? "checked" : ""}>3 straight losses (−1)</label>
-      <span class="small">base grade ${esc(CFG.grade)} unless set per ticker · grade never below C · ranked RS → RS Accel20 → Setup Quality → RMV → DCR%${def ? " · Defensive: exceptional names first" : ""}</span></div>
+      <span class="small">base grade ${esc(CFG.grade)} unless set per ticker · grade never below C · ${typeof lpReadyBy === "function" ? "Ready to trade ranked stage (EARLY → MID → LATE) → RS turning → RS 1M change → Setup Quality → RS; On deck ranked RS → RS Accel20 → Setup Quality → RMV → DCR%" : "ranked RS → RS Accel20 → Setup Quality → RMV → DCR%"}${def ? " · Defensive: exceptional names first" : ""}</span>${typeof lpTolHTML === "function" ? " " + lpTolHTML() : ""}</div>
     <div class="kpis" style="margin:8px 0"><div class="kpi card"><div class="k">Ready to trade</div><div class="v">${n("A-eligible")}</div><div class="n">in the buy zone, every check passes · MAP picks Focus A 0–5</div></div>
       <div class="kpi card"><div class="k">On deck</div><div class="v">${n("OnDeck-L2") + n("OnDeck-1blocker") + n("OnDeck-L3")}</div><div class="n">${n("OnDeck-L2")} just under the zone · ${n("OnDeck-L3")} deep under · ${n("OnDeck-1blocker")} one thing missing · list 0–6</div></div>
       <div class="kpi card"><div class="k">Not yet</div><div class="v">${n("Background")}</div><div class="n">too high above the buy zone</div></div>
       <div class="kpi card"><div class="k">Out</div><div class="v">${n("Out")}</div><div class="n" title="What stops them (the first hard check that fails)">${Object.entries(ffc).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => `${EC_CK[k] || "#" + k}: ${v}`).join(" · ")}</div></div></div>
-    <h4 style="margin:8px 0 2px">Ready to trade${fl}</h4>${tbl(L["A-eligible"], 5, "No name passes every check today.")}
-    <h4 style="margin:12px 0 2px">On deck</h4>${tbl(deck, 6, "Nothing on deck.")}
+    <h4 style="margin:8px 0 2px">Ready to trade${fl}</h4>${tbl(LPS.ready, 5, LPS.late.length ? "No early or mid-stage name passes every check today — see Late below." : "No name passes every check today.")}
+    <h4 style="margin:12px 0 2px">On deck</h4>${tbl(deck, 6, "Nothing on deck.")}${LPS.late.length ? `
+    <h4 style="margin:12px 0 2px">Late <span class="small dim" style="font-weight:400">ready to trade, but a late-stage trend (4+ pullbacks, 120+ sessions since the 200-day reclaim, or 30%+ over the 200-day) · fills a Daily Plan slot only when one is left${LPS.ready.length < 5 ? ` — ${Math.min(5 - LPS.ready.length, LPS.late.length)} today` : ""}</span></h4>${tbl(LPS.late, Math.max(0, 5 - LPS.ready.length), "")}` : ""}
     <details class="tp-fold" style="margin-top:8px"><summary>Not yet (${L.Background.length})</summary><div style="padding:6px 0">${L.Background.slice(0, 80).map(s => tkChip(s.r, s.x.loc === "ABOVE" ? "too high" : "deep under")).join("") || `<span class="dim small">none</span>`}</div></details>
     <details class="tp-fold"><summary>How the lists work</summary><div class="small" style="padding:6px 0">Same rules as Deep Space Screener v5.0 (rules v6.1), on the stored daily bars. <b>Ready to trade</b> = in the buy zone (L1) and checks 1–9 pass · <b>On deck · just under</b> = just under the buy zone (L2), nothing else missing · <b>On deck · deep under</b> = deeper under the daily 9 EMA but still above the daily 21 EMA (L3 deep reclaim, since 25 Oct), nothing else missing · <b>On deck · one thing missing</b> = in the buy zone with one soft blocker · <b>Not yet</b> = too high above the buy zone · <b>Out</b> = a hard check fails, or two soft blockers. <b>Hard</b> (any fail = out): 1 Stock: liquidity ($1B cap, $100M/day 20-day, &gt; $10) · 2 Stock: no single-bar break &gt; 40% in 50 bars · 3 Trend: above a rising daily 21 EMA, a rising daily 50 SMA and a rising weekly 10-week line · 5 Stretch: ≤ 4 ADR above the daily 50 SMA (or a gap reset) · 7 group not Lagging · 8 RS ≥ 75. <b>Soft</b> (one = on deck, two = out): just under the buy zone · 4 Stage 1 or 3 · 9 earnings inside 5 sessions (or no date). <b>Information only</b> (shown, never blocks — Eugene, 19 Oct): 10 room to the first resistance, ≥ 2R as a guide (1R = 0.6 ADR): the lowest of the 5/5 swing highs price hasn't traded above since, the swing lows it has broken below and not reclaimed, and the highest high of the last 5 sessions. "Trend broken — out" = check 3 failed with the close above the daily 21 EMA (screener code BELOW21, also "Structure fail"). Too high sits in Not yet. Just under and deep under move up to Ready only on a move back over yesterday's daily 9 EMA plus the 30-min trigger. The first 5 Ready to trade and first 6 on deck are full-strength; the rest are greyed. The earnings date in the CSV has no before/after-the-open timing, so every report is treated as after the close: a before-the-open reporter's real exit is one session earlier than shown.</div></details>
   </div>`;
@@ -8798,10 +8800,12 @@ selfCheck = function(){
   // list order: Board RS → RS Accel20 → Setup Quality → RMV (lower first) → DCR% → ticker; Defensive: exceptional first
   const L61 = s61Lists(true), m1 = mapRegime().v, dfn = (MAPV.includes(m1) ? m1 : S.tape && S.tape.bucket) === "Defensive";
   const keyOf = s => [dfn && s.exceptional ? 1 : 0, s.r.rs == null ? -1e9 : s.r.rs, s.d.ra && isFinite(s.d.ra.acc) ? s.d.ra.acc : -1e9, s.sq, isFinite(s.rmv) ? -s.rmv : -1e9, isFinite(s.d.dcr) ? s.d.dcr : -1e9];
+  // 4 Nov: stage age — Ready to trade is ranked stage tag (EARLY → MID → none → LATE) → RS turn → RS 1M change → Setup Quality first
+  const lpOn = typeof lpOf === "function", keyA = s => { const x = lpOf(s.r.sym), k0 = keyOf(s); return [k0[0], -({EARLY: 0, MID: 1, LATE: 3}[x && x.tag] ?? 2), x && x.rsTurn ? 1 : 0, x && isFinite(x.rs1m) ? x.rs1m : -1e9, s.sq, ...k0.slice(1)]; };
   for (const k in L61) for (let i = 1; i < L61[k].length; i++) {
-    const a = keyOf(L61[k][i - 1]), b = keyOf(L61[k][i]); let ok = true;
+    const kf = k === "A-eligible" && lpOn ? keyA : keyOf, a = kf(L61[k][i - 1]), b = kf(L61[k][i]); let ok = true;
     for (let j = 0; j < a.length; j++) { if (a[j] > b[j]) break; if (a[j] < b[j]) { ok = false; break; } }
-    F(ok, L61[k][i].r.sym, `Entry Check ${k} order (tie-breaks)`, `after ${L61[k][i - 1].r.sym}`, "RS → Accel20 → SQ → RMV → DCR");
+    F(ok, L61[k][i].r.sym, `Entry Check ${k} order (tie-breaks)`, `after ${L61[k][i - 1].r.sym}`, kf === keyA ? "stage → RS turn → RS 1M → SQ → RS → Accel20 → RMV → DCR" : "RS → Accel20 → SQ → RMV → DCR");
   }
   return R;
 };
@@ -9604,7 +9608,7 @@ function dpCardHTML(compact){
     ${disc}
     <div class="small dim" style="margin-top:6px">${S.has.hist ? "" : "The board's lists need the price history — until it's loaded only MAP's lists are in the plan. "}Live status uses the data on screen (Massive is 15 minutes delayed). "In the zone" is a location, not a trigger: the trigger is a 30-min close over the 30-min 21 EMA, from 10:00 ET, checked on the chart.</div></div>`;
 }
-function dpPaint(){ const b = $("dpBox"); if (b) { b.innerHTML = dpCardHTML(); b.querySelectorAll("tbody").forEach(tb => tb.addEventListener("click", e => { const t = e.target.closest("tr[data-sym]"); if (t && S.rowBySym && S.rowBySym.has(t.dataset.sym)) openDrawer(t.dataset.sym); })); } }
+function dpPaint(){ const b = $("dpBox"); if (b) { b.innerHTML = dpCardHTML(); if (typeof lpPaint === "function") try { lpPaint(b); } catch (e) {} /* 4 Nov: stage age badges */ b.querySelectorAll("tbody").forEach(tb => tb.addEventListener("click", e => { const t = e.target.closest("tr[data-sym]"); if (t && S.rowBySym && S.rowBySym.has(t.dataset.sym)) openDrawer(t.dataset.sym); })); } }
 // 31 Oct (structure only): was a renderTab override; now a "tab" hook — same code, same order (BOARD HOOKS, block 1)
 hookOn("tab", "dailyPlanBox", t => {
   if (t === "plan" && S.snap) { let b = $("dpBox"); if (!b) { $("tab-plan").querySelector(".lede") ? $("tab-plan").querySelector(".lede").insertAdjacentHTML("afterend", `<div class="card g1" id="dpBox"></div>`) : $("tab-plan").insertAdjacentHTML("afterbegin", `<div class="card g1" id="dpBox"></div>`); } if (JN.loaded) dpPaint(); else JN.ready.then(dpPaint); }
@@ -13188,9 +13192,12 @@ function pbSelf(){
   return out;
 }
 const _selfCheckPB = selfCheck;
+// 4 Nov: later sections add self-check lines here ({sym, what, ok, board, mine} lists) instead of another selfCheck wrapper
+const SC_X = [];
 selfCheck = function(){
   const R = _selfCheckPB();
   try { if (S.snap && pbHH()) for (const c of pbSelf()) { R.n++; if (!c.ok) R.fails.push({sym: c.sym, what: c.what, board: c.board, mine: c.mine}); } } catch (e) { console.warn("playbooks self-check", e); }
+  for (const f of SC_X) { try { if (S.snap) for (const c of f()) { R.n++; if (!c.ok) R.fails.push({sym: c.sym, what: c.what, board: c.board, mine: c.mine}); } } catch (e) { console.warn("self-check", e); } }
   return R;
 };
 
@@ -16232,5 +16239,169 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 .ndxi label{display:block;cursor:pointer;font-size:11.5px;line-height:1.5;overflow-wrap:anywhere}
 .ndxg input[type=checkbox]{vertical-align:-2px;margin:0 3px 0 0}
 .sxp .ndxg{max-height:460px}
+</style>`);
+</script>
+
+<script>
+"use strict";
+/* =====================================================================
+   STAGE AGE + PULLBACK COUNT — LEADER PULLBACK (4 Nov 2026). TRADING LOGIC (Playbook 1 ranking + which ready names fill the
+   Daily Plan's slots). Entry, trigger, stops, exits, sizing and the 11 checks are unchanged; no new playbook.
+   Eugene (handover "Stage Age + Pullback Count for Leader Pullback", 4 Nov): "ranking by [RS level] pushes mature, late Stage 2
+   names to the top … The goal is to favour names in their 1st or 2nd pullback after a fresh Stage 1→2 transition." Rulings in
+   chat, 4 Nov: "Full change now" (breaks the Spec 6.1 §8 freeze — Eugene's call); a LATE name fills a Focus slot "only if
+   slots are left"; Pullback # 0 names "rank as EARLY"; keep 320 stored sessions and show "N+" when the 200-day reclaim is
+   older than the stored history.
+   - Per stock, on dssBars (the stored daily bars + today's bar), needs ≥ LP.minBars bars:
+       200 SMA (simple), 21 EMA (the board's Pine-style EMA, PZ.ema), R0 = the last session whose close crossed from ≤ to >
+       the 200 SMA (a gap counts like any other); Stage Age = sessions from R0 to the last bar COUNTING R0 AS 1 (the
+       handover's acceptance table counts it that way — its text says "R0 = day 0", the table is 1 higher on all 13 names;
+       checked on Massive bars 4 Nov). No crossing inside the stored 200 SMA and the close above it → "N+" (N = sessions the
+       200 SMA covers) and LATE. Close at or under the 200 SMA → no age, no tag ("under the 200-day").
+       Touch = low ≤ 21 EMA × (1 + tol%) (tol: adrb.lpTol, default 0, on the Entry Check card). A pullback starts on a touch
+       with no touch in the LP.reset sessions before it; Pullback # = starts on or after R0 (a name still in a pullback shows
+       that pullback's number; 0 = none yet).
+       Ext 200 = close / 200 SMA − 1. RS line = close / SPY close (SPY's stored bars on the stock's own days). RS Turn = the RS
+       line made a 50-session high in the last 10 sessions, OR its 21-session % change > its 63-session % change ÷ 3.
+       RS 1M Chg = the 21-session % change of the RS line.
+       Tag: EARLY = age ≤ 60 and Pullback # ≤ 2 and Ext 200 ≤ 25% · LATE = Pullback # ≥ 4 or age > 120 or "N+" or Ext 200 > 30%
+       · MID = everything else (the handover's MID line leaves a gap — e.g. age 40, P2, Ext 27% — filled as MID, stated to
+       Eugene 4 Nov). All thresholds in LP.
+   - Ready to trade sort (s61Lists, in place): on Defensive days exceptional names first (Spec 6.1 §2, kept) → tag EARLY, MID,
+     no tag (under 200 / short history), LATE → RS Turn yes first → RS 1M Chg high to low → Setup Quality → then the old
+     tie-breaks (RS → RS Accel20 → RMV → DCR% → ticker). The Daily Plan's 5 ready slots take the top of that order, so a LATE
+     name only fills a slot nothing earlier took. On deck / Not yet / Out keep the old order.
+   - Entry Check card (in place): Ready to trade shows EARLY / MID / untagged; LATE ready names move to a "Late" table under
+     On deck (still Ready to trade — list code, Board log and feed "Spec61 List" unchanged). Badge P0 / P1 / P2 / P3 / P4+ ·
+     age next to each name (Entry Check card, Daily Plan, held names; ticker panel line under the Entry Check block). Held
+     names: shown only — no list or exit logic changes.
+   - Deep Space feed: 7 columns appended at the very end (FEED_EXT): Stage Age, Pullback #, Ext 200, RS Turn, RS 1M Chg,
+     Stage Tag, R0 Date. Older columns byte-identical.
+   - Self-check: a separate short recompute of age / Pullback # / Ext 200 / tag for every ready and on-deck name (SC_X).
+   - Never changes: zones, stops, targets, the checks, list codes, sizes, RS, group strength, the frozen plan's fields.
+   Storage NEW: adrb.lpTol (number, % of the 21 EMA). Test: tools/board-stageage-test.js.
+   ===================================================================== */
+const LP = {minBars: 260, ageE: 60, ageL: 120, pbE: 2, pbL: 4, extE: 25, extL: 30, reset: 5, rsHiWin: 50, rsHiRecent: 10, rs1: 21, rs3: 63, bench: "SPY"};
+const LP_TAGS = {EARLY: {o: 0, c: "lpE"}, MID: {o: 1, c: "lpM"}, LATE: {o: 3, c: "lpL"}};
+const lpTagO = t => t && LP_TAGS[t] ? LP_TAGS[t].o : 2;
+function lpTol(){ let v = NaN; try { v = +store.get("adrb.lpTol", 0); } catch (e) {} return isFinite(v) && v >= 0 && v <= 5 ? v : 0; }
+// SPY's closes on the symbol's own kept days (b.bi = indices into the stored timeline; nD = today's bar)
+function lpBench(b){
+  const si = HIST.idx ? HIST.idx.get(LP.bench) : null; if (si == null || !b || !b.bi) return null;
+  const nD = HIST.nD, ts = todaySource(), xs = ts ? ts.get(LP.bench) : null, o = new Float64Array(b.n).fill(NaN);
+  for (let j = 0; j < b.n; j++) { const t = b.bi[j]; o[j] = t < nD ? HIST.C[si * nD + t] : xs && fin(xs.c) ? xs.c : NaN; }
+  return o;
+}
+// the maths, on plain arrays (c, l, bench closes, dates) — tol in %
+function lpCalc(c, l, bc, dates, tol){
+  const n = c.length; if (n < LP.minBars) return null;
+  const s = PZ.sma(c, 200), e = PZ.ema(c, 21), li = n - 1, last = c[li], sl = s[li];
+  if (!fin(sl) || !fin(last)) return null;
+  const ext = (last / sl - 1) * 100;
+  let first = -1; for (let k = 0; k < n; k++) if (fin(s[k])) { first = k; break; }
+  let r0 = -1; for (let k = li; k > first; k--) if (fin(s[k - 1]) && c[k] > s[k] && c[k - 1] <= s[k - 1]) { r0 = k; break; }
+  const above = last > sl, plus = above && r0 < 0;
+  // RS (close / SPY)
+  let rsTurn = null, rs1m = null;
+  if (bc) { const rs = k => fin(bc[k]) && bc[k] > 0 && fin(c[k]) ? c[k] / bc[k] : NaN;
+    const a = rs(li), b1 = rs(li - LP.rs1), b3 = rs(li - LP.rs3);
+    if (fin(a) && fin(b1)) rs1m = (a / b1 - 1) * 100;
+    let hi = false; for (let j = li - LP.rsHiRecent + 1; j <= li && !hi; j++) { const v = rs(j); if (!fin(v)) continue; let ok = true;
+      for (let k = j - LP.rsHiWin + 1; k < j; k++) { const w = rs(k); if (!fin(w) || w > v) { ok = false; break; } } if (ok) hi = true; }
+    const acc = fin(a) && fin(b1) && fin(b3) ? (a / b1 - 1) > (a / b3 - 1) / 3 : false;
+    rsTurn = fin(a) ? hi || acc : null; }
+  if (!above) return {n, under: true, ext, rsTurn, rs1m, age: null, plus: false, pb: null, tag: null, r0: null, r0Date: ""};
+  const from = plus ? first : r0, age = li - from + 1, tf = 1 + tol / 100;
+  const touch = k => fin(e[k]) && fin(l[k]) && l[k] <= e[k] * tf;
+  let pb = 0, lastT = -Infinity; for (let k = 0; k <= li; k++) if (touch(k)) { if (k - lastT > LP.reset && k >= from) pb++; lastT = k; }
+  const tag = plus || pb >= LP.pbL || age > LP.ageL || ext > LP.extL ? "LATE" : age <= LP.ageE && pb <= LP.pbE && ext <= LP.extE ? "EARLY" : "MID";
+  return {n, under: false, ext, rsTurn, rs1m, age, plus, pb, tag, r0: plus ? null : r0, r0Date: plus ? "" : dates[r0] || ""};
+}
+const LPC = {key: "", map: new Map()};
+function lpOf(sym){
+  if (!S.has || !S.has.hist || !HIST.nD) return null;
+  const k = dssKey() + "|" + lpTol(); if (LPC.key !== k) { LPC.key = k; LPC.map = new Map(); }
+  if (LPC.map.has(sym)) return LPC.map.get(sym);
+  let x = null; try { const b = dssBars(sym); x = b ? lpCalc(b.c, b.l, lpBench(b), b.dates, lpTol()) : null; } catch (e) { console.warn("stage age", sym, e); x = null; }
+  LPC.map.set(sym, x); return x;
+}
+// Ready to trade order (s61Lists calls it for the A-eligible list)
+const LP_K = [["stage tag", s => { const x = lpOf(s.r.sym); return lpTagO(x && x.tag); }, true],
+  ["RS turn", s => { const x = lpOf(s.r.sym); return x && x.rsTurn ? 1 : 0; }, false],
+  ["RS 1M change", s => { const x = lpOf(s.r.sym); return x ? x.rs1m : NaN; }, false],
+  ["Setup Quality", s => s.sq, false]];
+function lpReadyBy(def){
+  const base = s61By(def), hi = v => fin(v) ? v : -Infinity, lo = v => fin(v) ? v : Infinity;
+  return (a, b) => { if (def) { const d = (b.exceptional ? 1 : 0) - (a.exceptional ? 1 : 0); if (d) return d; }
+    for (const [, f, low] of LP_K) { const va = f(a), vb = f(b), A = low ? lo(va) : hi(va), B = low ? lo(vb) : hi(vb); if (A !== B) return low ? A - B : B - A; }
+    return base(a, b); };
+}
+function lpTieWhy(a, b, def){
+  if (def && !!a.exceptional !== !!b.exceptional) return "exceptional (Defensive day)";
+  for (const [n, f] of LP_K) { const va = f(a), vb = f(b); if (va !== vb && !(Number.isNaN(va) && Number.isNaN(vb))) {
+    if (n === "stage tag") { const t = s => { const x = lpOf(s.r.sym); return x && x.tag ? x.tag : "no tag"; }; return `stage ${t(a)} vs ${t(b)}`; }
+    if (n === "RS turn") return `RS turning ${va ? "yes" : "no"} vs ${vb ? "yes" : "no"}`;
+    return `${n} ${fin(va) ? +(+va).toFixed(2) : "—"} vs ${fin(vb) ? +(+vb).toFixed(2) : "—"}`; } }
+  return typeof tieWhy === "function" ? tieWhy(a, b, def) : "";
+}
+// ready names split for the card: LATE → the Late table
+function lpSplit(rows){ const ready = [], late = []; for (const s of rows) { const x = lpOf(s.r.sym); (x && x.tag === "LATE" ? late : ready).push(s); } return {ready, late}; }
+const lpAgeTxt = x => x.plus ? `${x.age}+` : String(x.age);
+function lpTip(x){
+  if (x.under) return `Close at or under the 200-day SMA (${sg(x.ext, 1)}%) — no stage age`;
+  return `${x.plus ? `Above the 200-day SMA for all ${x.age} sessions it covers in the stored history` : `${x.age} sessions since it reclaimed the 200-day SMA on ${x.r0Date} (that day = 1)`} · pullback ${x.pb} to the 21 EMA since then · ${x.tag}`
+    + ` · ${sg(x.ext, 1)}% over the 200-day · RS turning ${x.rsTurn == null ? "—" : x.rsTurn ? "yes" : "no"} · RS 1M ${fin(x.rs1m) ? sg(x.rs1m, 1) + "%" : "—"} (vs SPY)`;
+}
+function lpBadge(sym){
+  const r = S.rowBySym && S.rowBySym.get(sym); if (!r || r.etf) return ""; const x = lpOf(sym); if (!x) return "";
+  if (x.under) return `<span class="lpb lpU" title="${esc(lpTip(x))}">under 200</span>`;
+  const p = x.pb >= LP.pbL ? "P4+" : "P" + x.pb, pc = x.pb === 0 ? "lp0" : x.pb <= 2 ? "lpg" : x.pb === 3 ? "lpa" : "lpx";
+  return `<span class="lpb ${pc}" title="${esc(lpTip(x))}">${p} · ${esc(lpAgeTxt(x))}d</span>`;
+}
+// badges on ticker cells (tr[data-sym] td.sym) inside a box
+function lpPaint(root){ if (!root || !S.has || !S.has.hist) return; root.querySelectorAll("tr[data-sym] td.sym").forEach(td => { if (td.querySelector(".lpb")) return; const h = lpBadge(td.closest("tr").dataset.sym); if (!h) return; const b = td.querySelector("b"); (b || td).insertAdjacentHTML(b ? "afterend" : "beforeend", " " + h); }); }
+hookOn("tab", "stageAge", () => { for (const id of ["s61Box", "dpBox", "homeHeld"]) try { lpPaint($(id)); } catch (e) { console.warn("stage age badges", e); } });
+hookOn("panel", "stageAge", (r, dr) => {
+  if (!r || r.etf || !dr) return; const x = lpOf(r.sym); if (!x) return; const box = dr.querySelector(".s61p"); if (!box || box.querySelector(".lppl")) return;
+  box.insertAdjacentHTML("beforeend", `<div class="lppl small">${lpBadge(r.sym)} ${x.tag ? `<span class="lpt ${LP_TAGS[x.tag].c}">${x.tag}</span> ` : ""}${esc(lpTip(x))}</div>`);
+});
+// tolerance input on the Entry Check card
+const lpTolHTML = () => `<label class="small" title="A touch of the daily 21 EMA = a low at or under the 21 EMA plus this % (0 = the line itself). Changes Pullback # and the stage tag.">21 EMA touch ± <input type="number" data-lptol min="0" max="5" step="0.05" value="${lpTol()}" style="width:4.5em">%</label>`;
+document.addEventListener("change", ev => { const t = ev.target; if (!t || !t.matches || !t.matches("[data-lptol]")) return; const v = +t.value;
+  try { store.set("adrb.lpTol", isFinite(v) && v >= 0 && v <= 5 ? v : 0); } catch (e) {} LPC.key = ""; if (S.snap) renderTab(S.ui.tab); });
+// feed
+const LP_FEED_H = ["Stage Age", "Pullback #", "Ext 200", "RS Turn", "RS 1M Chg", "Stage Tag", "R0 Date"];
+FEED_EXT.push({h: LP_FEED_H, cells: o => { const r = o.r; if (!r || r.etf) return null; const x = lpOf(r.sym); if (!x) return null;
+  return [x.under ? "" : x.plus ? x.age + "+" : x.age, x.under ? "" : x.pb, +x.ext.toFixed(2), x.rsTurn == null ? "" : x.rsTurn ? "Y" : "N", fin(x.rs1m) ? +x.rs1m.toFixed(2) : "", x.tag || "", x.r0Date || ""]; }});
+// self-check: a separate short copy of the rules (plain loops, own SMA / EMA), every ready + on-deck name
+function lpSelf(){
+  const out = []; if (!S.has || !S.has.hist || typeof s61Lists !== "function") return out;
+  const L = s61Lists(true), tol = 1 + lpTol() / 100;
+  for (const s of [...L["A-eligible"], ...L["OnDeck-L2"], ...L["OnDeck-1blocker"], ...L["OnDeck-L3"]]) {
+    const b = dssBars(s.r.sym), x = lpOf(s.r.sym); if (!b || b.n < LP.minBars) { out.push({sym: s.r.sym, what: "stage age (short history)", ok: x == null, board: x ? x.tag : "none", mine: "none"}); continue; }
+    const c = b.c, l = b.l, n = c.length, sma = [], ema = []; let run = 0;
+    for (let k = 0; k < n; k++) { run += c[k]; if (k >= 200) run -= c[k - 200]; sma.push(k >= 199 ? run / 200 : NaN); }
+    let e = NaN, acc = 0; for (let k = 0; k < n; k++) { if (k < 20) { acc += c[k]; ema.push(NaN); } else if (k === 20) { acc += c[k]; e = acc / 21; ema.push(e); } else { e = c[k] * 2 / 22 + e * 20 / 22; ema.push(e); } }
+    const li = n - 1, up = c[li] > sma[li]; let cross = -1;
+    for (let k = li; k >= 200; k--) if (c[k] > sma[k] && !(c[k - 1] > sma[k - 1])) { cross = k; break; }
+    const crossed = cross >= 0, start = crossed ? cross : 199;
+    let pb = 0, gap = 99; for (let k = 0; k <= li; k++) { const t = ema[k] === ema[k] && l[k] <= ema[k] * tol; if (t) { if (gap >= LP.reset && k >= start) pb++; gap = 0; } else gap++; }
+    const age = li - start + 1, ext = (c[li] / sma[li] - 1) * 100;
+    const tag = !up ? null : !crossed || pb >= 4 || age > 120 || ext > 30 ? "LATE" : age <= 60 && pb <= 2 && ext <= 25 ? "EARLY" : "MID";
+    const near = (a, b2) => Math.abs(a - b2) < 1e-6 * Math.max(1, Math.abs(b2));
+    out.push({sym: s.r.sym, what: "Ext 200 %", ok: !!x && near(x.ext, ext), board: x ? x.ext.toFixed(3) : "none", mine: ext.toFixed(3)});
+    if (up) { out.push({sym: s.r.sym, what: "Stage Age", ok: !!x && x.age === age && x.plus === !crossed, board: x ? lpAgeTxt(x) : "none", mine: crossed ? String(age) : age + "+"});
+      out.push({sym: s.r.sym, what: "Pullback #", ok: !!x && x.pb === pb, board: x ? x.pb : "none", mine: pb});
+      out.push({sym: s.r.sym, what: "Stage tag", ok: !!x && x.tag === tag, board: x ? x.tag : "none", mine: tag}); }
+  }
+  return out;
+}
+if (typeof SC_X !== "undefined") SC_X.push(lpSelf);
+document.head.insertAdjacentHTML("beforeend", `<style>
+.lpb{display:inline-block;font-size:10.5px;line-height:1.35;padding:0 5px;border-radius:8px;font-weight:600;white-space:nowrap;vertical-align:1px;border:1px solid transparent}
+.lpb.lpg{background:var(--st1);color:#fff}.lpb.lpa{background:#f0a020;color:#1a1a1a}.lpb.lpx{background:var(--chip);color:var(--ink-3)}
+.lpb.lp0{background:transparent;color:var(--st1);border-color:var(--st1)}.lpb.lpU{background:transparent;color:var(--ink-3);border-color:var(--line)}
+.lpt{font-size:10.5px;font-weight:700;letter-spacing:.04em}.lpt.lpE{color:var(--st1)}.lpt.lpM{color:#d08a00}.lpt.lpL{color:var(--ink-3)}
+.lppl{margin-top:6px;line-height:1.5}
 </style>`);
 </script>
