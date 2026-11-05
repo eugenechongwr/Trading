@@ -16063,3 +16063,163 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 .lppl{margin-top:6px;line-height:1.5}
 </style>`);
 </script>
+
+<script>
+"use strict";
+/* =====================================================================
+   GROUP RS + GROUP IGNITION — FEED ONLY, PAPER (5 Nov 2026). Tracking / research only: feed columns appended at the very end.
+   Eugene, 5 Nov (handover "Group-first selection and a Group Ignition playbook", MAP/BRIEF chat): "We are targeting stocks that
+   are late in their stages … I need a playbook that gets onto these sectors and stocks as they start getting into play."
+   Eugene in chat, 5 Nov: "feed only, go ahead with Group Ignition" — no card, no list, no switch, no group tie-break.
+   Nothing here is a trading rule. Never changes: Entry Check checks 1–11, lists, the Ready-to-trade order, sizes, the frozen plan,
+   older feed columns (byte-identical), the ETF feed, the MAP import, the on-screen Group leaderboards.
+   - Bars: the same aligned timeline as the Group leaderboards (series(sym, todaySource()) = stored bars + today's bar; a missing
+     day is NaN and simply has no value that day). Benchmarks are FIXED: SPY and RSP — not the board's benchmark setting.
+   - Per stock at session t: lg = 50-session return − SPY's (pp), sh = 10-session return − SPY's, sp = sh − lg / 5 (the leaderboard's
+     "RS speed"), shR = 10-session return − RSP's. Valid at t = lg and sh both known.
+   - Per group (the board's own groups, S.groups — the Group setting, default Industry; stocks only), at session t, over the members
+     valid at t: Grp RS 2W = median sh · Grp RS 10W = median lg · Grp RS Speed = median sp · Grp RS 2W vs RSP = median shR ·
+     state = hqState(median lg, median sp) (Leading / Improving / Weakening / Lagging, as the leaderboard squares).
+     RS values and ranks only for groups with ≥ 3 valid members (the leaderboard's floor). Ranks 1 = strongest, among those groups.
+   - Grp States 5W: the state at each of the last 5 week-ends (this week = the latest bar), oldest → newest, medians over members
+     valid at all 5 (as the leaderboard). Letters: L Leading · I Improving · W Weakening · G laGging · - no data.
+   - Grp Turn Age: daily states; sessions since the last day the group went from Weakening/Lagging to Improving/Leading, counting
+     that day as 1 (Stage Age's convention). Blank while Weakening/Lagging; "N+" if Improving/Leading for the whole window.
+   - Breadth: % of members whose close is above their own 21 EMA / 50 SMA (EMA seeded with the SMA of the first 21 closes; SMA = the
+     last 50 closes the stock has). Grp Breadth 50S Chg 5d = today's % above the 50 minus 5 sessions ago.
+   - Stk vs Grp 2W = the stock's 10-session return − the group median's (pp). Stk Grp Pctl = percentile inside the group on the
+     blend (10-session + 21-session return) / 2: 100 × (members below + ½ ties) / (members − 1).
+   - GROUP IGNITION v0 (the handover's starting values; GI below): group gate = (1) ≥ 5 valid members, (2) newest 1–3 weekly
+     squares Improving/Leading and ≥ 2 of the earlier ones Weakening/Lagging, (3) top 15 by RS speed and RS 2W > 0 vs SPY and vs RSP,
+     (4) ≥ 60% above the 21 EMA and the % above the 50 SMA higher than 5 sessions ago, (5) 2–4 all true on ≥ 3 of the last 5
+     sessions, (6) Turn Age ≤ 15. Stock gate (Entry Check's own bars and numbers, s61Of / lpOf): not Biotechnology, price > $10,
+     20-day $ volume ≥ $50M (a second column at $100M), group percentile ≥ 60, RS 1M Chg > 0 (vs SPY), close > a rising 21 EMA
+     (5-session slope), close > the 50 SMA, close > the 200 SMA (the handover's "or Stage Age ≤ 30" adds nothing: Stage Age only
+     exists above the 200), ≤ 2 ADR above the 21 EMA, earnings ≥ 6 sessions away (unknown date = miss, as Entry Check check 9).
+     GI Status: a name failing ONLY the 2-ADR extension check = "Wait for pullback" (the handover's expected output: ignited names
+     are mostly "Wait for pullback" because they're extended; GI Stock Pass stays N until it's back within 2 ADR). Stock gate passed:
+     In zone = band top to +0.5 ADR (L1) or under the band but no more than 0.25 ADR under the 9 EMA
+     (L2) · Wait for pullback = more than 0.5 ADR above the band · Below zone = deeper than 0.25 ADR under the 9 (not an entry).
+     "Out" = in an ignited group but a stock check fails. Blank = the group isn't ignited. GI Top 2 = the 2 best group percentiles
+     among a group's passing names (the handover's 2-per-group cap). GI Misses = every failed check in plain words.
+   Storage: none. Plugs in: FEED_EXT (no override). Test: tools/board-group-ignition-test.js (separate recompute).
+   ===================================================================== */
+const GI = {spy: "SPY", rsp: "RSP", win: 70, minN: 3, gMin: 5, rankTop: 15, br21: 60, persist: 5, persistMin: 3, turnMax: 15,
+  px: 10, liq: 50e6, liq2: 100e6, pctl: 60, ext21: 2, above: 0.5, l2: -0.25, erMin: 6, top: 2, wk: 5};
+const GI_LET = {Leading: "L", Improving: "I", Weakening: "W", Lagging: "G"};
+const giUp = st => st === "Leading" || st === "Improving", giDn = st => st === "Weakening" || st === "Lagging";
+const GIC = {key: "", v: null};
+function giEma(c, p){
+  const n = c.length, o = new Float64Array(n).fill(NaN), a = 2 / (p + 1); let e = null, s = 0, k = 0;
+  for (let t = 0; t < n; t++) { const x = c[t]; if (fin(x)) { if (e == null) { s += x; if (++k === p) e = s / p; } else e = a * x + (1 - a) * e; } if (e != null && fin(x)) o[t] = e; }
+  return o;
+}
+function giSma(c, p){
+  const n = c.length, o = new Float64Array(n).fill(NaN), q = []; let s = 0;
+  for (let t = 0; t < n; t++) { const x = c[t]; if (!fin(x)) continue; q.push(x); s += x; if (q.length > p) s -= q.shift(); if (q.length === p) o[t] = s / p; }
+  return o;
+}
+const giRet = (c, t, k) => t - k >= 0 && c[t] > 0 && c[t - k] > 0 ? (c[t] / c[t - k] - 1) * 100 : null;
+function giAll(){
+  if (!S.has || !S.has.hist || !HIST.nD || !HIST.idx || !S.groups) return null;
+  const key = dssKey(); if (GIC.key === key) return GIC.v;
+  GIC.key = key; GIC.v = null;
+  const tb = todaySource(), sp = series(GI.spy, tb), rp = series(GI.rsp, tb);
+  if (!sp) return null;
+  const n = sp.n, last = n - 1, t0 = Math.max(51, n - GI.win); if (last - t0 < 30) return null;
+  const W = last - t0 + 1, wk = HIST.wkAll && HIST.wkAll.length === n ? HIST.wkAll : null;
+  // per stock, per session in the window
+  const P = new Map();
+  for (const r of S.rows) {
+    if (r.etf || !r.group) continue;
+    const s = series(r.sym, tb); if (!s || s.n !== n) continue;
+    const c = s.c, e21 = giEma(c, 21), s50 = giSma(c, 50), lg = new Float64Array(W).fill(NaN), sh = new Float64Array(W).fill(NaN), shR = new Float64Array(W).fill(NaN);
+    for (let t = t0; t <= last; t++) { const a10 = giRet(c, t, 10), a50 = giRet(c, t, 50), b10 = giRet(sp.c, t, 10), b50 = giRet(sp.c, t, 50);
+      if (a10 != null && a50 != null && b10 != null && b50 != null) { lg[t - t0] = a50 - b50; sh[t - t0] = a10 - b10; }
+      const q10 = rp ? giRet(rp.c, t, 10) : null; if (a10 != null && q10 != null) shR[t - t0] = a10 - q10; }
+    P.set(r.sym, {r, c, e21, s50, lg, sh, shR, r10: giRet(c, last, 10), r21: giRet(c, last, 21)});
+  }
+  const ok = (p, j) => fin(p.lg[j]) && fin(p.sh[j]);
+  const G = [];
+  for (const g of S.groups) {
+    const M = g.members.filter(r => !r.etf && P.has(r.sym)).map(r => P.get(r.sym)); if (!M.length) continue;
+    const d = [];
+    for (let j = 0; j < W; j++) { const t = t0 + j, V = M.filter(p => ok(p, j));
+      const lgm = median(V.map(p => p.lg[j])), shm = median(V.map(p => p.sh[j])), spm = median(V.map(p => p.sh[j] - p.lg[j] / 5)), rRm = median(V.map(p => p.shR[j]));
+      let a21 = 0, n21 = 0, a50 = 0, n50 = 0; for (const p of M) { const x = p.c[t]; if (!fin(x)) continue; if (fin(p.e21[t])) { n21++; if (x > p.e21[t]) a21++; } if (fin(p.s50[t])) { n50++; if (x > p.s50[t]) a50++; } }
+      d.push({n: V.length, lg: lgm, sh: shm, sp: spm, rR: rRm, b21: n21 ? 100 * a21 / n21 : null, b50: n50 ? 100 * a50 / n50 : null, st: V.length ? hqState(lgm, spm) : null}); }
+    G.push({g, name: g.name, M, d});
+  }
+  // ranks per session among groups with ≥ GI.minN valid members (1 = strongest)
+  for (let j = 0; j < W; j++) for (const [k, rk] of [["sh", "r2"], ["sp", "rS"], ["lg", "r10"]]) {
+    const L = G.filter(x => x.d[j].n >= GI.minN && x.d[j][k] != null).sort((a, b) => b.d[j][k] - a.d[j][k]); L.forEach((x, i) => x.d[j][rk] = i + 1); }
+  // weekly squares as of session index j: the 5 latest week-ends up to t0 + j, medians over members valid at all of them
+  const sq = (x, j) => { if (!wk) return null; const ends = []; for (let t = t0 + j; t >= t0 && ends.length < GI.wk; t--) if (t === t0 + j || wk[t] !== wk[t + 1]) ends.push(t);
+    if (ends.length < GI.wk) return null; ends.reverse(); const V = x.M.filter(p => ends.every(t => ok(p, t - t0)));
+    return ends.map(t => { const jj = t - t0; return V.length ? hqState(median(V.map(p => p.lg[jj])), median(V.map(p => p.sh[jj] - p.lg[jj] / 5))) : null; }); };
+  const gates = (x, j) => { const D = x.d[j], q = sq(x, j); let k = 0; if (q) for (let i = q.length - 1; i >= 0 && giUp(q[i]); i--) k++;
+    const g2 = !!q && q.every(s => s) && k >= 1 && k <= 3 && q.slice(0, q.length - k).filter(giDn).length >= 2;
+    const g3a = D.n >= GI.minN && D.rS != null && D.rS <= GI.rankTop, g3b = D.sh != null && D.sh > 0, g3c = D.rR != null && D.rR > 0;
+    const g4a = D.b21 != null && D.b21 >= GI.br21, g4b = j >= 5 && D.b50 != null && x.d[j - 5].b50 != null && D.b50 > x.d[j - 5].b50;
+    return {q, g2, g3a, g3b, g3c, g4a, g4b, all: g2 && g3a && g3b && g3c && g4a && g4b}; };
+  const out = new Map(), byG = new Map();
+  for (const x of G) {
+    const J = W - 1, D = x.d[J], now = gates(x, J);
+    let held = 0; for (let j = J; j > J - GI.persist && j >= 0; j--) if (gates(x, j).all) held++;
+    let age = null, plus = false;
+    if (giUp(D.st)) { for (let j = J; j >= 1; j--) if (giUp(x.d[j].st) && giDn(x.d[j - 1].st)) { age = J - j + 1; break; } if (age == null) plus = true; }
+    const miss = [];
+    if (D.n < GI.gMin) miss.push(`${D.n} names with history (needs ${GI.gMin})`);
+    if (!now.g2) miss.push(now.q && now.q.every(s => s) ? "no fresh turn in the weekly squares" : "weekly squares incomplete");
+    if (!now.g3a) miss.push(`RS speed rank ${D.rS ?? "—"} (needs top ${GI.rankTop})`);
+    if (!now.g3b) miss.push("behind SPY over 2 weeks");
+    if (!now.g3c) miss.push("behind RSP over 2 weeks");
+    if (!now.g4a) miss.push(`${D.b21 == null ? "—" : D.b21.toFixed(0)}% above the 21 EMA (needs ${GI.br21}%)`);
+    if (!now.g4b) miss.push("% above the 50 SMA not higher than 5 sessions ago");
+    if (held < GI.persistMin) miss.push(`gates held ${held} of the last ${GI.persist} sessions (needs ${GI.persistMin})`);
+    if (!(age != null && age <= GI.turnMax)) miss.push(age != null ? `turned ${age} sessions ago (over ${GI.turnMax})` : plus ? `up for the whole ${W}-session window` : "not turned up");
+    const pass = !miss.length;
+    // stock side
+    const bl = x.M.map(p => ({p, v: p.r10 != null && p.r21 != null ? (p.r10 + p.r21) / 2 : null}));
+    const val = bl.filter(o => o.v != null), med10 = median(x.M.map(p => p.r10));
+    const G2 = {name: x.name, n: D.n, rs2: D.n >= GI.minN ? D.sh : null, rs10: D.n >= GI.minN ? D.lg : null, spd: D.n >= GI.minN ? D.sp : null, rsR: D.n >= GI.minN ? D.rR : null,
+      sq: now.q ? now.q.map(s => GI_LET[s] || "-").join("") : "", age, plus, W, r2: D.r2 ?? null, rS: D.rS ?? null, r10: D.r10 ?? null,
+      b21: D.b21, b50: D.b50, b50c: J >= 5 && D.b50 != null && x.d[J - 5].b50 != null ? D.b50 - x.d[J - 5].b50 : null, held, pass, miss, med10};
+    byG.set(x.name, G2);
+    const passers = [];
+    for (const o of bl) {
+      const p = o.p, r = p.r, pct = o.v == null || val.length < 2 ? null : 100 * (val.filter(z => z !== o && z.v < o.v).length + 0.5 * val.filter(z => z !== o && z.v === o.v).length) / (val.length - 1);
+      const s = s61Of(r), X = s && s.x, lp = lpOf(r.sym), sm = []; let extOnly = false;
+      if (/^biotechnology$/i.test(String(r.industry || "").trim())) sm.push("Biotechnology (excluded)");
+      if (!X) sm.push("no Entry Check numbers"); else {
+        if (!(X.close > GI.px)) sm.push(`price ${f2(X.close)} (needs over $${GI.px})`);
+        if (!(X.dv20 >= GI.liq)) sm.push(`$${fin(X.dv20) ? (X.dv20 / 1e6).toFixed(0) : "—"}M a day (needs $${GI.liq / 1e6}M)`);
+        if (!(pct != null && pct >= GI.pctl)) sm.push(`group percentile ${pct == null ? "—" : pct.toFixed(0)} (needs ${GI.pctl})`);
+        if (!(lp && fin(lp.rs1m) && lp.rs1m > 0)) sm.push("RS 1M change not above 0");
+        if (!(X.close > X.e21)) sm.push("under the 21 EMA"); else if (!X.e21Up) sm.push("21 EMA not rising");
+        if (!(X.close > X.s50)) sm.push("under the 50 SMA");
+        if (!(fin(X.s200) && X.close > X.s200)) sm.push("under the 200 SMA");
+        if (!(fin(X.d21) && X.d21 <= GI.ext21)) { sm.push(`${fin(X.d21) ? X.d21.toFixed(2) : "—"} ADR above the 21 EMA (max ${GI.ext21})`); if (fin(X.d21)) extOnly = sm.length === 1; }
+        const en = s.er ? s.er.n : null; if (en == null) sm.push("earnings date unknown"); else if (en < GI.erMin) sm.push(`earnings in ${en} sessions`);
+      }
+      const sPass = pass && !sm.length, sPass2 = sPass && X.dv20 >= GI.liq2;
+      let status = "";
+      if (pass) status = !sPass ? (extOnly && sm.length === 1 ? "Wait for pullback" : "Out") : X.dB > GI.above ? "Wait for pullback" : X.dB >= 0 || X.d9 >= GI.l2 ? "In zone" : "Below zone";
+      const m = pass ? sm : [...miss.map(t => "group: " + t), ...sm];
+      const rec = {g: G2, stk: p.r10 != null && med10 != null ? p.r10 - med10 : null, pct, sPass, sPass2, status, top: "", miss: m};
+      out.set(r.sym, rec); if (sPass) passers.push(rec);
+    }
+    passers.sort((a, b) => (b.pct ?? -1) - (a.pct ?? -1)).slice(0, GI.top).forEach(rec => rec.top = "Y");
+  }
+  GIC.v = {stocks: out, groups: byG, to: HIST.dates[HIST.nD - 1], today: !!tb};
+  return GIC.v;
+}
+const giOf = sym => { const A = giAll(); return A ? A.stocks.get(sym) || null : null; };
+const GI_FEED_H = ["Grp N", "Grp RS 2W", "Grp RS 10W", "Grp RS Speed", "Grp RS 2W vs RSP", "Grp States 5W", "Grp Turn Age", "Grp Rank 2W", "Grp Rank Speed", "Grp Rank 10W",
+  "Grp Breadth 21E", "Grp Breadth 50S", "Grp Breadth 50S Chg 5d", "Stk vs Grp 2W", "Stk Grp Pctl", "GI Group Pass", "GI Stock Pass", "GI Stock Pass $100M", "GI Status", "GI Top 2", "GI Misses"];
+const gi2 = v => fin(v) ? +v.toFixed(2) : "", gi1 = v => fin(v) ? +v.toFixed(1) : "";
+FEED_EXT.push({h: GI_FEED_H, prep: () => giAll(), cells: (o, A) => {
+  const r = o.r; if (!r || r.etf || !A) return null; const x = A.stocks.get(r.sym); if (!x) return null; const g = x.g;
+  return [g.n, gi2(g.rs2), gi2(g.rs10), gi2(g.spd), gi2(g.rsR), g.sq, g.age != null ? g.age : g.plus ? g.W + "+" : "", g.r2 ?? "", g.rS ?? "", g.r10 ?? "",
+    gi1(g.b21), gi1(g.b50), gi1(g.b50c), gi2(x.stk), fin(x.pct) ? Math.round(x.pct) : "", g.pass ? "Y" : "N", x.sPass ? "Y" : "N", x.sPass2 ? "Y" : "N", x.status, x.top, x.miss.join("; ")]; }});
+</script>
