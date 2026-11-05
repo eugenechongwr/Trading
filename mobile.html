@@ -416,16 +416,6 @@ tr.thin td,.tk.thin{opacity:.5}
 .sdots{display:inline-flex;gap:2px;vertical-align:middle}
 .sdots i{width:8px;height:8px;border-radius:50%;background:var(--surface-3)}
 .sdots i.on{background:var(--down)}
-/* ---------------- v4: theme radar + ladder ---------------- */
-.rsel{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
-.rsel .gchip{border-width:1.5px;border-style:solid}
-.lad{display:grid;grid-template-columns:minmax(140px,210px) minmax(80px,1fr) 58px auto minmax(90px,140px);gap:8px;align-items:center;padding:3px 0;border-bottom:1px dotted var(--line)}
-.lad .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px}
-.lad .nm span[data-radd]{cursor:pointer}
-.lad .nm span[data-radd]:hover{text-decoration:underline}
-.lad .v{text-align:right;font-variant-numeric:tabular-nums;font-size:12px}
-.lad .hz{display:flex;gap:3px}
-.lad .hz .rs{min-width:26px;font-size:11px}
 .rtab{table-layout:fixed}.rtab td,.rtab th{white-space:normal;text-align:left}
 /* ---------------- v4: screens grouped ---------------- */
 .scrcat{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);margin:6px 0 6px;font-weight:600}
@@ -507,9 +497,6 @@ td.t2lo{background:color-mix(in oklab, var(--good) 22%, transparent)}
 .wsbar span{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#111}
 .wsleg{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:11.5px;color:var(--ink-2)}
 .wsleg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
-.wsck{display:grid;grid-template-columns:minmax(220px,320px) minmax(0,1fr);gap:16px}
-.wsck textarea{width:100%;font-family:var(--mono);font-size:12px}
-@media (max-width:900px){.wsck{grid-template-columns:1fr}}
 .lvrow{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin:6px 0 0!important}
 .lvrow .lbl{margin-right:2px}
 .lvc{font-size:11.5px;border-radius:6px;padding:2px 7px;background:var(--surface-2);border:1px solid var(--line);cursor:pointer;white-space:nowrap}
@@ -517,28 +504,6 @@ td.t2lo{background:color-mix(in oklab, var(--good) 22%, transparent)}
 .lvc.long{border-color:color-mix(in oklab,var(--st1) 50%,var(--line))}.lvc.short{border-color:color-mix(in oklab,var(--down) 50%,var(--line))}
 .lvc i{font-style:normal;color:var(--ink-3);font-size:10.5px}
 .flag.lvf{background:var(--up-soft);color:var(--ink)}
-/* ---------------- Spec 6 × Pivot side by side ---------------- */
-.s6cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
-@media (max-width:1000px){.s6cols{grid-template-columns:1fr}}
-.s6cols .lbl{display:block;margin-bottom:5px}
-.s6w{margin-bottom:3px}
-/* Board plan vs Pivot script (18 Oct) */
-.s6intro{font-size:12.5px;color:var(--ink-2);margin:0 0 10px;max-width:1100px}
-.s6c{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--surface-2)}
-.s6c-h{display:flex;align-items:center;gap:8px}.s6n{font-weight:700;font-size:12px;padding:0 7px;border-radius:9px;background:var(--chip)}
-.s6c-b{margin-top:6px}
-.s6t .s6g{font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-2);border-bottom:2px solid var(--accent)}
-.s6t td{vertical-align:middle}
-.rcks{display:inline-flex;gap:3px;flex-wrap:wrap;vertical-align:middle}
-.rck{font-size:10.5px;font-weight:650;padding:1px 5px;border-radius:5px;border:1px solid transparent;line-height:15px}
-.rck.ok{background:var(--good-soft);color:var(--good)} .rck.no{background:var(--down-soft);color:var(--down)} .rck.na{background:var(--chip);color:var(--ink-3)}
-.s6v{font-size:11px;font-weight:650;padding:1px 7px;border-radius:9px;white-space:nowrap}
-.v-both{background:var(--good-soft);color:var(--good)} .v-plan{background:var(--up-soft);color:var(--up)} .v-pivot{background:var(--warn-soft);color:var(--med)}
-.rules2 .r2{display:grid;grid-template-columns:1fr 1fr;gap:6px 28px}
-.rules2 .r2 > div:not(.r2diff){min-width:0}
-.rules2 .r2diff{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px 18px;border-top:1px solid var(--line);padding-top:8px;font-size:12px}
-.rules2 .r2diff i{font-style:normal;font-weight:650;margin-right:4px}
-@media (max-width:1000px){.rules2 .r2{grid-template-columns:1fr}}
 /* ---------------- self-check + compact ticker-panel notes ---------------- */
 .scv{display:flex;flex-direction:column;gap:3px;border-radius:9px;padding:10px 12px;margin-bottom:10px;border-left:4px solid}
 .scv b{font-size:16px}.scv span{font-size:12px;color:var(--ink-2)}
@@ -638,7 +603,7 @@ html.ws.sbmin #side .sb-brand b,html.ws.sbmin .sb-file,html.ws.sbmin .nvsec,html
 html.ws.sbmin .sb-brand{flex-direction:column;padding:12px 0 8px}
 html.ws.sbmin .sb-tools{flex-direction:column}
 html.ws.sbmin .sb-foot{display:flex;padding:10px 6px;justify-content:center}
-html.ws.sbmin .sb-foot .sb-keys,html.ws.sbmin #wsClassic,html.ws.sbmin #setBtn .t{display:none}
+html.ws.sbmin .sb-foot .sb-keys,html.ws.sbmin #setBtn .t{display:none}
 html.ws.sbmin .sb-ic{margin:0}
 html.ws.sbmin #tabs button{grid-template-columns:1fr;padding:8px 0;justify-items:center;font-size:0;position:relative}
 html.ws.sbmin #tabs button::after{display:none}
@@ -803,7 +768,7 @@ html.mob svg.plot{touch-action:pan-y}
 html.mob .barlist{max-height:none}
 html.mob .screens{grid-template-columns:minmax(0,1fr)!important}
 /* every wide row on the desktop grids collapses to one column */
-html.mob .gapgrid,html.mob .gbody,html.mob .nwgrid,html.mob .tape,html.mob .tape .lines,html.mob .hlcols,html.mob .wsck,html.mob .s6cols,html.mob .scgrid,html.mob .rules2 .r2,html.mob .shgate,html.mob .prow,html.mob .mv{grid-template-columns:minmax(0,1fr)}
+html.mob .gapgrid,html.mob .gbody,html.mob .nwgrid,html.mob .tape,html.mob .tape .lines,html.mob .hlcols,html.mob .scgrid,html.mob .shgate,html.mob .prow,html.mob .mv{grid-template-columns:minmax(0,1fr)}
 html.mob .mbgrid{grid-template-columns:repeat(2,minmax(0,1fr))}
 html.mob .tape .verdict,html.mob .shgate .verdict{border-right:0;border-bottom:1px solid var(--line)}
 html.mob .gside{border-left:0;padding-left:0}
@@ -1050,7 +1015,6 @@ document.documentElement.classList.add("ws", "mob");
       <div class="g1" id="spotlight"></div>
       <div class="card" id="moneyCard"></div>
       <div class="card" id="glbCard"></div>
-      <div class="g2e"><div class="card" id="radarCard"></div><div class="card" id="ladderCard"></div></div>
       <div class="g2">
         <div class="card"><div class="hd"><h2>Rotation map</h2><span class="sub">across: longer-term RS (3M/6M) · up: short-term RS minus longer-term · dot size = members</span></div><div style="padding:0 8px 6px"><svg id="rotPlot" class="plot" height="380"></svg></div></div>
         <div class="card"><div class="hd"><h2>Breadth inside groups</h2><span class="sub">share of members above the 21 EMA / 50 SMA · in the buy zone</span></div><div class="bd barlist" id="thBreadth" style="max-height:380px"></div></div>
@@ -3018,7 +2982,6 @@ function renderThemes(){
       <td class="l">${g.members.filter(r => ecsIn(r, 1, 2)).sort((a, b) => (b.rs ?? 0) - (a.rs ?? 0)).slice(0, 4).map(r => tkChip(r, r.rs ?? "", ecsOf(r) === 1 ? "buy" : "")).join("") || "<span class='dim'>—</span>"}</td>
       <td>${pct0(g.a21)}</td><td>${pct0(g.a50)}</td><td>${g.buy ?? "—"}</td>
       ${hz.filter(h => h.k !== "today").map(h => `<td class="${cls(g["med_" + h.k])}">${pc(g["med_" + h.k], 1)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
-  renderRadar(G);
   $("thTable").querySelectorAll("th[data-tk]").forEach(th => th.onclick = () => { const k = th.dataset.tk; S.ui.thSort = so.k === k ? {k, d: -so.d} : {k, d: k === "name" ? 1 : -1}; renderThemes(); });
 }
 
@@ -4697,66 +4660,8 @@ function renderTodayPlot(){
   $("gapBox").onclick = e => { const g = e.target.closest("[data-gsel]"); if (!g || e.target.closest(".tk")) return; e.preventDefault(); S.ui.gapSel = S.ui.gapSel === g.dataset.gsel ? "" : g.dataset.gsel; renderTodayPlot(); };
 }
 
-/* =====================================================================
-   THEMES — strength radar + strength ladder
-   ===================================================================== */
-const RCOL = ["var(--st2)", "var(--st1)", "var(--st4)", "var(--st3)"];
-S.ui.radarSel = store.get("adrb.radarSel", null);
-S.ui.ladN = 15;
-function radarAxes(){
-  const H = k => S.hzAvail && S.hzAvail.some(h => h.k === k);
-  return [
-    ...[["p1w", "1W"], ["p1m", "1M"], ["p3m", "3M"], ["p6m", "6M"]].filter(([k]) => H(k)).map(([k, l]) => ({l: `RS ${l}`, f: g => g["grs_" + k], raw: g => `median ${pc(g["med_" + k], 1)} · RS ${g["grs_" + k] ?? "—"}`})),
-    {l: "Above 21 EMA", f: g => g.a21 == null ? null : g.a21 * 100, raw: g => pct0(g.a21) + " of members"},
-    {l: "Above 50 SMA", f: g => g.a50 == null ? null : g.a50 * 100, raw: g => pct0(g.a50) + " of members"},
-    {l: "Turning up", f: g => g.mom == null ? null : clamp(50 + g.mom * 50 / 60, 0, 100), raw: g => `short-term minus long-term RS ${sg(g.mom, 0)}`},
-    {l: "Names in or just under the zone", f: g => g.zoneRank ?? null, raw: g => g.buy == null ? "needs the price history" : `${g.buy + g.weak} of ${g.n} names · ranked vs other groups`}
-  ];
-}
-function renderRadar(G){
-  const card = $("radarCard"), lad = $("ladderCard"); if (!card) return;
-  const big = S.groups.filter(g => g.grs != null);
-  rate(big, g => g.buy == null ? null : (g.buy + g.weak) / g.n, "zoneRank");
-  const byName = new Map(big.map(g => [g.name, g]));
-  let sel = (S.ui.radarSel || []).filter(n => byName.has(n));
-  if (!sel.length) sel = [...G].sort((a, b) => (b.grs ?? 0) - (a.grs ?? 0)).slice(0, 3).map(g => g.name);
-  S.ui.radarSel = sel;
-  const setSel = a => { S.ui.radarSel = a.slice(0, 4); store.set("adrb.radarSel", S.ui.radarSel); renderRadar(G); };
-  const AX = radarAxes(), gs = sel.map(n => byName.get(n));
-  const W = Math.max(420, (card.clientWidth || 560) - 24), Hh = 400, cx = W / 2, cy = Hh / 2 + 4, R = Math.min(W, Hh) / 2 - 64, n = AX.length;
-  const P = (i, v) => { const a = -Math.PI / 2 + i * 2 * Math.PI / n, rr = R * clamp(v ?? 0, 0, 100) / 100; return [cx + rr * Math.cos(a), cy + rr * Math.sin(a)]; };
-  let s = "";
-  for (const ring of [25, 50, 75, 100]) s += `<polygon points="${AX.map((_, i) => P(i, ring).join(",")).join(" ")}" fill="none" stroke="var(--line)" ${ring === 50 ? 'stroke-dasharray="3 3" stroke="var(--line-strong)"' : ""}/>`;
-  AX.forEach((a, i) => { const [x, y] = P(i, 100), [lx, ly] = P(i, 122); s += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="var(--line)"/><text x="${lx}" y="${ly + 4}" text-anchor="${Math.abs(lx - cx) < 8 ? "middle" : lx > cx ? "start" : "end"}" style="fill:var(--ink-2);font-size:11px">${esc(a.l)}</text>`; });
-  s += `<text x="${cx + 4}" y="${cy - R / 2 - 2}" style="fill:var(--ink-3);font-size:9px">50</text>`;
-  gs.forEach((g, j) => { const pts = AX.map((a, i) => P(i, a.f(g))); s += `<polygon points="${pts.map(p => p.join(",")).join(" ")}" fill="${RCOL[j]}" fill-opacity=".12" stroke="${RCOL[j]}" stroke-width="2"/>` + pts.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="3.5" fill="${RCOL[j]}"><title>${esc(g.name)} · ${esc(AX[i].l)}: ${esc(AX[i].raw(g))}</title></circle>`).join(""); });
-  const opts = [...big].sort((a, b) => (b.grs ?? 0) - (a.grs ?? 0)).filter(g => !sel.includes(g.name));
-  card.innerHTML = `<div class="hd"><h2>Theme strength radar</h2><span class="sub">up to 4 groups side by side · further out = stronger · 50 = middle of the pack</span></div>
-    <div class="bd" style="padding-bottom:4px"><div class="rsel">${gs.map((g, j) => `<span class="gchip" style="border-color:${RCOL[j]}"><span class="sw" style="background:${RCOL[j]}"></span><b data-gopen="${esc(g.name)}" style="cursor:pointer">${esc(g.name)}</b> <span class="small">${esc(g.state)} · RS ${g.grs}</span><i data-rdel="${esc(g.name)}">×</i></span>`).join("")}
-      ${sel.length < 4 ? `<select id="rAdd"><option value="">+ add a group…</option>${opts.map(g => `<option value="${esc(g.name)}">${esc(g.name)} · RS ${g.grs}</option>`).join("")}</select>` : ""}
-      <span class="seg"><button data-rq="top">Top 3</button><button data-rq="imp">Fastest improving</button><button data-rq="weak">Weakest 3</button></span></div></div>
-    <svg viewBox="0 0 ${W} ${Hh}" style="width:100%;height:${Hh}px;display:block">${s}</svg>
-    <div class="bd"><table class="mini rtab"><thead><tr><th class="l">Axis</th>${gs.map((g, j) => `<th class="l" style="color:${RCOL[j]}">${esc(g.name.length > 22 ? g.name.slice(0, 21) + "…" : g.name)}</th>`).join("")}</tr></thead><tbody>${AX.map(a => `<tr><td class="l">${esc(a.l)}</td>${gs.map(g => `<td class="l small">${esc(a.raw(g))}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
-  card.querySelectorAll("[data-rdel]").forEach(x => x.onclick = () => setSel(sel.filter(n => n !== x.dataset.rdel)));
-  const add = card.querySelector("#rAdd"); if (add) add.onchange = () => { if (add.value) setSel([...sel, add.value]); };
-  card.querySelectorAll("[data-rq]").forEach(b => b.onclick = () => {
-    const q = b.dataset.rq, pool = [...G];
-    const pick = q === "top" ? pool.sort((a, b2) => (b2.grs ?? 0) - (a.grs ?? 0)) : q === "imp" ? pool.filter(g => g.mom != null).sort((a, b2) => b2.mom - a.mom) : pool.sort((a, b2) => (a.grs ?? 0) - (b2.grs ?? 0));
-    setSel(pick.slice(0, 3).map(g => g.name));
-  });
-  // ladder
-  const L = [...G].sort((a, b) => (b.grs ?? 0) - (a.grs ?? 0)).slice(0, S.ui.ladN || 15);
-  const hz = (S.hzAvail || []).filter(h => ["p1w", "p1m", "p3m"].includes(h.k));
-  lad.innerHTML = `<div class="hd"><h2>Theme strength ladder</h2><span class="sub">strongest groups first · bar = group RS · arrow = turning up or down · click a name to put it on the radar</span><span class="spacer"></span><span class="lbl">Show</span><select id="ladN">${[10, 15, 25, 40, 999].map(v => `<option value="${v}" ${S.ui.ladN === v ? "selected" : ""}>${v === 999 ? "All" : "Top " + v}</option>`).join("")}</select></div>
-    <div class="bd">${L.map(g => `<div class="lad"><div class="nm"><span class="${sel.includes(g.name) ? "pos" : ""}" data-radd="${esc(g.name)}" title="Put on the radar">${esc(g.name)}</span> <span class="small">${g.n}</span></div>
-      <div class="hbar" style="height:12px"><span style="width:${g.grs}%;background:${gStateColor(g.state)}"></span></div>
-      <div class="v"><b>${g.grs}</b> <span class="${(g.mom ?? 0) >= 0 ? "pos" : "neg"}" title="short-term minus long-term RS ${sg(g.mom, 0)}">${g.mom == null ? "" : g.mom > 15 ? "▲▲" : g.mom >= 0 ? "▲" : g.mom < -15 ? "▼▼" : "▼"}</span></div>
-      <div class="hz">${hz.map(h => rsBadge(g["grs_" + h.k], `${h.label}: median ${pc(g["med_" + h.k])}`)).join("")}</div>
-      <div class="small dim">${g.leaders.slice(0, 3).map(r => r.sym).join(" ")}</div></div>`).join("") || `<div class="empty">No groups match.</div>`}
-      <div class="small" style="margin-top:6px">Columns after the bar: group RS over ${hz.map(h => h.short).join(" / ")} · then the top 3 names by RS.</div></div>`;
-  lad.querySelectorAll("[data-radd]").forEach(x => x.onclick = () => { const nm = x.dataset.radd; setSel(sel.includes(nm) ? sel.filter(n => n !== nm) : [...sel, nm].slice(-4)); });
-  $("ladN").onchange = e => { S.ui.ladN = +e.target.value; renderRadar(G); };
-}
+/* THEMES — strength radar + strength ladder: removed 5 Nov 2026 (Eugene: radar + ladder not read; display only).
+   localStorage adrb.radarSel is left in storage, unused. */
 
 /* =====================================================================
    TABLE COLUMNS, SCREENS, FLAGS, DRAWER — additive extensions
@@ -5670,11 +5575,12 @@ $("tab-train").addEventListener("click", e => {
      current page's sections, sticky context bar with ticker search, Market/Today cards reordered top-down,
      two-column ticker panel (chart + numbers left, plan/checks · history/short · news · group tabs right) with a
      Market › Group › Stock context line, back, and prev/next through the list it was opened from.
-   Classic layout = the v4 page untouched (switching reloads; saved files restore themselves).
+   Classic layout = the v4 page untouched — REMOVED 5 Nov 2026 (Eugene: "Remove Classic"): html.ws is always set in <head>,
+   the sidebar button and the Settings switch are gone; adrb.layout is left in storage and ignored. The !WS branches below
+   are now unreachable on desktop and the phone (both always WS).
    ===================================================================== */
 const WS = document.documentElement.classList.contains("ws");
 const WSI = {list: [], restored: false, startTab: store.get("adrb.tab", null), secs: [], tpTab: store.get("adrb.tpTab", "plan") || "plan", hist: [], back: false};
-const setLayout = v => { store.set("adrb.layout", v); location.reload(); };
 
 /* ---------------- Shorts tab (both layouts) ---------------- */
 document.querySelector('#tabs button[data-tab="plan"]').insertAdjacentHTML("afterend", `<button data-tab="shorts">Shorts</button>`);
@@ -5994,7 +5900,7 @@ if (WS) {
     <div id="sbNav"></div>
     <div class="sb-blk"><span class="lbl">Files</span><div class="sb-files" id="sbFiles"></div></div>
     <div class="sb-blk sb-foot"><div class="sb-keys"><kbd>/</kbd> ticker search · <kbd>1</kbd>–<kbd>9</kbd> pages<br><kbd>←</kbd> <kbd>→</kbd> step the list in the ticker panel · <kbd>Esc</kbd> close</div>
-      <span class="sb-tools" id="sbTools"></span><button class="btn sm" id="wsClassic" title="Back to the top-tab layout (the page reloads; your saved files come back)">Classic layout</button></div>
+      <span class="sb-tools" id="sbTools"></span></div>
   </aside>`);
   $("sbFile").appendChild($("fileInfo"));
   // tabs → sidebar, in decision order with headings
@@ -6024,7 +5930,6 @@ if (WS) {
   if (store.get("adrb.sbMin", false)) document.documentElement.classList.add("sbmin");
   $("sbMin").onclick = () => { const on = document.documentElement.classList.toggle("sbmin"); store.set("adrb.sbMin", on); $("sbMin").textContent = on ? "»" : "«"; };
   if (store.get("adrb.sbMin", false)) $("sbMin").textContent = "»";
-  $("wsClassic").onclick = () => setLayout("classic");
   // tab switch → top of the page
   tabs.addEventListener("click", e => {
     const a = e.target.closest(".nvsec a[data-sec]");
@@ -6058,14 +5963,7 @@ if (WS) {
   });
 }
 
-/* ---------------- Settings: layout switch (both layouts) ---------------- */
-const _renderSettings1 = renderSettings;
-renderSettings = function(){
-  _renderSettings1();
-  const h = $("settings").querySelector("h3"); if (!h) return;
-  h.insertAdjacentHTML("afterend", `<h4>Layout</h4><div class="row"><div>Workspace layout<div class="d">Sidebar with the pages in top-down order, a jump list for the page you're on, ticker search, and the wide two-column ticker panel. Off = the classic top-tab layout. Switching reloads the page; your saved files come back on their own.</div></div><div><input type="checkbox" id="wsTog" ${WS ? "checked" : ""}></div></div>`);
-  $("wsTog").onchange = e => setLayout(e.target.checked ? "ws" : "classic");
-};
+/* 5 Nov 2026: the Settings "Workspace layout" switch is removed with the Classic layout (Eugene: "Remove Classic"). */
 </script>
 <script>
 "use strict";
@@ -6147,17 +6045,6 @@ function selfCheck(){
     const capped = CFG.perGroup > 0 && (gc[r.group] || 0) >= CFG.perGroup;
     F(capped || (pl.length >= CFG.planN && (r.rs ?? 0) <= minRs), r.sym, "Left off the plan without a reason", `RS ${r.rs}, not listed`, "in the plan");
   });
-  // Spec 6 × Pivot side-by-side list (when on): every name passes the location gates and the plan's shared filters
-  if (typeof s6On === "function" && s6On()) {
-    const L6 = s6List(), g6 = {};
-    L6.forEach((o, i) => { g6[o.r.group] = (g6[o.r.group] || 0) + 1;
-      F(o.x.pass && Object.values(o.x.g).every(v => v === true), o.r.sym, "Spec 6 × Pivot list: all location gates pass", o.x.why || "pass", "pass");
-      F(o.x.z9 <= 0.5 + 1e-12 || o.x.z21 <= 0.5 + 1e-12, o.r.sym, "Spec 6 × Pivot zone within 0.5 ADR of the 9 or 21", `${o.x.z9.toFixed(2)} | ${o.x.z21.toFixed(2)}`, "≤ 0.5");
-      F((o.r.rs ?? 0) >= CFG.rsMin, o.r.sym, "Spec 6 × Pivot list RS floor", o.r.rs, `≥ ${CFG.rsMin}`);
-      if (i) F((L6[i - 1].r.rs ?? 0) >= (o.r.rs ?? 0), o.r.sym, "Spec 6 × Pivot list ranked by RS", o.r.rs, "highest first"); });
-    F(L6.length <= CFG.planN, "—", "Spec 6 × Pivot list within the list size", L6.length, `≤ ${CFG.planN}`);
-    if (CFG.perGroup > 0) for (const g in g6) F(g6[g] <= CFG.perGroup, g, "Spec 6 × Pivot max per group", g6[g], `≤ ${CFG.perGroup}`);
-  }
   // rule settings vs the written spec (Chart & Entry Spec v6.0) — a change here is allowed, just visible
   const sp = (l, ok, v, want) => R.spec.push({l, ok, v, want});
   const zz = (CFG.zones && CFG.zones[CFG.zMode]) || DEFAULTS.zones[CFG.zMode];
@@ -6484,7 +6371,6 @@ renderTab = function(t){ if (t === "market" && S.snap) { sbPaint(); if (S.has.hi
    Theme gate (manual in the script) is left to MAP. Triggers (T1–T4) stay on the TradingView chart.
    ===================================================================== */
 const S6 = {zone: 0.5, ext: 4, lod: 0.6, room: 2, buf: 0.05, adrN: 20, slope: 5, wk: 10, hiN: 10, sw: 5, swMax: 25};
-const s6On = () => !!store.get("adrb.s6p", false);
 const S6H = {key: "", map: new Map()};
 function s6Hist(r){
   if (!S.has.hist || !S.snap) return null;
@@ -6547,58 +6433,10 @@ function s6Of(r){
   return {g, pass: !fail && !unknown, why: fail ? fail[1] : unknown ? `needs ${unknown[0] === "wk" || unknown[0] === "s50" ? "the price history" : "data"}` : "", z9, z21, ext, e9, e21, s50, adrPct, adrAbs,
     lod, lodOk: lod == null ? null : lod <= S6.lod, stop, res, room, roomOk: risk > 0 ? (res == null || room >= S6.room) : null, h};
 }
-// the side-by-side list: same pool, RS floor, earnings, group cap and list size as the plan — only the location rules differ
-function s6List(){
-  const pool = S.stocks.filter(r => (!CFG.liqOnly || !r.thin) && gOK(r));
-  const cands = pool.filter(r => (r.rs ?? 0) >= CFG.rsMin && (!CFG.hideER || !r.erSoon)).map(r => ({r, x: s6Of(r)})).filter(o => o.x && o.x.pass).sort((a, b) => (b.r.rs ?? 0) - (a.r.rs ?? 0));
-  const perG = {}, list = [];
-  for (const o of cands) { if (list.length >= CFG.planN) break; if (CFG.perGroup > 0 && (perG[o.r.group] || 0) >= CFG.perGroup) continue; perG[o.r.group] = (perG[o.r.group] || 0) + 1; list.push(o); }
-  return list;
-}
-function renderS6(){
-  const box = $("s6pBox"); if (!box) return;
-  if (!s6On()) { box.innerHTML = `<div class="hd"><h2>Spec 6.0 × Pivot — side by side</h2><span class="sub">off · shows which names your new Spec 6 × Pivot location rules let through next to today's rules. Never changes the plan.</span><span class="spacer"></span><button class="btn sm" id="s6Tog">Turn on</button></div>`; $("s6Tog").onclick = () => { store.set("adrb.s6p", true); renderS6(); }; return; }
-  const L = s6List(), plan = S.plan.plan, inP = new Set(plan.map(r => r.sym)), inS = new Set(L.map(o => o.r.sym));
-  const both = plan.filter(r => inS.has(r.sym)), onlyP = plan.filter(r => !inS.has(r.sym)), onlyS = L.filter(o => !inP.has(o.r.sym));
-  const why = r => { const x = s6Of(r); return x ? x.why || "list size / group cap" : "no data"; };
-  const ck = v => v == null ? `<span class="dim">·</span>` : v ? `<span class="ok-t">✓</span>` : `<span class="neg">✗</span>`;
-  const fx = v => v == null ? "—" : v.toFixed(2) + "×";
-  box.innerHTML = `<div class="hd"><h2>Spec 6.0 × Pivot — side by side</h2><span class="sub">location gates of your Spec 6 × Pivot script (its WATCH) · same RS floor, earnings, group cap and list size as the plan · the plan itself is unchanged</span><span class="spacer"></span><button class="btn sm" id="s6Tog">Turn off</button></div>
-    <div class="bd">
-      <div class="s6cols">
-        <div><div class="lbl">Both rule sets · ${both.length}</div>${both.map(r => tkChip(r, r.rs ?? "")).join("") || `<span class="dim">none</span>`}</div>
-        <div><div class="lbl">Only today's rules · ${onlyP.length}</div>${onlyP.map(r => `<div class="s6w">${tkChip(r, r.rs ?? "")} <span class="small">S6×P: ${esc(why(r))}</span></div>`).join("") || `<span class="dim">none</span>`}</div>
-        <div><div class="lbl">Only Spec 6 × Pivot · ${onlyS.length}</div>${onlyS.map(o => `<div class="s6w">${tkChip(o.r, o.r.rs ?? "")} <span class="small">today: ${esc(o.r.state ? ST[o.r.state].name : "—")}</span></div>`).join("") || `<span class="dim">none</span>`}</div>
-      </div>
-      ${L.length ? `<div class="tscroll" style="max-height:420px;margin-top:10px"><table class="mini"><thead><tr><th class="l">Ticker</th><th>RS</th><th class="l">Group</th><th>Weekly</th><th>&gt; 21E</th><th>50S ↑</th><th>Zone 9 | 21</th><th>Ext</th><th>LoD est.</th><th>Room est.</th><th>Resistance</th><th>Grade</th><th class="l">Today's rules</th></tr></thead><tbody>
-        ${L.map(({r, x}) => `<tr data-sym="${esc(r.sym)}"><td class="l sym">${esc(r.sym)}</td><td>${rsBadge(r.rs)}</td><td class="l small">${esc(r.group)}</td><td>${ck(x.g.wk)}</td><td>${ck(x.g.e21)}</td><td>${ck(x.g.s50)}</td><td>${fx(x.z9)} | ${fx(x.z21)}</td><td>${fx(x.ext)}${r.postER ? " R" : ""}</td><td>${x.lod == null ? "—" : `${ck(x.lodOk)} ${fx(x.lod)}`}</td><td>${x.room == null ? (x.roomOk ? `${ck(true)} clear` : "—") : `${ck(x.roomOk)} ${x.room.toFixed(2)}R`}</td><td>${x.res == null ? "—" : f2(x.res)}</td><td>${sizeGrade(r).g}</td><td class="l">${statusPill(r)}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty">No name passes the Spec 6 × Pivot location gates with the plan's RS floor right now.</div>`}
-      <div class="small" style="margin-top:6px">Gates at the last price: weekly close above a rising 10-week SMA · above the daily 21 EMA · above a rising 50 SMA · within ${S6.zone} ADR of the 9 or the 21 EMA · ≤ ${S6.ext} ADR above the 50 SMA (R = waived after earnings). ADR = the script's 20-session high/low average. <b>LoD and room are estimates</b> with the stop at today's low − ${S6.buf} ADR — the script uses the 30-min pullback low. Triggers (T1 reversal break etc.) stay on your TradingView chart.${S.has.hist ? "" : " <b>Load the price history</b> for the weekly and 50-SMA-rising gates."}</div>
-    </div>`;
-  $("s6Tog").onclick = () => { store.set("adrb.s6p", false); renderS6(); };
-  box.querySelector("tbody")?.addEventListener("click", e => { const tr = e.target.closest("tr[data-sym]"); if (tr) openDrawer(tr.dataset.sym); });
-}
-$("shortBox").insertAdjacentHTML("beforebegin", `<div class="card g1" id="s6pBox"></div>`);
-// 31 Oct (structure only): was a renderTab override; now a "tab" hook — same code, same order (BOARD HOOKS, block 1)
-hookOn("tab", "s6p", t => { if (t === "plan" && S.snap) renderS6(); });
-// ticker panel (workspace): the gate table under Plan & checks when the comparison is on
-if (WS) {
-  const _tpBuild1 = tpBuild;
-  tpBuild = function(r){
-    _tpBuild1(r);
-    if (!s6On() || r.etf) return;
-    const x = s6Of(r), pane = document.querySelector('#drawer .tp-pane[data-p="plan"]'); if (!x || !pane) return;
-    const row = (t, ok, v) => `<div class="chk"><span class="ic ${ok == null ? "na" : ok ? "ok" : "no"}">${ok == null ? "·" : ok ? "✓" : "✕"}</span><div>${t}</div><div class="small">${v}</div></div>`;
-    pane.querySelector(".tkt")?.insertAdjacentHTML("afterend", `<div class="s6p"><h4 style="margin:10px 0 2px;font-size:12px">Pivot script · Spec 6.0 × Pivot — ${x.pass ? `<span class="ok-t">WATCH (location passes)</span>` : `<span class="neg">NO · ${esc(x.why)}</span>`}</h4>
-      ${row("1 · Weekly close above a rising 10-week SMA", x.g.wk, x.h && x.h.wk ? `${f2(x.h.wk.c)} vs ${f2(x.h.wk.s1)}` : "needs history")}
-      ${row("2 · Above the daily 21 EMA (hard veto)", x.g.e21, f2(x.e21))}
-      ${row("3 · Above a rising daily 50 SMA", x.g.s50, x.s50 == null ? "—" : f2(x.s50))}
-      ${row(`4 · Within ${S6.zone} ADR of the 9 or 21 EMA`, x.g.zone, `${x.z9.toFixed(2)}× | ${x.z21.toFixed(2)}×`)}
-      ${row(`5 · ≤ ${S6.ext} ADR above the 50 SMA${r.postER ? " (waived after earnings)" : ""}`, x.g.ext, x.ext == null ? "—" : x.ext.toFixed(2) + "×")}
-      ${row(`9 · LoD ≤ ${S6.lod} ADR (estimate, today's low)`, x.lodOk, x.lod == null ? "—" : x.lod.toFixed(2) + "×")}
-      ${row(`10 · Room to first resistance ≥ ${S6.room}R (estimate)`, x.roomOk, x.room == null ? (x.roomOk ? "clear" : "—") : `${x.room.toFixed(2)}R to ${f2(x.res)}`)}
-      <div class="small">ADR ${x.adrPct.toFixed(2)}% · stop estimate ${x.stop == null ? "—" : f2(x.stop)} (today's low − ${S6.buf} ADR; the chart uses the 30-min pullback low). Trigger on TradingView.</div></div>`);
-  };
-}
+// 5 Nov 2026 (Eugene: "Keep plan, drop cards"): the side-by-side card (s6List, renderS6, its tab hook and the ticker-panel
+// gate table) is removed. s6Of / s6Hist stay: the Board log's frozen facts and the Entry Check's shadow pivot read them.
+// #s6pBox stays as an empty, hidden anchor — the Entry Check card is placed relative to it.
+$("shortBox").insertAdjacentHTML("beforebegin", `<div class="card g1 hidden" id="s6pBox"></div>`);
 </script>
 <script>
 "use strict";
@@ -6708,50 +6546,14 @@ Object.assign(SC_CAT, {ws2a: "Leadership", ws4b: "Setups", ws3a: "Weakness (shor
 const _flags2 = flagsHTML;
 flagsHTML = function(r){ const s = S.has.hist ? stageOf(r) : null; return _flags2(r) + (s && s.lab !== "N/A" ? ` <span class="wsp sm" style="--c:${WSL[s.lab].c}" title="Weinstein stage ${s.lab} · ${esc(WSL[s.lab].t)} (Deepvue-style reference)">S${s.lab}</span>` : ""); };
 
-/* ---------------- stage distribution (Market) + match against Deepvue (Data check) ---------------- */
+/* ---------------- stage distribution (Market) ---------------- */
 function stageDistHTML(rows){
   const cnt = {}; WS_ORDER.forEach(k => cnt[k] = 0); rows.forEach(r => { const s = stageOf(r); if (s) cnt[s.lab]++; });
   const tot = rows.length || 1;
   return `<div class="wsbar">${WS_SEQ.filter(k => cnt[k]).map(k => `<span style="flex:${cnt[k]};background:${WSL[k].c}" title="Stage ${k} · ${WSL[k].t}: ${cnt[k]}">${cnt[k] / tot >= 0.04 ? k : ""}</span>`).join("")}</div>
     <div class="wsleg">${WS_SEQ.map(k => `<span><i style="background:${WSL[k].c}"></i>${k} ${WSL[k].t} <b>${cnt[k]}</b></span>`).join("")}</div>`;
 }
-const STGREF = {txt: store.get("adrb.stageRef", "") || ""};
-function stageRefParse(txt){
-  const out = new Map(), norm = v => { v = String(v || "").trim().toUpperCase().replace(/^STAGE\s*/, "").replace(/\s+/g, ""); return v === "4B" ? "4B-" : WSL[v] ? v : v === "NA" ? "N/A" : null; };
-  const lines = String(txt).split(/\r?\n/).filter(x => x.trim());
-  if (!lines.length) return out;
-  const head = parseCSV(lines[0])[0] || [], hi = head.map(x => x.trim().toLowerCase());
-  const iS = hi.findIndex(x => /^(symbol|ticker)$/.test(x)), iG = hi.findIndex(x => /stage/.test(x));
-  if (iS >= 0 && iG >= 0) { for (const L of lines.slice(1)) { const row = parseCSV(L)[0] || []; const s = String(row[iS] || "").trim().toUpperCase().replace(/^.*:/, ""), g = norm(row[iG]); if (s && g) out.set(s, g); } return out; }
-  for (const L of lines) { const m = L.trim().split(/[\s,;\t]+/); if (m.length >= 2) { const s = m[0].toUpperCase().replace(/^.*:/, ""), g = norm(m.slice(1).join("")); if (s && g) out.set(s, g); } }
-  return out;
-}
-const mainOf = k => k === "N/A" ? "N/A" : k[0];
-function renderStageCheck(){
-  let box = $("wsBox");
-  if (!box) { const sc = $("scBox"); (sc || $("tab-data").querySelector(".lede")).insertAdjacentHTML("afterend", `<div class="card g1" id="wsBox"></div>`); box = $("wsBox"); }
-  const ref = stageRefParse(STGREF.txt), rows = [...ref.entries()].map(([s, g]) => { const r = S.rowBySym && S.rowBySym.get(s), m = r ? stageOf(r) : null; return {s, g, b: m ? m.lab : null}; });
-  const cmp = rows.filter(x => x.b && x.b !== "N/A" && x.g !== "N/A"), ex = cmp.filter(x => x.b === x.g).length, mn = cmp.filter(x => mainOf(x.b) === mainOf(x.g)).length;
-  const pc0 = (a, b) => b ? Math.round(a / b * 100) + "%" : "—";
-  const conf = {}; cmp.forEach(x => { const k = x.g + "→" + x.b; conf[k] = (conf[k] || 0) + 1; });
-  box.innerHTML = `<div class="hd"><h2>Weinstein stages vs Deepvue</h2><span class="sub">paste Deepvue's labels to measure how closely the board's stages match — the board's labels are a reference approximation</span></div>
-    <div class="bd"><div class="wsck"><div><textarea id="wsRef" rows="7" spellcheck="false" placeholder="One per line: NVDA 2&#10;AAPL 3A&#10;or paste a Deepvue CSV export with Symbol and Stage columns">${esc(STGREF.txt)}</textarea>
-      <div style="display:flex;gap:8px;margin-top:6px"><button class="btn sm" id="wsRun">Compare</button><button class="btn sm" id="wsClr">Clear</button></div></div>
-      <div>${!S.has.hist ? `<div class="empty">Needs the price history.</div>` : !ref.size ? `<div class="small">Paste 30–50 tickers with Deepvue's Stage column (1A, 1, 2A, 2, 3A, 3, 4, 4B-). The board shows the exact-label match rate and the main-stage match rate (1A counts as 1, 4B- as 4), then the misses so the rules can be tuned.</div>` : `
-        <div class="kpis" style="margin:0 0 8px"><div class="kpi card"><div class="k">Same label</div><div class="v">${pc0(ex, cmp.length)}</div><div class="n">${ex} of ${cmp.length} compared</div></div>
-          <div class="kpi card"><div class="k">Same main stage</div><div class="v">${pc0(mn, cmp.length)}</div><div class="n">1A = 1, 2A = 2, 3A = 3, 4B- = 4</div></div>
-          <div class="kpi card"><div class="k">Not compared</div><div class="v">${rows.length - cmp.length}</div><div class="n">not in your file, or N/A</div></div></div>
-        <div class="small" style="margin-bottom:4px">Misses — Deepvue → board: ${Object.entries(conf).filter(([k]) => k.split("→")[0] !== k.split("→")[1]).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<b>${esc(k)}</b> ×${n}`).join(" · ") || "none"}</div>
-        <div>${cmp.filter(x => x.b !== x.g).map(x => S.rowBySym.has(x.s) ? tkChip(S.rowBySym.get(x.s), `${x.g}→${x.b}`) : "").join("")}</div>`}</div></div>
-      <div class="small" style="margin-top:6px">How the board labels: Stage 2 = above rising 50- and 200-day (Deepvue's 10- and 40-week) averages; Stage 4 = below both, both falling, after 2+ closes under the 50-day; 3A = a Stage 2 name closing under its 50-day; 3 = the 150-day flattening after an advance; 1 = the 150-day flattening after a decline; 2A / 1A = the first ${WSG.fresh} sessions of a new Stage 2 / 1; 4B- = no new low for ${WSG.base} sessions and back above a falling 50-day with the 150-day ${WSG.db}%+ above it.</div></div>`;
-  $("wsRun").onclick = () => { STGREF.txt = $("wsRef").value; store.set("adrb.stageRef", STGREF.txt); renderStageCheck(); };
-  $("wsClr").onclick = () => { STGREF.txt = ""; store.set("adrb.stageRef", null); renderStageCheck(); };
-}
-const _renderTab5 = renderTab;
-renderTab = function(t){
-  if (t === "data" && S.snap) renderStageCheck();
-  _renderTab5(t);
-};
+// "Weinstein stages vs Deepvue" (Data check) removed 5 Nov 2026 (Eugene: "Remove both"; display only). adrb.stageRef is left in storage, unused.
 // 31 Oct (structure only): was a renderTab override; now a "tab" hook — same code, same order (BOARD HOOKS, block 1)
 hookOn("tab", "stagesList", t => {
   if (t === "market" && S.snap) {
@@ -7200,86 +7002,6 @@ hookOn("tab", "breadthCards", t => {
 <script>
 "use strict";
 /* =====================================================================
-   SETUPS: TWO RULE SETS, SAME LAYOUT (18 Oct). Display only — the plan, zones and states are unchanged.
-   The Spec 6.0 × Pivot card is rebuilt so each rule set is named plainly and shown the same way:
-     Board plan   = Chart & Entry Spec v6.0, the rules the plan already uses (checksFor)
-     Pivot script = the TradingView Spec 6.0 × Pivot location gates (s6Of)
-   Agreement columns ("Both agree" / "Board plan only" / "Pivot script only") and one table where every row carries
-   both sets of checks. When the comparison is on, the Trade rules card shows both rule sets side by side.
-   ===================================================================== */
-const ck1 = (l, ok, t) => `<span class="rck ${ok == null ? "na" : ok ? "ok" : "no"}" title="${esc(t)}: ${ok == null ? "no data" : ok ? "pass" : "fail"}">${l}</span>`;
-function planChecksHTML(r){
-  const C = Object.fromEntries(checksFor(r).map(c => [c.k, c]));
-  const z = zr();
-  return [ck1("9/21", C["9/21"].ok, "Price above the daily 9 and 21 EMA (hard veto)"), ck1("50", C["50"].ok, "Above the daily 50 SMA"),
-    ck1("zone", C.zone.ok, `In the buy zone: ${z[0]} to +${z[1]} ADR from the ${zm().line}`), ck1("ext", C.ext.ok, `No more than ${CFG.extCap} ADR above the 50 SMA`),
-    ck1("LoD", C.LOD.ok, `Entry under ${CFG.lodCap} ADR above the low of day`), ck1("RS", C.RS.ok, `RS ${CFG.rsMin}+`)].join("");
-}
-function pivotChecksHTML(x){
-  if (!x) return `<span class="dim small">no data</span>`;
-  return [ck1("wk", x.g.wk, "Weekly close above a rising 10-week SMA"), ck1("21E", x.g.e21, "Above the daily 21 EMA (hard veto)"), ck1("50↑", x.g.s50, "Above a rising daily 50 SMA"),
-    ck1("zone", x.g.zone, `Within ${S6.zone} ADR of the daily 9 or 21 EMA (${x.z9.toFixed(2)}× | ${x.z21.toFixed(2)}×)`), ck1("ext", x.g.ext, `No more than ${S6.ext} ADR above the 50 SMA (${x.ext == null ? "—" : x.ext.toFixed(2) + "×"})`),
-    ck1("LoD", x.lodOk, `LoD ≤ ${S6.lod} ADR — estimate with today's low (${x.lod == null ? "—" : x.lod.toFixed(2) + "×"})`), ck1("room", x.roomOk, `Room to the first resistance ≥ ${S6.room}R — estimate (${x.room == null ? (x.roomOk ? "clear" : "—") : x.room.toFixed(2) + "R"})`)].join("");
-}
-renderS6 = function(){
-  const box = $("s6pBox"); if (!box) return;
-  const intro = `<b>Board plan</b> = Chart &amp; Entry Spec v6.0, the rules the plan above already uses. <b>Pivot script</b> = your TradingView Spec 6.0 × Pivot (under forward test). Both pick from the same names with the same RS floor, earnings rule, group cap and list size — only the location rules differ. The plan itself never changes.`;
-  if (!s6On()) { box.innerHTML = `<div class="hd"><h2>Board plan vs Pivot script</h2><span class="sub">off · compares the plan's rules (Chart &amp; Entry Spec v6.0) with your Spec 6.0 × Pivot script on the same names</span><span class="spacer"></span><button class="btn sm" id="s6Tog">Turn on</button></div>`; $("s6Tog").onclick = () => { store.set("adrb.s6p", true); renderS6(); renderRulesCard(); }; return; }
-  const L = s6List(), plan = S.plan.plan, inP = new Set(plan.map(r => r.sym)), inS = new Set(L.map(o => o.r.sym));
-  const both = plan.filter(r => inS.has(r.sym)), onlyP = plan.filter(r => !inS.has(r.sym)), onlyS = L.filter(o => !inP.has(o.r.sym)).map(o => o.r);
-  const why = r => { const x = s6Of(r); return x ? x.why || "list size / group cap" : "no data"; };
-  const deckWhy = new Map(S.plan.deck.map(d => [d.r.sym, d.why]));
-  const boardWhy = r => deckWhy.get(r.sym) || (r.state === 1 || r.state === 2 ? `${ST[r.state].name} · list full or group cap` : r.state ? ST[r.state].name : "—");
-  const rows = [...both.map(r => [r, "both"]), ...onlyP.map(r => [r, "plan"]), ...onlyS.map(r => [r, "pivot"])];
-  const vlab = {both: ["Both agree", "v-both"], plan: ["Board plan only", "v-plan"], pivot: ["Pivot script only", "v-pivot"]};
-  const col = (t, n, sub, body) => `<div class="s6c"><div class="s6c-h"><b>${t}</b><span class="s6n">${n}</span></div><div class="small">${sub}</div><div class="s6c-b">${body || `<span class="dim small">none</span>`}</div></div>`;
-  box.innerHTML = `<div class="hd"><h2>Board plan vs Pivot script</h2><span class="sub">two rule sets on the same names — where they agree</span><span class="spacer"></span><button class="btn sm" id="s6Tog">Turn off</button></div>
-    <div class="bd">
-      <div class="s6intro">${intro}</div>
-      <div class="s6cols">
-        ${col("Both agree", both.length, "in the plan AND pass the Pivot script's location gates — the strongest overlap", both.map(r => tkChip(r, r.rs ?? "")).join(""))}
-        ${col("Board plan only", onlyP.length, "in the plan, but the Pivot script says no — its first failing gate is shown", onlyP.map(r => `<div class="s6w">${tkChip(r, r.rs ?? "")} <span class="small">Pivot: ${esc(why(r))}</span></div>`).join(""))}
-        ${col("Pivot script only", onlyS.length, "pass the Pivot script, but not in the plan — the board's reason is shown", onlyS.map(r => `<div class="s6w">${tkChip(r, r.rs ?? "")} <span class="small">Board: ${esc(boardWhy(r))}</span></div>`).join(""))}
-      </div>
-      ${rows.length ? `<div class="tscroll" style="max-height:440px;margin-top:12px"><table class="mini s6t"><thead>
-          <tr><th class="l" colspan="4"></th><th class="l s6g">Board plan · Chart &amp; Entry Spec v6.0</th><th class="l s6g">Pivot script · Spec 6.0 × Pivot</th></tr>
-          <tr><th class="l">Ticker</th><th>RS</th><th class="l">Group</th><th class="l">Agreement</th><th class="l">Checks · status</th><th class="l">Gates · stop estimate</th></tr></thead><tbody>
-        ${rows.map(([r, v]) => { const x = s6Of(r); return `<tr data-sym="${esc(r.sym)}"><td class="l sym">${esc(r.sym)}</td><td>${rsBadge(r.rs)}</td><td class="l small">${esc(r.group)}</td><td class="l"><span class="s6v ${vlab[v][1]}">${vlab[v][0]}</span></td>
-          <td class="l"><span class="rcks">${planChecksHTML(r)}</span> ${statusPill(r)}</td>
-          <td class="l"><span class="rcks">${pivotChecksHTML(x)}</span> <span class="small">${x && x.stop != null ? `stop ≈ ${f2(x.stop)}` : ""}${x && x.res != null ? ` · res ${f2(x.res)}` : ""}</span></td></tr>`; }).join("")}</tbody></table></div>` : `<div class="empty">Nothing in the plan, and nothing passes the Pivot script with the plan's RS floor right now.</div>`}
-      <div class="small" style="margin-top:6px">Green = pass, red = fail, grey = no data; hover any check for the rule. Pivot gates are read at the last price. <b>Its LoD and room are estimates</b> (stop = today's low − ${S6.buf} ADR) — the script uses the 30-min pullback low, so the chart has the final say. Triggers stay on TradingView.${S.has.hist ? "" : " <b>Load the price history</b> for the weekly and 50-SMA-rising gates."} Both rule sets are written out in the Trade rules card at the bottom of this page.</div>
-    </div>`;
-  $("s6Tog").onclick = () => { store.set("adrb.s6p", false); renderS6(); renderRulesCard(); };
-  box.querySelector("tbody")?.addEventListener("click", e => { if (e.target.closest("[data-sym]:not(tr)")) return; const tr = e.target.closest("tr[data-sym]"); if (tr) openDrawer(tr.dataset.sym); });
-};
-// Trade rules: the plan's rules, and — when the comparison is on — the Pivot script's beside them
-const RULES0 = {html: null};
-function renderRulesCard(){
-  const card = document.querySelector("#tab-plan .card.rules"); if (!card) return;
-  if (RULES0.html == null) RULES0.html = card.innerHTML;
-  if (!s6On()) { card.classList.remove("rules2"); card.innerHTML = RULES0.html; return; }
-  card.classList.add("rules2");
-  card.innerHTML = `<div class="r2">
-    <div>${RULES0.html.replace("<b>Trade rules (Chart &amp; Entry Spec v6.0)</b>", "<b>Board plan — Chart &amp; Entry Spec v6.0</b><div class=\"small\">what the plan, zones and stops on this board use</div>")}</div>
-    <div><b>Pivot script — Spec 6.0 × Pivot</b><div class="small">your TradingView script, under forward test — nothing proven yet</div><ol>
-      <li>Location, all at the fill: weekly close above a rising 10-week SMA · above the daily 21 EMA (hard veto) · above a rising 50 SMA · within ${S6.zone} ADR of the daily 9 <i>or</i> 21 EMA · no more than ${S6.ext} ADR above the 50 SMA.</li>
-      <li>Pullback: two lower 30-min closes seat it; it expires after 13 bars with no new low.</li>
-      <li>Trigger (primary): T1 reversal-candle break — a 30-min bar closes above the prior high in the top half of its range; buy-stop 1 tick over it, next bar only. T2 bottom-candle, T3 first up-candle and T4 (the board's 30-min 21 EMA reclaim) run alongside for the test.</li>
-      <li>Stop = pullback low − ${S6.buf} ADR. At the fill: entry within ${S6.lod} ADR of the low of day (replaces the half-ADR stop cap) and at least ${S6.room}R of room to the first daily resistance.</li>
-      <li>Management: ⅓ off at 2R, stop to entry; the rest exits on a daily close under the 9 EMA; time exit after T+3 if 2R hasn't printed.</li></ol></div>
-    <div class="r2diff"><b>Where they differ</b>
-      <span><i>Zone</i> plan: 0 to +0.5 ADR above the top of the 9/21 band · pivot: within 0.5 ADR of either EMA</span>
-      <span><i>Weekly trend</i> pivot only</span>
-      <span><i>Trigger</i> plan: 30-min close above the 21 EMA · pivot: T1 reversal-candle break</span>
-      <span><i>Stop</i> plan: 30-min pullback low, never wider than ½ ADR · pivot: pullback low − 0.05 ADR, entry ≤ 0.6 ADR off the low</span>
-      <span><i>Room to resistance</i> pivot only (≥ 2R)</span></div></div>`;
-}
-// 31 Oct (structure only): was a renderTab override; now a "tab" hook — same code, same order (BOARD HOOKS, block 1)
-hookOn("tab", "rulesCard", t => { if (t === "plan" && S.snap) renderRulesCard(); });
-</script>
-<script>
-"use strict";
-/* =====================================================================
    MAP A LIST · B LIST · STALK (18 Oct) — Setups, both layouts. Tracking only: never changes the plan, ranks or states.
      A list  = MAP's focus — the top 5 Claude picked (the existing "MAP focus" box; same data, same MAP flag)
      B list  = ready, but MAP let them go (kept to see whether the passes would have worked)
@@ -7424,27 +7146,6 @@ hookOn("tab", "layoutTidy", t => {
   }
   // the jump list is rebuilt once at the end of every page draw (BOARD HOOKS) — every late card is listed
 });
-// ticker panel: when the Pivot script's gates are shown, the Board plan's checks sit right above them, same layout
-if (WS) {
-  const _tpBuild2 = tpBuild;
-  tpBuild = function(r){
-    _tpBuild2(r);
-    const at = document.querySelector('#drawer .tp-pane[data-p="plan"] .s6p'); if (!at || r.etf) return;
-    const C = Object.fromEntries(checksFor(r).map(c => [c.k, c])), z = zr();
-    const row = (t, ok, v) => `<div class="chk"><span class="ic ${ok == null ? "na" : ok ? "ok" : "no"}">${ok == null ? "·" : ok ? "✓" : "✕"}</span><div>${t}</div><div class="small">${v}</div></div>`;
-    const inPlan = S.plan.plan.includes(r), deck = S.plan.deck.find(d => d.r === r), fail = checksFor(r).find(c => c.ok === false);
-    const verdict = inPlan ? `<span class="ok-t">IN THE PLAN · ${esc(r.state ? ST[r.state].name : "")}</span>` : deck ? `<span class="neg">ON DECK · ${esc(deck.why)}</span>` : `<span class="neg">NO · ${esc(fail ? fail.why : r.state ? ST[r.state].name : "not a setup")}</span>`;
-    at.insertAdjacentHTML("beforebegin", `<div class="bpck"><h4 style="margin:10px 0 2px;font-size:12px">Board plan · Chart &amp; Entry Spec v6.0 — ${verdict}</h4>
-      ${row("1 · Group not lagging (leading name / group: MAP decides)", C.group.ok, esc(r.group || "—"))}
-      ${row("2 · Above the daily 9 and 21 EMA (hard veto)", C["9/21"].ok, `${f2(r.e9)} | ${f2(r.e21)}`)}
-      ${row("3 · Above the daily 50 SMA", C["50"].ok, f2(r.s50))}
-      ${row(`4 · In the buy zone: ${z[0]} to +${z[1]} ADR from the ${zm().line}`, C.zone.ok, r.zx == null ? "—" : (r.zx >= 0 ? "+" : "") + r.zx.toFixed(2) + " ADR")}
-      ${row(`5 · No more than ${CFG.extCap} ADR above the 50 SMA${r.postER ? " (reset after earnings)" : ""}`, C.ext.ok, r.extU == null ? "—" : r.extU.toFixed(2) + "×")}
-      ${row(`6 · Entry under ${CFG.lodCap} ADR above the low of day`, C.LOD.ok, r.lodU == null ? "—" : r.lodU.toFixed(2) + "×")}
-      ${row(`7 · RS ${CFG.rsMin}+ and no earnings within the window`, C.RS.ok === false || C.ER.ok === false ? false : C.RS.ok == null ? null : true, `RS ${r.rs ?? "—"}${r.erIn != null ? ` · earnings ${r.erIn}d` : ""}`)}
-      <div class="small">Stop = the 30-min pullback low, never wider than ½ ADR (${r.adrD ? f2(r.adrD / 2) : "—"}). Trigger: a 30-min close above the 30-min 21 EMA. The full note is folded below.</div></div>`);
-  };
-}
 </script>
 <script>
 "use strict";
@@ -8205,8 +7906,7 @@ function dss6x(r, d){
   const tier = !d._.liqOk ? 0 : floor && miss === 0 ? 4 : floor && miss <= 1 ? 3 : d._.dev ? 2 : 0;
   return {x, tier, gate};
 }
-const DSF = {key: "", map: new Map(), reg: null, cmp: null};
-const dssPct = (a, n) => !n ? "—" : a === n ? "100%" : (Math.floor(a / n * 1000) / 10).toFixed(1) + "%";   // never rounds a miss up to 100%
+const DSF = {key: "", map: new Map(), reg: null, cmp: null};   // cmp: unused since 5 Nov 2026 (comparison removed)
 function dssKey(){ const ts = todaySource(); return HIST.nD + "|" + (HIST.dates[HIST.nD - 1] || "") + "|" + (ts ? ts.date + ts.src : "") + "|" + (S.snap ? S.snap.asOf + S.mode + S.rows.length : "") + "|" + rowsGen() + "|" + (SB.splits ? SB.splits.at : ""); }
 function dssOf(sym){
   const k = dssKey(); if (DSF.key !== k) { DSF.key = k; DSF.map = new Map(); DSF.reg = dssRegime(); }
@@ -8376,7 +8076,7 @@ function feedExport(){
   download(feedName(), feedCSV(), "text/csv"); toast(`Feed saved: ${feedName()}`);
 }
 
-/* ---------------- compare with real TradingView exports (Deep Space Screener · TAS · REACCEL) ---------------- */
+/* ---------------- recognise TradingView exports (Deep Space Screener · TAS · REACCEL) — the comparison itself was removed 5 Nov 2026 ---------------- */
 // TradingView writes ">" in plot titles as "&gt;" — decode before matching; an "Indicator name: " prefix is dropped.
 const dssNorm = s => String(s || "").replace(/&gt;/g, ">").replace(/&lt;/g, "<").replace(/&amp;/g, "&").toLowerCase().replace(/^.*?:\s*(?=[a-z$%])/, m => /screener|tas|reaccel|deep space/.test(m) ? "" : m).replace(/[^a-z0-9%$σ]+/g, "");
 const CMP_T = {
@@ -8388,44 +8088,18 @@ const CMP_T = {
 const cmpType = text => { const h = String(text).replace(/^﻿/, "").split("\n")[0].replace(/&gt;/g, ">").toLowerCase(); return Object.keys(CMP_T).find(k => CMP_T[k].test(h)) || null; };
 const isDss = t => t === "dss" || t === "dss5";
 const isDssFile = text => isDss(cmpType(text));
+// 5 Nov 2026 (Eugene: "Remove both"): the column-by-column TradingView comparison is removed (display only). Exports are
+// still recognised by their headers (CMP_T / cmpType, unchanged) so they never load as stock files, and a Deep Space
+// Screener export still files the MAP source universe (msrcFromExport, wrapped onto dssCompare further down).
 function dssCompare(name, text){
-  const type = cmpType(text) || "dss", T = CMP_T[type];
-  const g = parseCSV(String(text).replace(/^﻿/, "")); if (g.length < 2) { toast(name + ": no rows"); return; }
-  const H = g[0].map(dssNorm), symI = H.findIndex(h => h === "symbol" || h === "ticker");
-  if (symI < 0) { toast(name + ": no Symbol column"); return; }
-  const colI = T.cols.map(c => H.indexOf(dssNorm(c.h)));
-  const res = {type, kind: T.name, name, at: Date.now(), rows: 0, both: 0, cols: T.cols.map(c => ({...c, n: 0, same: 0, diffs: []})), tierDiff: [], tierN: 0, tierSame: 0, notHere: [], noHist: [], conf: {}, theme: null, log: type === "dss5" ? [] : null};
-  const thI = H.indexOf(dssNorm("Theme ID")); if (type === "tas" && thI >= 0) res.theme = {n: 0, same: 0, zeroTV: 0, zeroBoard: 0, diffs: []};
-  for (const row of g.slice(1)) {
-    let sym = String(row[symI] || "").trim(); if (!sym) continue; if (sym.includes(":")) sym = sym.split(":").pop();
-    res.rows++;
-    const r = S.rowBySym && S.rowBySym.get(sym);
-    if (!r && !(HIST.idx && HIST.idx.has(sym))) { res.notHere.push(sym); continue; }
-    const d = dssOf(sym); if (!d) { res.noHist.push(sym); continue; }
-    res.both++;
-    res.cols.forEach((c, j) => {
-      if (colI[j] < 0) return; const raw = row[colI[j]], tv = raw === "" || raw == null ? null : num(raw), mine = c.f(d, r);
-      if (tv == null && !fin(mine)) return;
-      c.n++;
-      const ok = c.int ? fin(mine) && tv != null && Math.round(mine) === Math.round(tv) : fin(mine) && tv != null && Math.abs(mine - tv) <= (c.tol != null ? c.tol + 1e-9 : Math.max(0.02 * Math.abs(tv), c.key === "key" ? 50 : 0.05));
-      if (ok) c.same++; else c.diffs.push([sym, tv, fin(mine) ? mine : null]);
-      if (c.par && res.log) res.log.push([d.to || "", sym, c.h, fin(mine) ? +mine.toFixed(4) : "", tv == null ? "" : tv, fin(mine) && tv != null ? +(mine - tv).toFixed(4) : "", ok ? "ok" : "OUT"]);
-    });
-    if (isDss(type)) { const ti = colI[0], fi = colI[1], bt = T.tier ? T.tier(d, r) : d.tier, bf = T.fail ? T.fail(d, r) : d.fail;
-      if (ti >= 0 && row[ti] !== "") { const tv = Math.round(num(row[ti])); res.tierN++; const id = tv + "→" + bt; res.conf[id] = (res.conf[id] || 0) + 1; if (tv === bt) res.tierSame++; else res.tierDiff.push([sym, tv, bt, fi >= 0 ? num(row[fi]) : null, bf]); } }
-    if (res.theme) { const tv = Math.round(num(row[thI])), th = tasTheme(sym, r ? r.industry : null); res.theme.n++; if (tv === th.id) res.theme.same++; else res.theme.diffs.push([sym, tv, th.id]); if (tv === 0) res.theme.zeroTV++; if (th.id === 0) res.theme.zeroBoard++; }
-  }
-  res.missingCols = T.cols.filter((c, j) => colI[j] < 0).map(c => c.h);
-  DSF.cmp = DSF.cmp && typeof DSF.cmp === "object" && !DSF.cmp.type ? DSF.cmp : {};
-  DSF.cmp[type] = res;
-  if (S.ui.tab !== "data") goTab("data"); else renderTab("data");
-  toast(`Compared ${res.both} tickers with ${name} (${T.name})`);
+  const type = cmpType(text); if (isDss(type)) return;
+  toast(`${name}: ${type ? CMP_T[type].name + " export" : "not a screener export"} — not loaded as a stock file (the TradingView comparison was removed 5 Nov)`);
 }
 const _loadNewF = loadNew;
 loadNew = async function(files){
   const arr = [...files], texts = await readFiles(arr), cmp = [], rest = [];
   arr.forEach((f, i) => (cmpType(texts[i].text) ? cmp : rest).push(i));
-  cmp.forEach(i => { if (S.snap && S.has.hist) dssCompare(texts[i].name, texts[i].text, texts[i].mtime); else toast(`${texts[i].name} is a TradingView screener export — load your files and the price history first, then compare it on Data check`); });
+  cmp.forEach(i => { if (S.snap && S.has.hist) dssCompare(texts[i].name, texts[i].text, texts[i].mtime); else toast(`${texts[i].name} is a TradingView screener export — not loaded as a stock file`); });
   if (rest.length) return _loadNewF(rest.map(i => arr[i]));
 };
 
@@ -8434,22 +8108,12 @@ $("snapBtn").insertAdjacentHTML("afterend", `<button class="btn" id="feedBtn" ti
 $("feedBtn").onclick = () => feedExport();
 document.body.insertAdjacentHTML("beforeend", `<input type="file" id="fileDss" accept=".csv,text/csv" multiple class="hidden">`);
 $("fileDss").onchange = async e => { const fs = [...e.target.files]; e.target.value = ""; for (const f of fs) { const t = await f.text(); if (!cmpType(t)) { toast(`${f.name} isn't a Deep Space Screener, TAS or REACCEL export`); continue; } dssCompare(f.name, t, f.lastModified || null); } };
-function cmpHTML(R, any){
-  const colRows = R.cols.filter(c => c.n).map(c => `<tr><td class="l">${esc(c.h)}</td><td>${c.n}</td><td class="${c.same / c.n >= 0.95 ? "pos" : c.same / c.n >= 0.8 ? "" : "neg"}"><b>${dssPct(c.same, c.n)}</b></td><td class="l small">${c.diffs.slice(0, 4).map(([s, a, b]) => `${esc(s)} ${a == null ? "—" : +(+a).toFixed(2)} vs ${b == null ? "—" : +b.toFixed(2)}`).join(" · ")}</td></tr>`).join("");
-  const conf = Object.entries(R.conf).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k.replace("→", " → ")}: ${v}`).join(" · ");
-  return `<h4 style="margin:12px 0 4px">${esc(R.kind)} · compared with <b>${esc(R.name)}</b></h4>
-    <div class="small">${R.rows} rows in that file · <b>${R.both}</b> scored by the board · ${R.notHere.length} not in this board's files or history${R.noHist.length ? ` · ${R.noHist.length} with too little stored history` : ""}${R.missingCols.length ? ` · columns not in that export: ${R.missingCols.map(esc).join(", ")}` : ""}</div>
-    ${isDss(R.type) ? `<div class="kpis" style="margin:8px 0"><div class="kpi card"><div class="k">Same Tier</div><div class="v ${R.tierN && R.tierSame / R.tierN >= 0.95 ? "pos" : "neg"}">${dssPct(R.tierSame, R.tierN)}</div><div class="n">${R.tierSame} of ${R.tierN} · Pine → board: ${esc(conf)}</div></div>${R.log ? `<div class="kpi card"><div class="k">Parity fields in tolerance</div><div class="v ${R.log.length && R.log.every(x => x[6] === "ok") ? "pos" : "neg"}">${dssPct(R.log.filter(x => x[6] === "ok").length, R.log.length)}</div><div class="n">${R.log.filter(x => x[6] !== "ok").length} outside · <button class="btn sm" data-feed="plog">Download parity log</button></div></div>` : ""}</div>` : ""}
-    ${R.theme ? `<div class="small" style="margin:6px 0"><b>Theme ID</b>: board and TradingView agree on ${R.theme.same} of ${R.theme.n}. TradingView left <b>${R.theme.zeroTV}</b> unmapped (its baked-in list is from an older universe), the board left <b>${R.theme.zeroBoard}</b> (no override and no industry match). ${R.theme.diffs.slice(0, 20).map(([s, a, b]) => `${esc(s)} ${a}→${b}`).join(" · ")}</div>` : ""}
-    <div class="tscroll" style="max-height:360px"><table class="mini"><thead><tr><th class="l">Column</th><th>Compared</th><th>Match</th><th class="l">First differences (TradingView vs board)</th></tr></thead><tbody>${colRows}</tbody></table></div>
-    ${R.tierDiff.length ? `<div class="small" style="margin-top:6px"><b>Tier differs</b> (TradingView tier/fail code → board tier/fail code): ${R.tierDiff.slice(0, 60).map(([s, a, b, fa, fb]) => `<span class="tk" data-sym="${esc(s)}">${esc(s)} ${a}/${fa ?? "?"} → ${b}/${fb}</span>`).join(" ")}${R.tierDiff.length > 60 ? ` and ${R.tierDiff.length - 60} more` : ""}</div>` : ""}`;
-}
 function renderFeedCard(){
   const tab = $("tab-data"); if (!tab) return;
   let box = $("feedBox"); if (!box) { const at = tab.querySelector(":scope > p.lede"); (at || tab).insertAdjacentHTML(at ? "afterend" : "afterbegin", `<div class="card g1" id="feedBox"></div>`); box = $("feedBox"); }
   if (!S.snap) { box.innerHTML = ""; return; }
   const head = `<div class="hd"><h2>Deep Space feed</h2><span class="sub">one CSV for the daily MAP/BRIEF: Deep Space Screener v5.0 (rules v6.1, 39 columns), Entry Check lists, REACCEL, TAS with live themes, Power List and board context</span><span class="spacer"></span>
-    <button class="btn sm primary" data-feed="csv" ${S.has.hist ? "" : "disabled"}>Export feed CSV</button><button class="btn sm" data-feed="cmp" ${S.has.hist ? "" : "disabled"}>Compare with TradingView exports…</button></div>`;
+    <button class="btn sm primary" data-feed="csv" ${S.has.hist ? "" : "disabled"}>Export feed CSV</button></div>`;
   if (!S.has.hist) { box.innerHTML = head + `<div class="bd"><div class="empty" style="padding:4px 0">The feed is built from the stored daily bars. <button class="btn sm" data-hist="full">Load price history</button></div></div>`; return; }
   const rows = S.stocks.map(r => ({r, d: dssOf(r.sym)})).filter(o => o.d);
   const cnt = k => { const c = {}; rows.forEach(o => { const v = k(o); c[v] = (c[v] || 0) + 1; }); return c; };
@@ -8470,8 +8134,6 @@ function renderFeedCard(){
     <table class="mini" style="margin-top:6px"><thead><tr><th class="l">Theme</th><th class="l">Proxy</th><th>Proxy 4W</th><th>vs QQQ</th><th>Stage</th><th>Health</th><th>Names</th><th class="l">Leading / emerging inside (MAP picks in bold)</th></tr></thead><tbody>
     ${tRows.map(({t, P, rs4, hl, g}) => `<tr><td class="l">${t[0]} · ${esc(t[2])}</td><td class="l">${t[1]}</td><td>${P ? sg(P.r21, 1) + "%" : "—"}</td><td class="${rs4 > 0 ? "pos" : "neg"}">${fin(rs4) ? sg(rs4, 1) : "—"}</td><td>${P && fin(P.stage) ? P.stage : "—"}</td><td>${hl == null ? "—" : ["Weak", "Neutral", "<b>Strong</b>"][hl]}</td><td>${g.n}</td><td class="l small">${g.lead.slice(0, 14).map(s => g.pick.includes(s) ? `<b>${esc(s)}</b>` : esc(s)).join(" ")}${g.nl.length ? ` · new leaders: ${g.nl.map(esc).join(" ")}` : ""}</td></tr>`).join("")}</tbody></table>
     <div class="small dim" style="margin-top:4px">Themes are resolved live from your file's Industry column with the same rules as tools/build-tas-map.py (overrides first, then industry) — no weekly script edit. Proxy ETFs and the index tape are read from the stored bars even when your files don't carry them, and are added to the feed as extra rows.</div></details>`;
-  const C = DSF.cmp && !DSF.cmp.type ? DSF.cmp : {};
-  const cmp = ["dss5", "dss", "tas", "ra"].filter(k => C[k]).map(k => cmpHTML(C[k], any)).join("") + (Object.keys(C).length ? `<div class="small dim" style="margin-top:6px">Numbers match when within 2% (or 0.05) of TradingView's; whole-number columns must be equal. Expect small gaps from data (TradingView vs Massive bars, splits, volume) and names sitting right on a line. Compare files from the same session: this board's bars run to ${esc(any ? any.to : "—")}.</div>` : "");
   const stale = feedStale();
   box.innerHTML = head + `<div class="bd">${stale ? `<div class="note" style="margin-bottom:8px;color:var(--neg)"><b>Price history is behind:</b> it ends ${esc(stale.last)} but should run to ${esc(stale.want)} (a holiday can make this a false alarm). Update it before exporting — numbers built across a gap are wrong. <button class="btn sm" data-hist="upd">Update price history</button></div>` : ""}
     <div class="small">Bars to <b>${esc(any ? any.to : "—")}</b>${ts ? ` (stored history + today's bar from ${ts.src === "csv" ? "your file" : ts.src === "live" ? "live mode" : "the board"})` : " (stored history — no newer bar in this file)"} · QQQ regime <b>${esc(reg)}</b> · ${rows.length} stocks scored · screener defaults (zone 0.75, StopFit 1.25, ADR 3%, $20M)</div>
@@ -8483,9 +8145,9 @@ function renderFeedCard(){
     ${top.length ? `<div class="small" style="margin-top:8px">Tier 4 (6.0), by RS Rank Key · Setup Quality in bold: ${top.map(chip).join("")}</div>` : ""}
     ${top6.length ? `<div class="small" style="margin-top:4px">Tier 4 (6.0X): ${top6.map(chip).join("")}</div>` : ""}
     <div class="small dim" style="margin-top:6px">6.0X ladder (confirmed 18 Oct): Tier 4 = liquidity, RS state, weekly above a rising 10W and above a rising 50 SMA, plus above the 21 EMA, within 0.5 ADR of the 9 or 21, and no more than 4 ADR above the 50. Tier 3 = the same with one of the last three missing. LoD and room are daily estimates in the file, never gates. Setup Quality is the same 0–5 score for both.</div>
-    ${themeT}${cmp}</div>`;
+    ${themeT}</div>`;
 }
-$("tab-data").addEventListener("click", e => { const b = e.target.closest("[data-feed]"); if (!b) return; if (b.dataset.feed === "csv") feedExport(); else if (b.dataset.feed === "plog") s61ParityLog(); else $("fileDss").click(); });
+$("tab-data").addEventListener("click", e => { const b = e.target.closest("[data-feed]"); if (!b) return; if (b.dataset.feed === "csv") feedExport(); });
 // 31 Oct (structure only): was a renderTab override; now a "tab" hook — same code, same order (BOARD HOOKS, block 1)
 hookOn("tab", "feedCard", t => { if (t === "data") { try { renderFeedCard(); } catch (e) { console.warn("feed card", e); } } });
 </script>
@@ -8758,13 +8420,6 @@ const FEED_61 = [["MAP Universe", s => yn(s.mapUni)], ["Loc Label", s => s.x.loc
     cols: DSS5_COLS.map(([h, f, dp, tol, par]) => ({h, f: (d, r) => { const V = d && d.s61 ? {d, x: d.s61, r, p: s61Pine(d.s61, r && r.mcap != null ? r.mcap : null), sq: s61Sq(d, d.s61)} : null; return V ? f(V) : NaN; }, int: dp == null, key: h, tol, par: !!par})),
     tier: (d, r) => d.s61 ? s61Pine(d.s61, r && r.mcap != null ? r.mcap : null).tier : null, fail: (d, r) => d.s61 ? s61Pine(d.s61, r && r.mcap != null ? r.mcap : null).fail : null};
   Object.assign(CMP_T, rest); }
-function s61ParityLog(){
-  const R = DSF.cmp && DSF.cmp.dss5; if (!R || !R.log) { toast("Compare a Deep Space Screener v5.0 export first"); return; }
-  const q = v => { const t = String(v); return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
-  const L = [["date", "ticker", "field", "board", "screener", "delta", "within tolerance"].join(","), ...R.log.map(x => x.map(q).join(","))];
-  const day = R.log[0] ? R.log[0][0] : fmtDate(new Date());
-  download(`spec61-parity-${day}.csv`, L.join("\n"), "text/csv"); toast(`Parity log saved: ${R.log.length} cells, ${R.log.filter(x => x[6] !== "ok").length} outside tolerance`);
-}
 function s61TierLine(rows){
   const c = {}, l = {}; rows.forEach(o => { const V = s61V(o.r.sym, o.r); if (V) c[V.p.tier] = (c[V.p.tier] || 0) + 1; const s = s61Of(o.r); if (s) l[s.list] = (l[s.list] || 0) + 1; });
   return [4, 3, 2, 1, 0].map(k => `<b>${c[k] || 0}</b> ${({4: "Tier 4 · L1", 3: "Tier 3 · L2", 2: "Tier 2 · L3 / above", 1: "Tier 1 · extended", 0: "Tier 0"})[k]}`).join(" · ")
@@ -14209,8 +13864,9 @@ $("side").addEventListener("click", e => {
   if (e.target.closest("#tabs button[data-tab], .nvsec a, .sb-files .btn, #setBtn, #wsClassic")) mMenu(false);
 }, true);
 {
+  // 5 Nov 2026: the desktop "Classic layout" button is gone, so the phone adds its own "Desktop edition" button in its place
+  $("sbTools").insertAdjacentHTML("afterend", `<button class="btn sm" id="wsClassic" title="Open the full desktop board (index.html) with the same settings">Desktop edition</button>`);
   const b = $("wsClassic");
-  b.textContent = "Desktop edition"; b.title = "Open the full desktop board (index.html) with the same settings";
   b.onclick = () => { location.href = "index.html" + location.hash; };
   $("sbFile").insertAdjacentHTML("beforeend", `<span class="mdesk">Phone edition · same board, same numbers</span>`);
 }
@@ -14349,13 +14005,15 @@ addEventListener("popstate", () => {
   $("mSnap").onclick = e => { e.stopPropagation(); $("fileSnap").click(); };
 }
 
-/* ---------------- Settings: the layout switch becomes a link to the desktop edition ---------------- */
+/* ---------------- Settings: a link to the desktop edition ---------------- */
 {
   const _rs = renderSettings;
   renderSettings = function(){
     _rs();
-    const t = $("wsTog"); if (!t) return;
-    const row = t.closest(".row");
+    // 5 Nov 2026: the desktop's layout switch row is gone; the phone adds its own row under the first heading
+    const h = $("settings").querySelector("h3"); if (!h) return;
+    h.insertAdjacentHTML("afterend", `<h4>Layout</h4><div class="row"></div>`);
+    const row = h.nextElementSibling.nextElementSibling;
     row.innerHTML = `<div>Phone edition<div class="d">This is the phone layout of the same board — same files, numbers and settings. The desktop edition has the wide sidebar and keyboard shortcuts.</div></div><div><a class="btn sm" href="index.html${esc(location.hash)}">Desktop edition</a></div>`;
   };
 }
