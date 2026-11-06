@@ -849,6 +849,11 @@ html.mob #app :not(.mtf-open) > .tablehd ~ .tablehd{display:none}
 html.mob .tscroll.mr{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 36px),rgba(0,0,0,.25));mask-image:linear-gradient(to right,#000 calc(100% - 36px),rgba(0,0,0,.25))}
 html.mob #drawer table{display:block;overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}
 html.mob #drawer .tscroll table{display:table;overflow:visible}
+/* Index trend page (6 Nov 2026, display only): shorter chart, two tiles a row, the read stacked */
+html.mob .itc{height:400px}
+html.mob .itg{grid-template-columns:repeat(2,minmax(0,1fr))}
+html.mob .itnow .big{font-size:24px}
+html.mob .itbx .v{font-size:16px}
 </style>
 <script>
 // Phone edition, runs before anything else: always the workspace layout plus html.mob (the desktop's adrb.layout is left alone).
@@ -16929,4 +16934,320 @@ function dpWhyHTML(e){
   const rows = dpPlanRows(e.now).map(([l, v, c]) => `<span class="lab">${esc(l)}</span><span class="${c}">${v}</span>`).join("");
   return `${chips ? `<div class="dpc">${chips}</div>` : ""}${rows ? `<div class="dpg">${rows}</div>` : ""}`;
 }
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   INDEX TREND (6 Nov 2026). DISPLAY ONLY — a page of its own; changes no zone, stop, target, state, RS, check result,
+   list, size, plan line, Deep Space / ETF feed column, MAP import, Board-log record or snapshot. MAP stays the call.
+   Eugene (chat, 6 Nov): "Do you think we can make a similar page in the board that can represent the indexes and sectors
+   for selection … Best is it just pulls existing data from different places in the board for the read. Maybe a standalone
+   section it self and not under any page." Then: "yes write up the plan with 5 years" and "no idea on bands, draw lines
+   only and go". Plan: docs/index-trend-plan-2026-11-06.md. Not a rule anywhere in Notion — a cross-check only.
+   - Tab "Index trend" (Discover, right after Market). Picker grid of ETF_GROUPS "Indexes" + "Sectors" (switch: + every
+     other group), click a tile for the read: state, since-dates, back-above levels, this run vs past runs, time in state,
+     daily / weekly stretch gauges with the 5-year histogram, and a chart (price coloured by state, the 21 EMA and the
+     10-week SMA as lines, a state strip, a daily-stretch pane). "MAP says" sits on top.
+   - Maths (itCalc, pure): 21 EMA of daily closes (Pine style, SMA seed); ATR14 = Pine RMA of true range, SMA seed;
+     weekly bars from the daily bars (weekKey), the 10-week SMA and weekly ATR14 taken AS OF each day (the week so far
+     counts as this week's bar — what TradingView's weekly shows that evening). State: Risk on = close above both lines,
+     Pullback = above the 10-week / not above the 21-day, Probe = above the 21-day / not above the 10-week, Risk off =
+     neither. Stretch = (close − line) ÷ ATR; σ = z-score of that stretch over the ETF's whole stored history; extended
+     past ±1.5σ. Rarity = stored days at or beyond tonight's σ on the same side. Runs = consecutive days in one state;
+     a run's return = last close of the run ÷ the close before it began − 1.
+     Back above the 21-day = today's 21 EMA (close' > EMA' ⇔ close' > EMA). Back above (or stays above) the 10-week =
+     mean of the prior 9 completed weekly closes (inside the same week: close' > (sum9 + close') ÷ 10 ⇔ close' > sum9 ÷ 9).
+   - Data: one Massive call per ETF, /v2/aggs/ticker/{T}/range/1/day/{5y back}/{last session} (adjusted), stored in
+     IndexedDB "dsb-idxhist" / "bars" (keyPath sym, kept apart from dsb-hist). New sessions are copied from the board's
+     own stored bars (dssBars — no extra call) and kept, so the history grows past 5 years. Re-fetch when the stored close
+     and the board's close for the same day differ by > 1% (a split), or when the stored bars stop short of the last
+     finished session and the board's bars can't fill the gap (once per session date). Tonight's bar = dssBars' today
+     bar (Massive 15 min delayed, or the file), labelled as such; never "live".
+   Storage NEW: adrb.itSel (selected ETF), adrb.itAll (1 = every ETF group), IndexedDB dsb-idxhist. No CFG / hash keys.
+   Hook points: pageOn("itrend") only — no override. On trial (docs/trials.md).
+   ===================================================================== */
+const IT = {recs: new Map(), loaded: false, busy: false, prog: null, errs: [], tried: new Map(), calc: new Map(), chart: null, msg: ""};
+const IT_DB = {name: "dsb-idxhist", ver: 1, store: "bars"};
+const IT_SIG = 1.5, IT_YEARS = 5;
+const IT_ST = {
+  on: {n: "Risk on", cls: "iton", d: "Above both lines. The trend is working on the daily and the weekly."},
+  pb: {n: "Pullback", cls: "itpb", d: "Above the 10-week, below the 21-day. A dip inside the longer uptrend."},
+  pr: {n: "Probe", cls: "itpr", d: "Above the 21-day, below the 10-week. A bounce that hasn't repaired the weekly trend yet."},
+  off: {n: "Risk off", cls: "itoff", d: "Below both lines. The weakest of the four."}
+};
+const IT_NAME = {SPY: "S&P 500", QQQ: "Nasdaq 100", DIA: "Dow 30", IWM: "Russell 2000", MDY: "Mid caps", RSP: "S&P 500 equal weight", QQQE: "Nasdaq 100 equal weight", IWC: "Micro caps",
+  XLK: "Technology", XLC: "Communications", XLY: "Discretionary", XLP: "Staples", XLE: "Energy", XLF: "Financials", XLV: "Health care", XLI: "Industrials", XLB: "Materials", XLRE: "Real estate", XLU: "Utilities"};
+const itAll = () => { try { return store.get("adrb.itAll", 0) ? 1 : 0; } catch (e) { return 0; } };
+const itGroups = () => ETF_GROUPS.filter(([g]) => itAll() || g === "Indexes" || g === "Sectors");
+const itSyms = () => [...new Set(itGroups().flatMap(([, l]) => l))];
+const itSel = () => { let s = "QQQ"; try { s = store.get("adrb.itSel", "QQQ") || "QQQ"; } catch (e) {} return itSyms().includes(s) ? s : "QQQ"; };
+
+/* ---------- storage ---------- */
+function itDb(){ return new Promise((res, rej) => { const q = indexedDB.open(IT_DB.name, IT_DB.ver); q.onupgradeneeded = () => { const db = q.result; if (!db.objectStoreNames.contains(IT_DB.store)) db.createObjectStore(IT_DB.store, {keyPath: "sym"}); }; q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); }
+async function itDbAll(){ const db = await itDb(); return new Promise((res, rej) => { const q = db.transaction(IT_DB.store, "readonly").objectStore(IT_DB.store).getAll(); q.onsuccess = () => res(q.result || []); q.onerror = () => rej(q.error); }); }
+async function itDbPut(recs){ if (!recs.length) return; const db = await itDb(); return new Promise((res, rej) => { const tx = db.transaction(IT_DB.store, "readwrite"), st = tx.objectStore(IT_DB.store); recs.forEach(r => st.put(r)); tx.oncomplete = res; tx.onerror = () => rej(tx.error); }); }
+async function itRestore(){
+  if (IT.loaded) return; IT.loaded = true;
+  try { (await itDbAll()).forEach(r => { if (r && r.sym && Array.isArray(r.d)) IT.recs.set(r.sym, r); }); } catch (e) { IT.msg = "This browser blocked local storage, so the 5-year history can't be kept."; }
+}
+
+/* ---------- fetch (one call per ETF) ---------- */
+async function itFetch(sym){
+  const to = lastDoneSession(), from = addDays(to, -Math.round(365.25 * IT_YEARS) - 7);
+  const j = await mget(`/v2/aggs/ticker/${encodeURIComponent(sym)}/range/1/day/${from}/${to}`, {adjusted: "true", sort: "asc", limit: 50000});
+  const R = (j.results || []).filter(x => x && x.c > 0 && x.h > 0 && x.l > 0 && fin(x.t));
+  const rec = {sym, d: [], o: [], h: [], l: [], c: [], fetched: to};
+  for (const x of R) { const d = etParts(x.t).d; if (rec.d.length && d <= rec.d[rec.d.length - 1]) continue; rec.d.push(d); rec.o.push(x.o > 0 ? x.o : x.c); rec.h.push(x.h); rec.l.push(x.l); rec.c.push(x.c); }
+  return rec;
+}
+// the stored 5 years + the board's own bars after them (and tonight's bar); copies finished sessions into the record
+function itBars(sym){
+  const rec = IT.recs.get(sym), b = typeof dssBars === "function" ? dssBars(sym) : null;
+  if (!rec || !rec.d.length) return b && b.n ? {d: b.dates.slice(), o: [...b.o], h: [...b.h], l: [...b.l], c: [...b.c], today: b.today, src: "board", grew: 0, split: false} : null;
+  const out = {d: rec.d.slice(), o: rec.o.slice(), h: rec.h.slice(), l: rec.l.slice(), c: rec.c.slice(), today: false, src: "massive", grew: 0, split: false};
+  if (!b || !b.n) return out;
+  const last = rec.d[rec.d.length - 1], at = b.dates.lastIndexOf(last);
+  if (at >= 0 && (!b.today || at < b.n - 1)) { const x = b.c[at], y = rec.c[rec.c.length - 1]; if (fin(x) && x > 0 && Math.abs(y / x - 1) > 0.01) { out.split = true; return out; } }
+  const nDone = b.today ? b.n - 1 : b.n;
+  for (let t = 0; t < b.n; t++) {
+    if (b.dates[t] <= last || !fin(b.c[t]) || !fin(b.h[t]) || !fin(b.l[t])) continue;
+    const o = fin(b.o[t]) ? b.o[t] : b.c[t];
+    out.d.push(b.dates[t]); out.o.push(o); out.h.push(b.h[t]); out.l.push(b.l[t]); out.c.push(b.c[t]);
+    if (t < nDone) { rec.d.push(b.dates[t]); rec.o.push(o); rec.h.push(b.h[t]); rec.l.push(b.l[t]); rec.c.push(b.c[t]); out.grew++; }
+    else out.today = true;
+  }
+  return out;
+}
+async function itLoad(){
+  if (IT.busy) return; await itRestore();
+  const want = itSyms(), done = lastDoneSession(), todo = [];
+  for (const s of want) {
+    const rec = IT.recs.get(s), bb = rec ? itBars(s) : null;
+    const lastDone = bb ? bb.d[bb.d.length - (bb.today ? 2 : 1)] : null;
+    const need = !rec || (bb && bb.split) || (lastDone && lastDone < done), why = `${done}|${bb && bb.split ? "split" : "gap"}`;
+    if (need && IT.tried.get(s) !== why) todo.push([s, why]);
+  }
+  if (!todo.length || !newsKey()) { itSave(); return; }
+  todo.forEach(([s, why]) => IT.tried.set(s, why)); todo.splice(0, todo.length, ...todo.map(x => x[0]));
+  IT.busy = true; IT.errs = []; IT.prog = {done: 0, n: todo.length}; let i = 0;
+  const worker = async () => { while (i < todo.length) { const s = todo[i++];
+    try { const r = await itFetch(s); if (r.d.length) { IT.recs.set(s, r); IT.calc.delete(s); try { await itDbPut([r]); } catch (e) {} } else IT.errs.push(`${s}: no bars from Massive`); }
+    catch (e) { IT.errs.push(`${s}: ${e.msg || "error"}`); if (/refused/.test(e.msg || "")) i = todo.length; }
+    IT.prog.done++; if (S.ui.tab === "itrend" && IT.prog.done % 4 === 0) itPaint(); } };
+  try { await Promise.all([worker(), worker(), worker(), worker()]); } finally { IT.busy = false; IT.prog = null; IT.calc.clear(); }
+  itSave(); if (S.ui.tab === "itrend") itPaint();
+}
+// keep the sessions copied from the board's bars (the record grows past 5 years)
+function itSave(){ const g = []; for (const [, r] of IT.recs) if (r._n !== r.d.length) { r._n = r.d.length; g.push(r); } if (g.length) itDbPut(g.map(r => { const {_n, ...x} = r; return x; })).catch(() => {}); }
+
+/* ---------- maths (pure) ---------- */
+function itEma(c, n){ const o = new Array(c.length).fill(NaN), a = 2 / (n + 1); let s = 0;
+  for (let t = 0; t < c.length; t++) { if (t < n) { s += c[t]; if (t === n - 1) o[t] = s / n; } else o[t] = o[t - 1] + a * (c[t] - o[t - 1]); } return o; }
+function itTr(h, l, c){ return h.map((x, t) => t === 0 ? x - l[t] : Math.max(x - l[t], Math.abs(x - c[t - 1]), Math.abs(l[t] - c[t - 1]))); }
+function itRma(x, n){ const o = new Array(x.length).fill(NaN); let s = 0;
+  for (let t = 0; t < x.length; t++) { if (t < n) { s += x[t]; if (t === n - 1) o[t] = s / n; } else o[t] = (o[t - 1] * (n - 1) + x[t]) / n; } return o; }
+function itZ(a){ const v = a.filter(fin); if (v.length < 2) return {m: NaN, s: NaN, n: v.length}; const m = v.reduce((p, x) => p + x, 0) / v.length; const s = Math.sqrt(v.reduce((p, x) => p + (x - m) * (x - m), 0) / (v.length - 1)); return {m, s, n: v.length}; }
+const itMed = a => { const b = a.filter(fin).sort((x, y) => x - y); if (!b.length) return NaN; const k = b.length >> 1; return b.length % 2 ? b[k] : (b[k - 1] + b[k]) / 2; };
+// bars {d, o, h, l, c} → every daily value + tonight's read
+function itCalc(B){
+  const n = B.c.length; if (n < 30) return {n, short: true};
+  const c = B.c, e21 = itEma(c, 21), atr = itRma(itTr(B.h, B.l, c), 14);
+  // weeks: index of each day's week, completed weekly closes / highs / lows
+  const wk = B.d.map(weekKey), wIdx = new Array(n), W = [];
+  for (let t = 0; t < n; t++) { if (!W.length || W[W.length - 1].k !== wk[t]) W.push({k: wk[t], h: B.h[t], l: B.l[t], c: c[t], t0: t}); else { const w = W[W.length - 1]; w.h = Math.max(w.h, B.h[t]); w.l = Math.min(w.l, B.l[t]); w.c = c[t]; } wIdx[t] = W.length - 1; }
+  const wc = W.map(w => w.c), wtr = itTr(W.map(w => w.h), W.map(w => w.l), wc), watr = itRma(wtr, 14);
+  // as of day t: this week's bar so far
+  const s10 = new Array(n).fill(NaN), wa = new Array(n).fill(NaN), back10 = new Array(n).fill(NaN);
+  let wh = -Infinity, wl = Infinity;
+  for (let t = 0; t < n; t++) {
+    const j = wIdx[t]; if (t === W[j].t0) { wh = -Infinity; wl = Infinity; } wh = Math.max(wh, B.h[t]); wl = Math.min(wl, B.l[t]);
+    if (j >= 9) { let s = 0; for (let k = j - 9; k < j; k++) s += wc[k]; s10[t] = (s + c[t]) / 10; back10[t] = s / 9; }
+    if (j >= 14) { const pc = wc[j - 1], tr = Math.max(wh - wl, Math.abs(wh - pc), Math.abs(wl - pc)); wa[t] = (watr[j - 1] * 13 + tr) / 14; }
+  }
+  const dD = c.map((x, t) => fin(e21[t]) && atr[t] > 0 ? (x - e21[t]) / atr[t] : NaN), dW = c.map((x, t) => fin(s10[t]) && wa[t] > 0 ? (x - s10[t]) / wa[t] : NaN);
+  const zD = itZ(dD), zW = itZ(dW), sD = dD.map(x => fin(x) && zD.s > 0 ? (x - zD.m) / zD.s : NaN), sW = dW.map(x => fin(x) && zW.s > 0 ? (x - zW.m) / zW.s : NaN);
+  const st = c.map((x, t) => !fin(e21[t]) || !fin(s10[t]) ? null : x > e21[t] ? (x > s10[t] ? "on" : "pr") : (x > s10[t] ? "pb" : "off"));
+  // runs of one state
+  const runs = []; for (let t = 0; t < n; t++) { if (!st[t]) continue; const r = runs[runs.length - 1]; if (r && r.s === st[t] && r.t1 === t - 1) r.t1 = t; else runs.push({s: st[t], t0: t, t1: t}); }
+  runs.forEach(r => { r.len = r.t1 - r.t0 + 1; const b = r.t0 > 0 ? c[r.t0 - 1] : c[r.t0]; r.ret = (c[r.t1] / b - 1) * 100; });
+  const L = n - 1, cur = runs[runs.length - 1] || null, past = cur ? runs.slice(0, -1).filter(r => r.s === cur.s && r.t0 > runs[0].t0) : [];
+  // since when each line has been on this side
+  const since = (line) => { if (!fin(line[L])) return null; const up = c[L] > line[L]; let t = L; while (t > 0 && fin(line[t - 1]) && (c[t - 1] > line[t - 1]) === up) t--; return {up, t, d: B.d[t], n: L - t + 1}; };
+  // rarity: stored days at or beyond tonight's σ on the same side
+  const rare = (s) => { const v = s.filter(fin), x = s[L]; if (!fin(x) || !v.length) return null; const k = v.filter(y => x < 0 ? y <= x : y >= x).length; return {k, n: v.length, p: k / v.length * 100}; };
+  // where the worst 5% of daily returns happened
+  const rets = []; for (let t = 1; t < n; t++) if (st[t]) rets.push({r: c[t] / c[t - 1] - 1, s: st[t]});
+  const cut = rets.map(x => x.r).sort((a, b) => a - b)[Math.floor(rets.length * 0.05)], worst = rets.filter(x => x.r <= cut);
+  const share = {}; for (const k of Object.keys(IT_ST)) share[k] = {w: worst.length ? worst.filter(x => x.s === k).length / worst.length * 100 : NaN, all: rets.length ? rets.filter(x => x.s === k).length / rets.length * 100 : NaN};
+  return {n, d: B.d, c, e21, s10, atr, wa, dD, dW, sD, sW, st, runs, cur, past, L,
+    now: {c: c[L], st: st[L], e21: e21[L], s10: s10[L], back10: back10[L], sD: sD[L], sW: sW[L], dD: dD[L], dW: dW[L]},
+    sinceD: since(e21), sinceW: since(s10), rareD: rare(sD), rareW: rare(sW), share, nD: zD.n, nW: zW.n, today: !!B.today};
+}
+function itGet(sym){
+  const B = itBars(sym); if (!B) return null;
+  const key = `${B.d.length}|${B.d[B.d.length - 1]}|${B.c[B.c.length - 1]}`, h = IT.calc.get(sym);
+  if (h && h.key === key) return h.v;
+  const v = itCalc(B); v.src = B.src; v.split = B.split; IT.calc.set(sym, {key, v}); return v;
+}
+
+/* ---------- page ---------- */
+{
+  const tabs = $("tabs"), mk = tabs.querySelector('button[data-tab="market"]');
+  mk.insertAdjacentHTML("afterend", `<button data-tab="itrend" data-sub="Indexes & sectors vs their 21-day and 10-week lines" title="Indexes & sectors vs their 21-day and 10-week lines">Index trend</button>`);
+  $("tab-market").insertAdjacentHTML("afterend", `<section class="tab" id="tab-itrend"><p class="lede">Each index and sector ETF read on its own price only: above or below its 21-day line (21 EMA) and its 10-week line (10-week SMA) — four situations — and how stretched price is from each, scored against its own last 5 years. A second opinion beside MAP; it never changes the call, a list or a size.</p><div class="card g1" id="itHead"></div><div class="card g1" id="itGrid"></div><div id="itRead"></div></section>`);
+  document.head.insertAdjacentHTML("beforeend", `<style>#tabs button[data-tab="itrend"]{--ic:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 17l5-5 4 3 8-9'/><path d='M3 21h18'/></svg>")}
+#tab-itrend{--it-on:var(--good);--it-pb:var(--st1);--it-pr:var(--warn);--it-off:var(--crit);--it-up:#6b5bd6;--it-dn:var(--crit)}
+#itHead .bd{display:flex;gap:10px 16px;flex-wrap:wrap;align-items:center}
+.itg-h{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-3);margin:8px 0 4px}
+.itg{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:6px}
+.itt{border:1px solid var(--line);border-left:4px solid var(--line-strong);border-radius:8px;padding:5px 8px;background:var(--surface);cursor:pointer;text-align:left;font:inherit;color:inherit;min-width:0}
+.itt.on{outline:2px solid var(--accent);outline-offset:-1px}
+.itt b{font-size:13px}.itt .nm{display:block;font-size:10.5px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.itt .ln{display:flex;gap:6px;align-items:baseline;font-size:11px;flex-wrap:wrap}
+.itt.iton{border-left-color:var(--it-on)}.itt.itpb{border-left-color:var(--it-pb)}.itt.itpr{border-left-color:var(--it-pr)}.itt.itoff{border-left-color:var(--it-off)}
+.itw.iton{color:var(--it-on)}.itw.itpb{color:var(--it-pb)}.itw.itpr{color:var(--it-pr)}.itw.itoff{color:var(--it-off)}
+.itx{font-size:10px;font-weight:600;padding:0 4px;border-radius:4px;color:#fff}.itx.up{background:var(--it-up)}.itx.dn{background:var(--it-dn)}
+.itr{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr) minmax(0,1fr);gap:12px;margin-bottom:12px}
+.itnow{padding:12px 14px}.itnow .big{font-size:30px;font-weight:700;line-height:1.1;margin:4px 0}
+.itnow.iton{background:var(--good-soft)}.itnow.itoff{background:var(--down-soft)}.itnow.itpr{background:var(--warn-soft)}.itnow.itpb{background:var(--surface-2)}
+.itch{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.itch span{border:1px solid var(--line-strong);border-radius:6px;padding:2px 7px;font-size:11px;font-family:var(--mono);background:var(--surface)}
+.itbx{display:grid;grid-template-columns:1fr 1fr;gap:8px}.itbx>div{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 9px;min-width:0}
+.itbx .k{font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-3)}.itbx .v{font-size:19px;font-weight:700}
+.itga{padding:10px 12px}.itga h3{margin:0;font-size:15px}.itga svg{width:100%;height:auto;display:block}
+.itcard{padding:10px 12px}.itc{height:560px;position:relative}.itleg{font-size:11.5px;color:var(--ink-2);margin:4px 0 6px;min-height:16px}
+.itkey{display:flex;gap:4px 12px;flex-wrap:wrap;font-size:11px;color:var(--ink-2);margin:4px 0}.itkey i{display:inline-block;width:14px;height:3px;vertical-align:middle;margin-right:4px}
+@media (max-width:1100px){.itr{grid-template-columns:1fr}}</style>`);
+}
+const itCls = s => s && IT_ST[s] ? IT_ST[s].cls : "";
+const itSg = (x, d = 2) => fin(x) ? (x > 0 ? "+" : x < 0 ? "−" : "") + Math.abs(x).toFixed(d) : "—";
+const itPx = x => fin(x) ? (x >= 1000 ? x.toFixed(1) : x.toFixed(2)) : "—";
+const itDt = d => { if (!d) return "—"; const [y, m, dd] = d.split("-"); return `${+dd} ${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][+m - 1]}${y !== String(new Date().getFullYear()) ? " " + y : ""}`; };
+const itExt = x => !fin(x) ? "" : x >= IT_SIG ? `<span class="itx up" title="upside extended (past +${IT_SIG}σ)">▲</span>` : x <= -IT_SIG ? `<span class="itx dn" title="downside extended (past −${IT_SIG}σ)">▼</span>` : "";
+function itHeadHTML(){
+  const mr = mapRegime(), v = mr.v || "";
+  const recs = itSyms().map(s => IT.recs.get(s)).filter(Boolean), first = recs.length ? recs.map(r => r.d[0]).sort()[0] : null;
+  const seg = `<span class="seg" title="Which ETFs the grid shows — changes what you see only">${[[0, "Indexes & sectors"], [1, "+ every ETF group"]].map(([k, t]) => `<button data-itall="${k}" class="${itAll() === k ? "on" : ""}">${t}</button>`).join("")}</span>`;
+  let st = "";
+  if (IT.prog) st = `Fetching 5 years of daily bars from Massive… ${IT.prog.done} of ${IT.prog.n}`;
+  else if (!newsKey() && !recs.length) st = `Add your Massive key in Settings to fetch the 5-year history (one call per ETF, once).`;
+  else if (recs.length) st = `Massive daily bars (15 min delayed), stored in this browser from ${itDt(first)} · new sessions copied from the board's own price history`;
+  else if (HIST.nD) st = `Using the board's own price history (${HIST.nD} sessions) until the 5-year pull runs — stretch scores are against that shorter history.`;
+  return `<div class="hd"><h2>Index trend</h2><span class="sub">price vs the 21-day and the 10-week line · extended past ±${IT_SIG}σ of its own history</span></div>
+    <div class="bd"><span><b>MAP says:</b> <span class="${v === "Supportive" ? "pos" : v === "Defensive" ? "neg" : ""}">${esc(v || "not set")}</span> <span class="small">— this page is a second opinion and never changes the call</span></span>${seg}
+    <span class="small">${esc(st)}</span>${IT.msg ? `<span class="small neg">${esc(IT.msg)}</span>` : ""}${IT.errs.length ? `<span class="small neg" title="${esc(IT.errs.join("\n"))}">${IT.errs.length} ETF(s) couldn't be fetched (hover)</span>` : ""}</div>`;
+}
+function itTile(sym, sel){
+  const x = itGet(sym), nm = IT_NAME[sym] || ETF_GROUP_OF[sym] || "";
+  if (!x || x.short || !x.now.st) return `<button class="itt" data-itsel="${esc(sym)}" data-tsym="${esc(sym)}"><b>${esc(sym)}</b><span class="nm">${esc(nm)}</span><span class="ln dim">${IT.prog ? "loading…" : "no history yet"}</span></button>`;
+  const s = x.now.st, dn = x.cur ? x.cur.len : 0;
+  return `<button class="itt ${itCls(s)} ${sym === sel ? "on" : ""}" data-itsel="${esc(sym)}" data-tsym="${esc(sym)}" title="${esc(`${sym} · ${IT_ST[s].n} for ${dn} sessions · daily ${itSg(x.now.sD)}σ · weekly ${itSg(x.now.sW)}σ`)}"><b>${esc(sym)}</b><span class="nm">${esc(nm)}</span>
+    <span class="ln"><span class="itw ${itCls(s)}"><b>${IT_ST[s].n}</b></span><span class="dim">${dn}d</span></span>
+    <span class="ln"><span>D ${itSg(x.now.sD, 1)}σ</span>${itExt(x.now.sD)}<span>W ${itSg(x.now.sW, 1)}σ</span>${itExt(x.now.sW)}</span></button>`;
+}
+function itGridHTML(sel){
+  return `<div class="hd"><h2>Pick an index or sector</h2><span class="sub">left edge = its situation · D / W = stretch from the daily / weekly line in σ · ▲▼ = extended</span></div><div class="bd">`
+    + itGroups().map(([g, l]) => `<div class="itg-h">${esc(g)}</div><div class="itg">${l.map(s => itTile(s, sel)).join("")}</div>`).join("") + `</div>`;
+}
+// gauge + histogram of the stored σ values (SVG, scales with the card)
+function itGauge(s, x, rare, side){
+  const lo = -4, hi = 4, W = 400, X = v => 10 + (clamp(v, lo, hi) - lo) / (hi - lo) * (W - 20);
+  const bins = new Array(32).fill(0); s.forEach(v => { if (fin(v)) bins[clamp(Math.floor((v - lo) / 0.25), 0, 31)]++; });
+  const mx = Math.max(1, ...bins), col = k => { const m = lo + (k + 0.5) * 0.25; return m <= -IT_SIG ? "var(--it-dn)" : m >= IT_SIG ? "var(--it-up)" : "var(--line-strong)"; };
+  const bars = bins.map((b, k) => `<rect x="${X(lo + k * 0.25) + 0.5}" y="${150 - b / mx * 62}" width="${(W - 20) / 32 - 1}" height="${b / mx * 62}" fill="${col(k)}"/>`).join("");
+  const tx = fin(x) ? X(x) : null;
+  const svg = `<svg viewBox="0 0 ${W} 172" role="img" aria-label="stretch gauge">
+    <rect x="10" y="22" width="${W - 20}" height="10" rx="5" fill="var(--surface-3)"/>
+    <rect x="10" y="22" width="${X(-IT_SIG) - 10}" height="10" rx="5" fill="var(--down-soft)"/><rect x="${X(IT_SIG)}" y="22" width="${W - 10 - X(IT_SIG)}" height="10" rx="5" fill="var(--up-soft)"/>
+    <line x1="${X(-IT_SIG)}" x2="${X(-IT_SIG)}" y1="18" y2="36" stroke="var(--it-dn)" stroke-width="2"/><line x1="${X(IT_SIG)}" x2="${X(IT_SIG)}" y1="18" y2="36" stroke="var(--it-up)" stroke-width="2"/>
+    <text x="${X(-IT_SIG)}" y="48" font-size="10" text-anchor="middle" fill="var(--ink-3)">−${IT_SIG}σ</text><text x="${X(IT_SIG)}" y="48" font-size="10" text-anchor="middle" fill="var(--ink-3)">+${IT_SIG}σ</text>
+    <text x="10" y="12" font-size="10" fill="var(--it-dn)">DOWNSIDE EXTENDED</text><text x="${W - 10}" y="12" font-size="10" text-anchor="end" fill="var(--it-up)">UPSIDE EXTENDED</text>
+    ${tx != null ? `<path d="M${tx - 5} 16 L${tx + 5} 16 L${tx} 23 Z" fill="var(--ink)"/><text x="${clamp(tx, 24, W - 24)}" y="64" font-size="11" font-weight="700" text-anchor="middle" fill="var(--ink)">${itSg(x)}σ</text>` : ""}
+    ${bars}<line x1="10" x2="${W - 10}" y1="150.5" y2="150.5" stroke="var(--line-strong)"/>
+    ${tx != null ? `<line x1="${tx}" x2="${tx}" y1="80" y2="156" stroke="var(--ink)" stroke-width="1.5"/><text x="${clamp(tx, 22, W - 22)}" y="168" font-size="10" text-anchor="middle" fill="var(--ink)">tonight</text>` : ""}
+  </svg>`;
+  let t = "";
+  if (rare && fin(x)) {
+    const ext = x <= -IT_SIG ? "downside extended" : x >= IT_SIG ? "upside extended" : "";
+    const pTxt = rare.p < 1 ? "under the 1st percentile" : `${rare.p < 10 ? rare.p.toFixed(1) : Math.round(rare.p)}% of days`;
+    t = ext ? `<b class="${x < 0 ? "neg" : ""}" style="${x > 0 ? "color:var(--it-up)" : ""}">${ext}</b> — only ${rare.k} of the last ${rare.n.toLocaleString("en-US")} days have been this far from the line (${pTxt}). Worth knowing, not a reason to buy or sell on its own.`
+      : `Inside the normal range — ${rare.k.toLocaleString("en-US")} of the last ${rare.n.toLocaleString("en-US")} days were this far ${x < 0 ? "below" : "above"} the line or further.`;
+  } else t = `Not enough history for a stretch score yet.`;
+  return `${svg}<div class="small" style="margin-top:4px">${t}</div>`;
+}
+function itReadHTML(sym){
+  const x = itGet(sym);
+  if (!x) return `<div class="card"><div class="bd"><div class="empty">${IT.prog ? "Fetching the history…" : newsKey() ? `No stored bars for ${esc(sym)} yet.` : "Add your Massive key in Settings (or load the price history) to read this ETF."}</div></div></div>`;
+  if (x.short || !x.now.st) return `<div class="card"><div class="bd"><div class="empty">${esc(sym)}: ${x.n} sessions stored — the 10-week line needs about 10 weeks and the weekly ATR about 15.</div></div></div>`;
+  const n = x.now, s = n.st, S1 = IT_ST[s], cur = x.cur, past = x.past;
+  const lvl = (lab, v, up) => { const p = fin(v) ? (v / n.c - 1) * 100 : NaN; return `<div><div class="k">${up ? "Stays above the " + lab + " while over" : "Back above the " + lab}</div><div class="v">${itPx(v)}</div><div class="small">${fin(p) ? itSg(p, 1) + "% from tonight's close" : ""}</div></div>`; };
+  const pr = past.map(r => r.ret), pl = past.map(r => r.len), worst = pr.length ? Math.min(...pr) : NaN;
+  const sh = x.share[s], tag = `${x.today ? "tonight so far" : "last close"} · ${itDt(x.d[x.L])}`;
+  const sinceTxt = (lab, o) => o ? `${lab} · ${o.up ? "above" : "below"} since ${itDt(o.d)} · ${o.n}d` : `${lab} · —`;
+  const nm = IT_NAME[sym] ? ` · ${IT_NAME[sym]}` : "";
+  return `<div class="itr">
+    <div class="card itnow ${S1.cls}"><div class="small" style="font-family:var(--mono);text-transform:uppercase">${esc(tag)} · ${esc(sym)}${esc(nm)} ${itPx(n.c)}</div>
+      <div class="big itw ${S1.cls}">${S1.n.toUpperCase()}</div>
+      <div>${esc(S1.d)}${fin(sh.w) ? ` <span class="small">Over the stored history ${Math.round(sh.w)}% of ${esc(sym)}'s worst 5% of days came in this situation (it was in it ${Math.round(sh.all)}% of the time).</span>` : ""}</div>
+      <div class="itch"><span>${esc(sinceTxt("21-day", x.sinceD))}</span><span>${esc(sinceTxt("10-week", x.sinceW))}</span></div>
+      <div class="itbx">${lvl("21-day", n.e21, n.c > n.e21)}${lvl("10-week", n.back10, n.c > n.s10)}
+        <div><div class="k">${esc(sym)} this run</div><div class="v ${cls(cur.ret)}">${itSg(cur.ret, 1)}%</div><div class="small">${pr.length ? `past runs: ${itSg(itMed(pr), 1)}% median · worst ${itSg(worst, 1)}%` : "no past runs in this situation"}</div></div>
+        <div><div class="k">Time in this situation</div><div class="v">${cur.len} days</div><div class="small">${pl.length ? `usually ${Math.round(itMed(pl))} · longest ever ${Math.max(...pl)} · ${pl.length} past runs` : "no past runs in this situation"}</div></div>
+      </div></div>
+    <div class="card itga"><h3>DAILY</h3><div class="small">price against its own 21 EMA, in ATR (${itSg(n.dD)} ATR)</div>${itGauge(x.sD, n.sD, x.rareD)}</div>
+    <div class="card itga"><h3>WEEKLY</h3><div class="small">price against its own 10-week SMA, in weekly ATR (${itSg(n.dW)} ATR)</div>${itGauge(x.sW, n.sW, x.rareW)}</div>
+  </div>
+  <div class="card itcard"><div class="hd" style="padding:0 0 4px"><h2>${esc(sym)} and the two lines</h2><span class="sub">last two years shown · scroll or pinch for the rest of the ${x.n.toLocaleString("en-US")} sessions</span></div>
+    <div class="itkey">${Object.keys(IT_ST).map(k => `<span><i style="background:var(--it-${k})"></i>${IT_ST[k].n}</span>`).join("")}<span><i style="background:var(--ink-3)"></i>21 EMA</span><span><i style="background:var(--accent)"></i>10-week SMA</span><span><i style="background:var(--it-up)"></i>upside extended</span><span><i style="background:var(--it-dn)"></i>downside extended</span></div>
+    <div class="small">Under the price: the four situations as a strip, then the daily stretch in σ (bars) and the weekly stretch (line), with the ±${IT_SIG}σ lines.</div>
+    <div class="itleg" id="itLeg"></div><div class="itc" id="itChart"></div></div>`;
+}
+function itChart(sym){
+  const box = $("itChart"), leg = $("itLeg"); if (IT.chart) { try { IT.chart.remove(); } catch (e) {} IT.chart = null; }
+  const x = itGet(sym), LW = window.LightweightCharts; if (!box || !x || x.short || !LW) return;
+  const css = getComputedStyle($("tab-itrend")), v = (k, f) => css.getPropertyValue(k).trim() || f;
+  const col = {on: v("--good", "#0ca30c"), pb: v("--st1", "#1baf7a"), pr: v("--warn", "#fab219"), off: v("--crit", "#d03b3b")}, up = "#6b5bd6", dn = v("--crit", "#d03b3b"), grey = v("--line-strong", "#cfcec8");
+  const chart = LW.createChart(box, {autoSize: true, layout: {background: {type: "solid", color: v("--surface", "#ffffff")}, textColor: v("--ink-2", "#52514e"), fontSize: 11, attributionLogo: true, panes: {separatorColor: v("--line", "#e5e4df")}},
+    grid: {vertLines: {visible: false}, horzLines: {color: v("--line", "#e5e4df")}}, rightPriceScale: {borderColor: v("--line", "#e5e4df")},
+    timeScale: {borderColor: v("--line", "#e5e4df"), rightOffset: 4}, crosshair: {mode: 0}, handleScroll: {vertTouchDrag: false}, localization: {locale: "en-US"}});
+  IT.chart = chart;
+  const t0 = x.st.findIndex(Boolean); if (t0 < 0) return;
+  const P = [], E = [], W10 = [], ST = [], SD = [], SW = [];
+  for (let t = t0; t < x.n; t++) {
+    const time = x.d[t], s = x.st[t];
+    P.push({time, value: x.c[t], color: s ? col[s] : grey}); E.push({time, value: x.e21[t]}); W10.push({time, value: x.s10[t]});
+    ST.push({time, value: 1, color: s ? col[s] : grey});
+    if (fin(x.sD[t])) SD.push({time, value: x.sD[t], color: x.sD[t] >= IT_SIG ? up : x.sD[t] <= -IT_SIG ? dn : grey});
+    if (fin(x.sW[t])) SW.push({time, value: x.sW[t]});
+  }
+  const ls = (o, p) => chart.addSeries(LW.LineSeries, {priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, ...o}, p);
+  ls({color: v("--ink-3", "#7c7b76"), lineWidth: 1}).setData(E);
+  ls({color: v("--accent", "#2a78d6"), lineWidth: 2}).setData(W10);
+  const ps = chart.addSeries(LW.LineSeries, {lineWidth: 2, priceLineVisible: false, lastValueVisible: true});
+  ps.setData(P);
+  const sts = chart.addSeries(LW.HistogramSeries, {priceScaleId: "itstrip", priceLineVisible: false, lastValueVisible: false, base: 0}, 1); sts.setData(ST);   // own overlay scale: no axis labels on the strip
+  const sd = chart.addSeries(LW.HistogramSeries, {priceLineVisible: false, lastValueVisible: false, base: 0}, 2); sd.setData(SD);
+  const sw = ls({color: v("--ink-2", "#52514e"), lineWidth: 1, lastValueVisible: true}, 2); sw.setData(SW);
+  for (const [p, c] of [[IT_SIG, up], [-IT_SIG, dn]]) sd.createPriceLine({price: p, color: c, lineWidth: 1, lineStyle: 0, axisLabelVisible: true, title: ""});
+  try { const pn = chart.panes(); pn[0].setStretchFactor(0.68); pn[1].setStretchFactor(0.05); pn[2].setStretchFactor(0.27); } catch (e) {}
+  const span = innerWidth < 700 ? 250 : 504;
+  chart.timeScale().setVisibleLogicalRange({from: Math.max(0, P.length - span), to: P.length + 3});
+  const at = new Map(P.map((p, k) => [p.time, k + t0]));
+  const paint = tm => { const t = tm != null && at.has(tm) ? at.get(tm) : x.n - 1, s = x.st[t];
+    leg.innerHTML = `<b>${esc(sym)}</b> ${esc(x.d[t])} · close <b>${itPx(x.c[t])}</b> · <span class="itw ${itCls(s)}"><b>${s ? IT_ST[s].n : "—"}</b></span> · 21 EMA ${itPx(x.e21[t])} · 10-week ${itPx(x.s10[t])} · daily ${itSg(x.sD[t])}σ · weekly ${itSg(x.sW[t])}σ`; };
+  paint(null);
+  chart.subscribeCrosshairMove(p => paint(p && p.time != null ? (typeof p.time === "object" ? `${p.time.year}-${String(p.time.month).padStart(2, "0")}-${String(p.time.day).padStart(2, "0")}` : p.time) : null));
+}
+function itPaint(){
+  const sel = itSel();
+  $("itHead").innerHTML = itHeadHTML(); $("itGrid").innerHTML = itGridHTML(sel); $("itRead").innerHTML = itReadHTML(sel);
+  itChart(sel);
+  if (typeof afterTab === "function") afterTab("itrend");
+}
+function renderIndexTrend(){ itPaint(); if (!IT.busy) itRestore().then(() => { if (S.ui.tab === "itrend") itPaint(); return itLoad(); }).catch(e => console.warn("index trend", e)); }
+pageOn("itrend", renderIndexTrend);
+document.addEventListener("click", ev => {
+  const t = ev.target && ev.target.closest ? ev.target.closest("#tab-itrend [data-itsel], #tab-itrend [data-itall]") : null; if (!t) return;
+  if (t.dataset.itsel) { try { store.set("adrb.itSel", t.dataset.itsel); } catch (e) {} itPaint(); return; }
+  try { store.set("adrb.itAll", +t.dataset.itall ? 1 : null); } catch (e) {} renderIndexTrend();
+});
 </script>
