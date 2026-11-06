@@ -17021,7 +17021,10 @@ function liqStatusHTML(){
   return `Tradeable liquidity (check 1b): trade counts for ${nt} of the last ${LIQ_T.trN} sessions${nt < LIQ_T.trMin ? ` — not checked until ${LIQ_T.trMin}+ (${newsKey() ? "refilling from Massive" : "needs your Massive key"})` : ""} · 1-min bars for ${m} name${m === 1 ? "" : "s"}${LIQ.min && LIQ.min.date ? ` (5 sessions to ${LIQ.min.date})` : ""}${LIQ.prog ? ` · fetching ${LIQ.prog.done} of ${LIQ.prog.n}…` : ""}${LIQ.errs.length ? ` · ${LIQ.errs.length} fetch error(s)` : ""}.`;
 }
 hookOn("tab", "liquidity", t => {
-  for (const id of ["s61Box", "dpBox", "homeHeld", "watchBody", "listsBox"]) try { liqPaint($(id)); } catch (e) {}
+  // 6 Nov (display only; Eugene: "the liquidity check appears on the watchlist as a tag, but not in the setups page for my map
+  // focus list"): every ticker table on the page that's showing (MAP lists box focusBox, map tracker, playbook cards …), not a fixed list
+  for (const id of ["s61Box", "dpBox", "homeHeld", "watchBody", "listsBox", "focusBox", "mapTrack"]) try { liqPaint($(id)); } catch (e) {}
+  try { liqPaint(document.querySelector("#app .tab.on")); } catch (e) {}
   if (t === "data") { const host = $("dataFiles"); if (host && !host.querySelector(".lqst")) host.insertAdjacentHTML("beforeend", `<div class="small lqst" style="margin-top:6px">${liqStatusHTML()}</div>`); }
   liqNtFill().catch(() => {}); liqMinFill().catch(() => {});
 });
