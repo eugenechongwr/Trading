@@ -7691,13 +7691,22 @@ function jnTv(file){
 }
 
 /* ---------------- export · snapshots ---------------- */
+// 7 Nov 2026: later sections add Decision-log columns at the END through JN_CSV_EXT ({h: [headers], prep: () => P, cells:
+// (x, P) => [values]}, x = a jnItems() row) — every older column stays byte-identical; MISSED SESSION rows are unchanged
+// (MAP SCORECARD section). No override.
+const JN_CSV_EXT = [];
+function jnCsvExt(x, q, P){
+  if (!JN_CSV_EXT.length) return "";
+  return "," + JN_CSV_EXT.flatMap((e, i) => { if (!x) return e.h; let c = null; try { c = e.cells(x, P[i]); } catch (er) { console.warn("decision log columns", er); } return c || e.h.map(() => ""); }).map(q).join(",");
+}
 function jnCSV(){
   const q = v => { const x = v == null ? "" : String(v); return /[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x; };
   const H = ["plan_day", "data_session", "file_type", "files", "ticker", "lists", "state", "status", "rs", "group", "group_state", "entry", "widest_stop", "target_2r", "adr_pct", "from_line_adr", "from_50_adr", "grade", "volatility", "earnings", "earnings_days", "pivot_script", "on_deck_why", "tape_read", "map_call",
     "call", "reasons", "note", "decided_at", "after_open", "entered", "trigger", "chart_stop", "resistance", "room_r", "outcome", "fill", "fill_date", "exit", "exit_date", "r", "move_5d_pct", "move_10d_pct", "my_fill", "my_exit", "my_stop", "my_stop_from", "my_r", "my_fill_vs_entry_adr", "my_risk_adr",
     "rules_logged", "s61_list", "s61_loc", "s61_planned_entry", "s61_1r_est", "s61_first_res", "s61_room_r", "s61_first_fail", "s61_grade", "s61_earnings_sessions", "s61_exit_by", "s61_setup_quality",
     "shown_to_you", "rules_name", "my_trim", "my_r_net", "my_trim_r", "my_runner_r", "room_from_fill_r", "room_res", "room_res_from", "room_under_2r_reason", "outcome_type", "status", "status_reason"];
-  const L = [H.join(",")];
+  const XP = JN_CSV_EXT.map(e => { try { return e.prep ? e.prep() : null; } catch (er) { console.warn("decision log columns", er); return null; } });
+  const L = [H.join(",") + jnCsvExt(null, q, XP)];
   for (const x of jnItems().reverse()) {
     const o = x.o, f = o.f, d = o.dec, c = o.ch || {}, s = x.sc.sim, rr = jnRoom(o), r4 = v => v == null || !isFinite(v) ? "" : +v.toFixed(4), m = jnMine(o) || {}, g = f.s61 || {};
     L.push([x.rec.p, x.rec.d0, x.rec.mode === "pm" ? "premarket" : "regular", (x.rec.files || []).join(" + "), o.s, o.src.map(k => JN_SRC[k] || k).join(" + "), f.st ? ST[f.st].name : "", f.status, f.rs, f.grp, f.gs, f.entry, f.stop, f.tgt, f.adr, f.zx, f.ext, f.grade, f.vs ? VSL[f.vs].n : "", f.er, f.erIn, f.piv, f.why || "", x.rec.tape || "", x.rec.map || "",
@@ -7706,7 +7715,7 @@ function jnCSV(){
       o.fill ?? "", o.exit ?? "", r4(m.stop), m.from || "", r4(m.R), r4(m.slip), r4(m.risk),
       x.rec.spec || "6.0", g.list || "", g.loc || "", g.entry ?? "", g.r1 ?? "", g.nh ? "NH" : g.fr ?? "", g.nh ? "NH" : g.room ?? "", g.ff || "", g.grade || "", g.erN ?? "", g.exitBy || "", g.sq ?? "",
       x.dec === "unseen" ? "no" : "yes", o.spec || x.rec.spec || "6.0", o.trim ?? "", r4(m.net), r4(m.trimR), r4(m.runR), r4(m.roomA), r4(m.res), m.resFrom || "", o.roomWhy || "",
-      m.R != null ? "executed" : jnFinished(s) ? ((o.spec || x.rec.spec || "6.0") === "6.1" ? "simulated (Entry Check levels)" : "simulated (6.0 replay)") : "", o.st || "", o.stWhy || ""].map(q).join(","));
+      m.R != null ? "executed" : jnFinished(s) ? ((o.spec || x.rec.spec || "6.0") === "6.1" ? "simulated (Entry Check levels)" : "simulated (6.0 replay)") : "", o.st || "", o.stWhy || ""].map(q).join(",") + jnCsvExt(x, q, XP));
   }
   for (const d of jnMissed()) L.push([d, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "MISSED SESSION"].map(q).join(","));
   download(`deep-space-decision-log-${fmtDate(new Date())}.csv`, L.join("\n"), "text/csv");
@@ -12544,12 +12553,23 @@ svg text.sclab{paint-order:stroke;stroke:var(--surface);stroke-width:3px;stroke-
    - Self-check: a separate short copy of the R1 state machine and the OB status for every stock with history (pbSelf).
    Never changes: Entry Check checks / lists / sizes, rows, ranks, states, the Daily Plan, the Board log, the Deep Space
    feed CSV, the ETF feed, the Decision-log CSV, settings-hash keys. Storage NEW: adrb.pb, adrb.pbGF, adrb.r1Terr.
+   7 Nov 2026 (in place, guarded — Notion "Playbook 2 · First Pullback — v1.0", approved 7 Nov; see the FIRST PULLBACK script
+   at the end): the switch reads "1 · Leader Pullback · 2 · First Pullback". First Pullback is stored as adrb.pb = "fp" (its own
+   value — 2 / 3 keep their old meaning and are never reused). Shakeout Reclaim and Floor Bounce come off the switch: an old
+   stored 2 / 3 opens Playbook 1 (and the Research card on that playbook), pbSet(2 | 3) opens the Research card. Both stay
+   computed; every reader below (cards, panel tabs, screens, criteria, Today line, Watchlist card, MAP O lines, feeds,
+   TradingView lists, campaigns, self-check) keeps working. adrb.pbGF gains the key "fp"; its 1 / 2 / 3 sets are kept.
    ===================================================================== */
-const PB_N = {1: "Leader Pullback", 2: "Shakeout Reclaim", 3: "Floor Bounce"};
+const PB_N = {1: "Leader Pullback", 2: "Shakeout Reclaim", 3: "Floor Bounce", fp: "First Pullback"};
 const PB_D = {1: "Playbook 1 · Leader Pullback — buy strong leaders when they dip back to their rising averages; the Entry Check (rules v6.1) is its checklist; canonical, in test since 26 Oct",
   2: "Playbook 2 · Shakeout Reclaim (R1) — a former leader is shaken out under its averages, then takes the level back; experimental live, 0.10% NLV, outside the Entry Check test",
-  3: "Playbook 3 · Floor Bounce (OB) — a fast drop lands on a price floor set earlier and bounces (Monis); paper / watch only, never sized"};
-const pbCur = () => { let v = 1; try { v = +store.get("adrb.pb", 1) || 1; } catch (e) {} return v === 2 || v === 3 ? v : 1; };
+  3: "Playbook 3 · Floor Bounce (OB) — a fast drop lands on a price floor set earlier and bounces (Monis); paper / watch only, never sized",
+  fp: "Playbook 2 · First Pullback — a stock fresh off a strong leg (early Stage 2) pulls back quietly to its daily 9 or 21 EMA on drying volume and tight ranges; buy over the 09:30–10:00 ET candle's high, stop = its low; paper / watch only (Notion v1.0, 7 Nov 2026)"};
+// 7 Nov 2026: the buttons on the switch (value, number shown) — First Pullback is shown as 2 but stored as "fp"
+const PB_SW = [[1, 1], ["fp", 2]];
+const pbNo = k => k === "fp" ? 2 : k;
+// 7 Nov 2026: "fp" = First Pullback; an old stored 2 / 3 (Shakeout Reclaim / Floor Bounce, now off the switch) reads as 1 — never as "fp"
+const pbCur = () => { let v = 1; try { v = store.get("adrb.pb", 1); } catch (e) {} return v === "fp" ? "fp" : 1; };
 const p2 = x => fin(x) ? x.toFixed(2) : "—";
 const pbHH = () => !!(S.has && S.has.hist && HIST.nD);
 // the per-symbol caches follow the price bars only (the SPEED script's key): a settings change that rebuilds the rows but
@@ -12714,7 +12734,7 @@ function obRun(){
 }
 
 /* ---------------- the playbook switch ---------------- */
-function pbSegHTML(id){ const k = pbCur(); return `<span class="seg pbseg" id="${id}" title="Which playbook the Setups page, the ticker panel's first tab, the chart levels and the filter bar follow">${[1, 2, 3].map(i => `<button data-pb="${i}" class="${i === k ? "on" : ""}" title="${esc(PB_D[i])}">${i} · ${PB_N[i]}</button>`).join("")}</span>`; }
+function pbSegHTML(id){ const k = pbCur(); return `<span class="seg pbseg" id="${id}" title="Which playbook the Setups page, the ticker panel's first tab, the chart levels and the filter bar follow">${PB_SW.map(([i, no]) => `<button data-pb="${i}" class="${i === k ? "on" : ""}" title="${esc(PB_D[i])}">${no} · ${PB_N[i]}</button>`).join("")}</span>`; }
 function pbChipPaint(){
   const lb = document.querySelector(".livebox"); if (!lb) return;
   let c = $("pbChip");
@@ -12722,17 +12742,20 @@ function pbChipPaint(){
   c.innerHTML = `<span class="lbl">Playbook</span>` + pbSegHTML("pbSw");
 }
 function pbDefaultGF(k){
-  const p = k === 2 ? GF_PRESETS["Playbook 2 · Shakeout Reclaim"] : k === 3 ? GF_PRESETS["Playbook 3 · Floor Bounce"] : null;
+  const p = k === "fp" ? GF_PRESETS["Playbook 2 · First Pullback"] : k === 2 ? GF_PRESETS["Playbook 2 · Shakeout Reclaim"] : k === 3 ? GF_PRESETS["Playbook 3 · Floor Bounce"] : null;
   return {...structuredClone(GF_DEF), on: true, gates: {...GF_DEF.gates, ...((p && p.gates) || {})}, crit: structuredClone((p && p.crit) || {})};
 }
 function pbSet(k){
-  k = +k; const was = pbCur(); if (k === was || ![1, 2, 3].includes(k)) return;
+  k = k === "fp" ? "fp" : +k;
+  // 7 Nov 2026: Shakeout Reclaim / Floor Bounce are off the switch — 2 / 3 open the Research card on Setups instead
+  if (k === 2 || k === 3) { if (typeof pbResOpen === "function") pbResOpen(k === 2 ? "r1" : "ob"); return; }
+  const was = pbCur(); if (k === was || ![1, "fp"].includes(k)) return;
   const all = store.get("adrb.pbGF", {}) || {};
   all[was] = structuredClone(GF);
   GF = all[k] ? {...structuredClone(GF_DEF), ...structuredClone(all[k]), gates: {...GF_DEF.gates, ...(all[k].gates || {})}, crit: structuredClone(all[k].crit || {})} : pbDefaultGF(k);
   store.set("adrb.pbGF", all); store.set("adrb.pb", k);
-  WSI.tpTab = k === 2 ? "r1" : k === 3 ? "ob" : "plan"; store.set("adrb.tpTab", WSI.tpTab);
-  toast(`Playbook ${k} · ${PB_N[k]} — its own filters are loaded`);
+  WSI.tpTab = k === "fp" ? "fp" : "plan"; store.set("adrb.tpTab", WSI.tpTab);
+  toast(`Playbook ${pbNo(k)} · ${PB_N[k]} — its own filters are loaded`);
   gfApply(); if (!S.snap) renderAll();
   const dr = $("drawer"); if (dr && dr.classList.contains("open") && typeof WSI !== "undefined" && WSI.cur && S.rowBySym && S.rowBySym.has(WSI.cur)) openDrawer(WSI.cur);
 }
@@ -12744,7 +12767,7 @@ const _renderGBarPB = renderGBar;
 renderGBar = function(){
   _renderGBarPB();
   const el = document.querySelector("#gbar .gbar-in"); if (!el) return;
-  const k = pbCur(); el.insertAdjacentHTML("afterbegin", `<span class="gchip pbg pb${k}" title="Each playbook keeps its own filters. Switching playbook saves these and loads the other playbook's set.">Filters for <b>Playbook ${k} · ${PB_N[k]}</b></span>`);
+  const k = pbCur(); el.insertAdjacentHTML("afterbegin", `<span class="gchip pbg pb${k}" title="Each playbook keeps its own filters. Switching playbook saves these and loads the other playbook's set.">Filters for <b>Playbook ${pbNo(k)} · ${PB_N[k]}</b></span>`);
 };
 
 /* ---------------- filter criteria + screens ---------------- */
@@ -12857,8 +12880,9 @@ function pbPlanPaint(){
   box.classList.toggle("hidden", k === 1);
   if (k === 1) { box.innerHTML = ""; box.removeAttribute("data-pb"); return; }
   box.dataset.pb = k;
-  try { box.innerHTML = k === 2 ? r1CardHTML() : obCardHTML(); } catch (e) { console.warn("playbook card", e); box.innerHTML = `<div class="bd"><div class="empty">Couldn't build this card: ${esc(e.message)}</div></div>`; }
-  const lede = $("planLede"); if (lede) lede.innerHTML = k === 2 ? `<b>Playbook 2 · Shakeout Reclaim (R1)</b> — former leaders flushed under their daily 21 EMA that reclaim. Read from the stored daily bars; the trigger is the Shakeout Reclaim indicator's on the 30-min. Click a name for its Shakeout Reclaim tab, chart levels and Entry Check.`
+  try { box.innerHTML = k === "fp" ? (typeof fpCardHTML === "function" ? fpCardHTML() : "") : k === 2 ? r1CardHTML() : obCardHTML(); } catch (e) { console.warn("playbook card", e); box.innerHTML = `<div class="bd"><div class="empty">Couldn't build this card: ${esc(e.message)}</div></div>`; }
+  const lede = $("planLede"); if (lede) lede.innerHTML = k === "fp" ? `<b>Playbook 2 · First Pullback</b> (paper / watch only) — a stock fresh off a strong leg pulls back quietly to its daily 9 or 21 EMA on drying volume and tight ranges. Buy over the 09:30–10:00 ET candle's high, stop = its low. Click a name for its First Pullback tab, chart levels and Entry Check.`
+    : k === 2 ? `<b>Playbook 2 · Shakeout Reclaim (R1)</b> — former leaders flushed under their daily 21 EMA that reclaim. Read from the stored daily bars; the trigger is the Shakeout Reclaim indicator's on the 30-min. Click a name for its Shakeout Reclaim tab, chart levels and Entry Check.`
     : `<b>Playbook 3 · Floor Bounce</b> — fast drops onto a daily price floor (Monis). Paper / watch only. Click a name for its Floor Bounce tab and the level on the chart.`;
 }
 // 31 Oct (structure only): was a renderTab override; now a "tab" hook — same code, same order (BOARD HOOKS, block 1)
@@ -12880,7 +12904,7 @@ function r1PaneHTML(r){
   if (r.etf) return `<div class="pbp"><div class="small">R1 is a stock playbook (former leaders).</div></div>`;
   const x = r1Of(r); if (!x) return `<div class="pbp"><div class="small">${pbHH() ? "Not enough stored bars for R1." : "R1 needs the price history (Data check → Load price history)."}</div></div>`;
   const c = r1CallR(r, x), er = r1Earn(r, x), erOk = er.n == null ? null : er.n >= S61.erMin, stopLim = R1C.maxStop * x.adrD;
-  return `<div class="pbp"><div class="pbh"><b>Shakeout Reclaim · ${esc(r.sym)}</b> <span class="small dim">Playbook 2 · code R1 · experimental live · 0.10% NLV</span><span class="spacer"></span><span class="pill ${c.c}">${esc(c.t)}</span></div>
+  return `<div class="pbp"><div class="pbh"><b>Shakeout Reclaim · ${esc(r.sym)}</b> <span class="small dim">Research (off the switch since 7 Nov) · code R1 · experimental live · 0.10% NLV</span><span class="spacer"></span><span class="pill ${c.c}">${esc(c.t)}</span></div>
     <div class="pbsay"><b>${esc(c.s[0].toUpperCase() + c.s.slice(1))}.</b></div>
     ${pbStrip([[x.gate, "Former leader", x.gate ? "passes the gate" : r1GateWhy(x)], [x.state >= 2 && x.state <= 4, "Reset", "campaign live (1.5 ADR reset into the daily 21 EMA / 50 SMA)"], [x.state === 3, x.state === 3 ? `Armed ${x.armType === 1 ? "U&R" : "CAP"} · ${x.daysLeft} left` : "Armed", "U&R of a pivot low or a capitulation day, last 3 sessions"],
       [!x.inP1, x.inP1 ? "In P1 territory" : "R1 territory", x.terr === "notion" ? "R1 = close under the daily 21 EMA or the 21 EMA not rising (Notion 19 Oct)" : "R1 = close under the daily 9 or 21 EMA (old Spec 6.0 test)"], [x.close > x.s50, "50 SMA", `the trigger needs price above the daily 50 SMA ${p2(x.s50)}`], [erOk, er.n == null ? "Earn ?" : `Earn ${er.n} sess`, "no new entry with earnings inside 5 sessions"]])}
@@ -12892,7 +12916,7 @@ function obPaneHTML(r){
   const x = obOf(r); if (!x) return `<div class="pbp"><div class="small">${pbHH() ? "Not enough stored bars." : "The oversold read needs the price history (Data check → Load price history)."}</div></div>`;
   const st = OB_ST[x.st], ok = OB_CAND.has(x.st), lv = x.levels || [];
   const lvRows = lv.slice(0, 8).map(q => `<tr class="${x.lvl === q ? "on" : x.lost.includes(q) ? "dim" : ""}"><td>${p2(q.p)}</td><td class="l small">${esc(obSrc(q))}</td><td class="l small">${x.lvl === q ? "the level" : x.lost.includes(q) ? "lost (closed under)" : "lower"}</td><td class="small">${esc(q.src.map(s => s.d).join(", "))}</td></tr>`).join("");
-  return `<div class="pbp"><div class="pbh"><b>Floor Bounce · ${esc(r.sym)}</b> <span class="small dim">Playbook 3 · paper / watch only</span><span class="spacer"></span><span class="pill ${st.c}">${esc(st.n)}</span></div>
+  return `<div class="pbp"><div class="pbh"><b>Floor Bounce · ${esc(r.sym)}</b> <span class="small dim">Research (off the switch since 7 Nov) · paper / watch only</span><span class="spacer"></span><span class="pill ${st.c}">${esc(st.n)}</span></div>
     <div class="pbsay"><b>${x.why ? esc(st.n + " — " + x.why) : ok ? `${esc(st.n)} at ${p2(x.L)} (zone ${p2(x.L - x.z)} – ${p2(x.L + x.z)}).` : esc(st.n) + (fin(x.L) ? ` — level ${p2(x.L)}` : "")}</b></div>
     ${pbStrip([[x.liq, "Stock", x.etf ? "ETF floor: $20M a day, $10+" : "cap ≥ $1B, $100M a day, over $10"], [!!x.sudden, fin(x.dropA) ? `Drop ${x.dropA.toFixed(1)} ADR · ${x.days}d` : "Drop", "≥ 3 ADR from the 8-session high in ≤ 7 sessions, ≤ 1 up close"], [!!x.lvl, x.lvl ? "Level " + p2(x.L) : "Level", "a daily level set before the drop"],
       [x.tests == null ? null : x.tests <= 1, x.tests ? `Test ${x.tests}` : "Not tested", "first test best; the second test fails more often"], [fin(x.dA) ? x.dA <= OBC.near : null, fin(x.dA) ? `${sg(x.dA, 2)} ADR` : "Zone", "within 1 ADR above the level, or in the zone"], [fin(x.rv) ? x.rv < OBC.rvHi : null, fin(x.rv) ? `Vol ${x.rv.toFixed(1)}×` : "Vol", "a volume surge into the level warns of a breakdown"]])}
@@ -12942,6 +12966,7 @@ bcModel = async function(r, iv){
     if (x && fin(x.L)) { L(x.L, BC_STYLE.entry, "OB level", 0); L(x.L + x.z, BC_STYLE.zone, "OB zone top", 1); L(x.L - x.z, BC_STYLE.zone, "OB zone bottom", 1); if (x.next) L(x.next.p, BC_STYLE.s200, "OB next level", 2); }
     if (x && x.lost) for (const q of x.lost.slice(-2)) L(q.p, BC_STYLE.stop, "OB lost level", 2);
     if (x) M.pb = {k, st: x.st, iH: x.hDate}; }
+  if (k === "fp" && !r.etf && typeof fpChartLines === "function") { try { fpChartLines(r, L, M); } catch (e) { console.warn("first pullback chart", e); } }   // 7 Nov 2026: FIRST PULLBACK script
   try { M.lab = bcLabels(M.lines); M.band = bcBand(M); } catch (e) { console.warn("playbook chart labels", e); }
   return M;
 };
@@ -12960,20 +12985,20 @@ const _envHTMLPB = envHTML;
 envHTML = function(){
   const h = _envHTMLPB(); if (!S.snap || !pbHH()) return h;
   let line = ""; try { const R = r1Rows() || [], a = R.filter(o => o.x.state === 3).map(o => o.r.sym), O = obRun(), c = O ? O.rows.filter(o => obCandOK(o) && !o.etf).sort(obRank).map(o => o.sym) : [];
-    line = `<div class="small pbline" style="margin-top:6px"><b>Other playbooks:</b> Shakeout Reclaim ${a.length} armed${a.length ? ` (${a.slice(0, 6).map(s => `<span class="tk" data-sym="${esc(s)}">${esc(s)}</span>`).join(" ")})` : ""} · Floor Bounce ${c.length} at or near a floor${c.length ? ` (${c.slice(0, 6).map(s => `<span class="tk" data-sym="${esc(s)}">${esc(s)}</span>`).join(" ")})` : ""} — <a href="#" data-pbgo="2">open Shakeout Reclaim</a> · <a href="#" data-pbgo="3">open Floor Bounce</a></div>`; } catch (e) { console.warn("playbooks today", e); }
+    line = (typeof fpTodayLine === "function" ? fpTodayLine() : "") + `<div class="small pbline" style="margin-top:6px"><b>Research (off the switch):</b> Shakeout Reclaim ${a.length} armed${a.length ? ` (${a.slice(0, 6).map(s => `<span class="tk" data-sym="${esc(s)}">${esc(s)}</span>`).join(" ")})` : ""} · Floor Bounce ${c.length} at or near a floor${c.length ? ` (${c.slice(0, 6).map(s => `<span class="tk" data-sym="${esc(s)}">${esc(s)}</span>`).join(" ")})` : ""} — <a href="#" data-pbgo="2">open Shakeout Reclaim</a> · <a href="#" data-pbgo="3">open Floor Bounce</a> (Research card on Setups)</div>`; } catch (e) { console.warn("playbooks today", e); }
   const i = h.lastIndexOf("</div>"); return i < 0 ? h + line : h.slice(0, i) + line + h.slice(i);
 };
 document.addEventListener("click", e => { const a = e.target.closest("[data-pbgo]"); if (!a) return; e.preventDefault(); pbSet(a.dataset.pbgo); goTab("plan"); });
 document.addEventListener("click", e => { const t = e.target.closest(".pbline .tk[data-sym]"); if (t) { e.stopPropagation(); openDrawer(t.dataset.sym); } }, true);
 function pbWatchHTML(){
-  const hd = `<div class="hd"><h2>Playbooks 2 · 3 — Shakeout Reclaim armed and Floor Bounce watch</h2><span class="sub">Shakeout Reclaim = experimental live · Floor Bounce = paper / watch only · never on the Entry Check lists</span></div>`;
+  const hd = `<div class="hd"><h2>Research — Shakeout Reclaim armed and Floor Bounce watch</h2><span class="sub">off the playbook switch since 7 Nov, still computed · Shakeout Reclaim = experimental live · Floor Bounce = paper / watch only · never on the Entry Check lists</span></div>`;
   if (!pbHH()) return hd + `<div class="bd"><div class="empty">Needs the stored price history.</div></div>`;
   const R = r1Rows() || [], a = R.filter(o => o.x.state === 3).sort((p, q) => q.x.daysLeft - p.x.daysLeft || (q.r.rs ?? -1) - (p.r.rs ?? -1)), O = obRun();
   const c = O ? O.rows.filter(obCandOK).sort(obRank).slice(0, 5) : [];   // 1 Nov: + stricter filters when on
   return hd + `<div class="bd">${O ? obMapHTML(O) : ""}
     <div class="small" style="margin:4px 0"><b>Shakeout Reclaim armed</b> (${a.length}): ${a.length ? a.map(o => `<span class="tk" data-sym="${esc(o.r.sym)}">${esc(o.r.sym)}</span>${typeof r1sStarTxt === "function" ? r1sStarTxt(o) : ""} <span class="dim">${o.x.armType === 1 ? "U&R" : "CAP"} · ${o.x.daysLeft} left${o.x.close > o.x.s50 ? "" : " · needs 50 SMA"}</span>`).join(" · ") : "none"}</div>
     <div class="small" style="margin:4px 0"><b>Floor Bounce — board's top 5</b>: ${c.length ? c.map(o => `<span class="tk" data-sym="${esc(o.sym)}">${esc(o.sym)}</span> <span class="dim">${OB_ST[o.x.st].n} · ${p2(o.x.L)}</span>`).join(" · ") : "none"}</div>
-    <div class="small"><a href="#" data-pbgo="2">Playbook 2 · Shakeout Reclaim</a> · <a href="#" data-pbgo="3">Playbook 3 · Floor Bounce</a></div></div>`;
+    <div class="small">Research card on Setups: <a href="#" data-pbgo="2">Shakeout Reclaim</a> · <a href="#" data-pbgo="3">Floor Bounce</a></div></div>`;
 }
 const _renderWatchPB = renderWatch;
 renderWatch = function(){
@@ -12982,6 +13007,7 @@ renderWatch = function(){
   let c = $("pbWatch"); if (!c) { box.insertAdjacentHTML("beforeend", `<div class="card g1" id="pbWatch"></div>`); c = $("pbWatch"); }
   const es = $("esBox"); if (es && es.nextElementSibling !== c) es.after(c);
   try { c.innerHTML = pbWatchHTML(); } catch (e) { console.warn("playbooks watch", e); c.innerHTML = ""; }
+  if (typeof fpWatchPaint === "function") try { fpWatchPaint(box, c); } catch (e) { console.warn("first pullback watch", e); }   /* 7 Nov 2026: First Pullback card (FIRST PULLBACK at the end; paper) */
   if (typeof lpPaint === "function") try { lpPaint(box); } catch (e) {}   /* 4 Nov: stage badges on every Watchlist group (STAGE AGE at the end; display only) */
 };
 
@@ -13104,7 +13130,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 .pbtop{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:2px 0 10px}
 .pbtop .lbl{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
 .pbtop .seg button{font-size:13px;padding:4px 12px}
-#tab-plan.pbOn > :not(#planLede):not(#pbTop):not(#pbBox){display:none!important}
+#tab-plan.pbOn > :not(#planLede):not(#pbTop):not(#pbBox):not(#fpTrackBox):not(#pbResBox){display:none!important}
 #pbBox table td{vertical-align:top} #pbBox tr[data-sym],#pbBox .tk,#pbWatch .tk{cursor:pointer}
 .obctx{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2,transparent)}
 .gchip.pbg{background:transparent;border-style:dashed}
@@ -14624,6 +14650,7 @@ function TVL_SECS(C){
       {k: "p1eR", n: "ETF setups · Ready (long)", def: 1, need: H, f: tvlESItems(C, "long", true)},
       {k: "p1eW", n: "ETF setups · Reclaim watch (long)", def: 1, need: H, f: tvlESItems(C, "long", false)},
       {k: "p1eX", n: "Their leveraged wrappers", def: 0, need: H, f: tvlESWraps(C, "long")}]},
+    ...(typeof fpTvlSecs === "function" ? fpTvlSecs(C, H) : []),   // 7 Nov 2026: Playbook 2 · First Pullback (paper; FIRST PULLBACK script) — off DS Daily
     {k: "r1", h: "SHAKEOUT RECLAIM", n: "Shakeout Reclaim · stocks", perm: "experimental live · 0.10% NLV", items: [
       {k: "r1A", n: "Armed", def: 1, need: H, f: tvlR1(C, 3)},
       {k: "r1R", n: "Reset — watch", def: 1, need: H, f: tvlR1(C, 2)},
@@ -14642,6 +14669,7 @@ function TVL_SECS(C){
       {k: "obeP", n: "Approaching", def: 1, need: H, f: tvlOBItems(C, true, S2("ap"))},
       {k: "obeW", n: "Second test / tested — watch only", def: 0, need: H, f: tvlOBItems(C, true, OB_WATCH)}]},
     {k: "sh", h: "SHORT RESEARCH", n: "Short research · stocks", perm: "watch only · no live stock shorts", items: [
+      ...(typeof flsTvlItems === "function" ? flsTvlItems(H) : []),   // 7 Nov 2026: Short · Former leader, lower high (paper; script "SHORT · FORMER LEADER, LOWER HIGH") — off DS Daily like every short research item
       {k: "shF", n: "At a failed bounce, no blocker", def: 0, need: H, f: () => shortList().filter(r => r.sLoc && !r.sBlock.length).sort((a, b) => (b.ss.n - a.ss.n) || ((a.rs ?? 99) - (b.rs ?? 99))).map(r => tvlE(r.sym, `Short watch · ${r.sLoc} · weakness ${r.ss.n}/7`))},
       {k: "shM", n: "Rebounding — kept in short research memory", def: 0, need: H, f: () => tvlCampOpen(["SH"]).filter(c => c.reb || c.miss).map(c => tvlE(c.s, `Short research memory · since ${c.since} · ${c.st}${c.miss ? ` · not in today's data (last on the watch ${c.seen})` : ` · ${c.off} session${c.off === 1 ? "" : "s"} off the watch`}`, c.st))},
       {k: "shFR", n: "Failed rally · rejection confirmed", def: 0, need: H, f: () => typeof frRows === "function" ? frRows().filter(o => o.x.st === "rej").map(o => tvlE(o.r.sym, `Failed rally research · Rejection confirmed · ${o.x.kind} ${frP(o.x.lv)}`, "Rejection confirmed")) : null},
@@ -14665,10 +14693,10 @@ function TVL_SECS(C){
   return secs;
 }
 // presets: DS Daily = every item's default; a playbook preset = that playbook's stock + ETF defaults (shorts: all their items)
-const TVL_PRE = {"DS Daily": null, "Leader Pullback": ["p1", "p1e"], "Shakeout Reclaim": ["r1"], "Floor Bounce": ["ob", "obe"], "Short research": ["sh", "she"], "Held & campaigns": ["held", "camp"], "Research pool": ["pool"]};
+const TVL_PRE = {"DS Daily": null, "Leader Pullback": ["p1", "p1e"], "First Pullback": ["fp"], "Shakeout Reclaim": ["r1"], "Floor Bounce": ["ob", "obe"], "Short research": ["sh", "she"], "Held & campaigns": ["held", "camp"], "Research pool": ["pool"]};
 function tvlPreset(name){
   const on = {}, secs = TVL_SECS({}), P = TVL_PRE[name];
-  for (const s of secs) for (const it of s.items) { if (s.screens) continue; on[it.k] = P ? (P.includes(s.k) && (it.def || s.k === "sh" || s.k === "pool" && it.k === "poolM") ? 1 : 0) : it.def ? 1 : 0; }
+  for (const s of secs) for (const it of s.items) { if (s.screens) continue; on[it.k] = P ? (P.includes(s.k) && (it.def || s.k === "sh" || s.k === "fp" && it.pre || s.k === "pool" && it.k === "poolM") ? 1 : 0) : it.def ? 1 : 0; }
   return on;
 }
 function tvlSel(){
@@ -17472,5 +17500,1358 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 .lqb{display:inline-block;font-size:10.5px;line-height:1.35;padding:0 5px;border-radius:8px;font-weight:700;white-space:nowrap;vertical-align:1px}
 .lqb.lqo{background:var(--crit);color:#fff}.lqb.lqc{background:var(--warn);color:#1a1a1a}.lqb.lqk{background:transparent;color:var(--good);border:1px solid var(--good)}
 .lqpl{margin-top:6px;line-height:1.5}
+</style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   MAP LISTS TRACKER — DOWNLOAD CSV (7 Nov 2026) — display / tracking only. On a 2-week trial (docs/trials.md).
+   Eugene, 7 Nov: "add the download csv button" (the tracker "logs the performance of tickers, but there's no export
+   csv file. it would be useful to be able to bring that here for review").
+   • Adds a "Download CSV" button to the Setups → MAP lists tracker card header. One row per name per list, the same
+     rows the card works out (first listing of each name on each list, from adrb.mapLog), with raw numbers: price when
+     listed, ADR % then, price now, % move, move / best / worst since in ADR of the listing price, sessions, the Entry
+     Check list and location now, and where "now" comes from (Live = Massive, 15 min delayed, or the file's date).
+   • Follows the card's All / A list / B list / Stalk switch, like the table.
+   • Reads only: adrb.mapLog, S.rowBySym, mlRange(), s61Of(). Never writes the log, never changes a list, a rank, a
+     plan, the feed or the Board log. No new storage keys. No function overrides: the button is put back after each
+     redraw of the card by a "tab" hook plus two document listeners (a click inside the card or on Clear lists, and typing in the
+     list boxes, whose own redraw waits 400 ms) — no page watcher. Clicks on the button are handled by the same click listener.
+   ===================================================================== */
+function mlCsvRows(){
+  const log = store.get(MLOG, {}) || {}, dates = Object.keys(log).sort(), by = S.rowBySym || new Map(), first = new Map();
+  for (const d of dates) for (const k of ["A", "B", "S"]) for (const [s, px, adr] of (log[d][k] || [])) { const id = k + ":" + s; if (!first.has(id)) first.set(id, {k, s, d, px, adr, last: d}); else first.get(id).last = d; }
+  return [...first.values()].filter(o => MAPL.show === "all" || o.k === MAPL.show).map(o => {
+    const r = by.get(o.s), adrPct = o.adr ?? (r ? r.adr : null), unit = o.px != null && adrPct ? o.px * adrPct / 100 : null;
+    const now = r ? r.last : null, rg = mlRange(o.s, o.d);
+    let s = null; try { s = r && !r.etf && S.has.hist && typeof s61Of === "function" ? s61Of(r) : null; } catch (e) {}
+    return {...o, adrPct, now, pct: o.px && now != null ? (now / o.px - 1) * 100 : null, u: unit && now != null ? (now - o.px) / unit : null,
+      best: unit && rg ? (rg.hi - o.px) / unit : null, worst: unit && rg ? (rg.lo - o.px) / unit : null, sess: rg ? rg.n : 0,
+      list: s && LIST61[s.list] ? LIST61[s.list].n : (s ? s.list : ""), loc: s ? ecLoc(s.x) : "", inFile: !!r};
+  }).sort((a, b) => a.d < b.d ? 1 : a.d > b.d ? -1 : "ABS".indexOf(a.k) - "ABS".indexOf(b.k));
+}
+function mlCsv(){
+  if (!S.snap) { toast("Load the files first"); return; }
+  const q = v => { const x = v == null ? "" : String(v); return /[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x; };
+  const n4 = v => v == null || !isFinite(v) ? "" : +v.toFixed(4);
+  const KL = {A: "A list", B: "B list", S: "Stalk"};
+  const src = S.snap.live && S.snap.live.dataMs ? `Live (Massive, 15 min delayed) ${new Date(S.snap.live.dataMs).toISOString()}` : `File ${S.snap.asOf || ""}`;
+  const H = ["listed", "last_listed", "list", "ticker", "price_then", "adr_pct_then", "price_now", "now_from", "move_pct", "move_adr", "best_since_adr", "worst_since_adr", "sessions", "entry_check_list_now", "location_now", "in_current_file"];
+  const rows = mlCsvRows(), L = [H.join(",")];
+  for (const o of rows) L.push([o.d, o.last, KL[o.k], o.s, n4(o.px), n4(o.adrPct), n4(o.now), o.now == null ? "" : src, n4(o.pct), n4(o.u), n4(o.best), n4(o.worst), o.sess, o.list, o.loc, o.inFile ? "yes" : "no"].map(q).join(","));
+  if (!rows.length) { toast("Nothing logged yet"); return; }
+  download(`deep-space-map-lists-tracker-${fmtDate(new Date())}.csv`, L.join("\n"), "text/csv");
+}
+function mlCsvBtn(){
+  const box = $("mapTrack"); if (!box) return;
+  const hd = box.querySelector(".hd"); if (!hd || hd.querySelector("#mlCsv")) return;
+  const at = hd.querySelector("#mlLog"); if (!at) return;
+  at.insertAdjacentHTML("beforebegin", `<button class="btn sm" id="mlCsv" title="Download the tracker as a CSV (follows the All / A / B / Stalk switch)">Download CSV</button>`);
+}
+document.addEventListener("click", e => { const t = e.target && e.target.closest ? e.target : null; if (!t) return;
+  if (t.closest("#mlCsv")) { mlCsv(); return; }
+  if (t.closest("#mapTrack") || t.closest("#listsClear")) setTimeout(mlCsvBtn, 0); }, true);   // capture: runs before the card's own handlers redraw it
+document.addEventListener("input", e => { const id = e.target && e.target.id; if (["focusIn", "heldIn", "bIn", "stalkIn"].includes(id)) { clearTimeout(window._mlCsvT); window._mlCsvT = setTimeout(mlCsvBtn, 600); } });
+hookOn("tab", "mapTrackCsv", t => { if (t === "plan" && S.snap) mlCsvBtn(); });
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   MAP SCORECARD (7 Nov 2026) — tracking / display only. Changes no list, rank, plan, size, feed or existing number.
+   Eugene (chat, 7 Nov): "+1R before the stop." / "map scorecard yes" — "Map surfaces tickers with at least a 50% win
+   rate, this gives buffer for our execution." New Discoveries: "the new discovery just counts towards my 15 entries for
+   the week" and "I dont want you to state it like i did something wrong, we just log it as an exception. Trading is
+   dynamic." (docs/proposals-2026-11-07-focus-ariel.md §1 + rulings 2–3.)
+   • Board log page: a card "Does MAP surface winners? (target 50%)" at the top of the page, in its own box right above
+     the Board log body (#mscBox before #jnBody — the log's own redraws never remove it). Rows: MAP Focus A, MAP Focus B, MAP On deck / Stalk (rec.n src A / B / S), Daily Plan · Ready first 5 (the
+     frozen plan = the last revision in rec.plan.revs, entries with l "q" or also "q"), New Discoveries (rec.disc), Other
+     Ready names (Entry Check Ready, src a61, on none of those). Windows: the last 20 plan days and since 26 Oct (test
+     day 1); plan days up to today (New York). A name counts once per row per plan day.
+   • WIN (msc1R, pure — no DOM, no globals): levels = the ones the Board-log replay uses for that record (jnLv: Entry Check
+     planned entry, stop = entry − frozen 1R est (0.6 ADR); 6.0 days keep their own entry / widest stop). TRIGGER = within 5
+     sessions after the plan day's data session a daily bar trades through the planned entry — the replay's own fill rule
+     (buy-stop when the entry is above the price then: fill = max(open, entry); else limit: fill = min(open, entry)). WIN =
+     entry + 1R before the stop. Fill bar: win only if its high ≥ +1R AND its low stayed above the stop (low at / under the
+     stop = loss). Later bars: open at / under the stop = loss, open at / over +1R = win, a bar touching both = loss, else
+     stop = loss / +1R = win. Nothing after the fill bar + 10 sessions (or bars not in yet) = open: counted, left out of the
+     win rate (wins ÷ (wins + losses)). Not filled in 5 sessions = not triggered; window still running = pending.
+     SHADOW "1 ADR stop": same fill, stop = fill − 1 ADR$ at listing, +1R = fill + 1 ADR$ (ADR$ = frozen 1R est ÷ 0.6, 6.0
+     days the frozen ADR % × the price then).
+     Avg R = the Board log's own replay (jnSim: 2R target / stop / T+3) on the same levels, finished trades only.
+   • New Discoveries found in Live mode (src "live") have no rec.n row: they are scored from their frozen facts
+     (rec.disc[s].f entry / last) with ADR % from the row now (the Entry Check's ADR %, else the CSV's) × the price then,
+     stop = entry − 0.6 ADR$, on the stored daily bars from the plan day's data session (rec.d0) — nothing is written: no
+     rec.n row, jnDays / jnRecord untouched. A discovery that is in rec.n that day is scored on that record's levels.
+     Limit: the plan day's own bar can include trading before the discovery time (daily bars only).
+   • Decision-log CSV (protected interface): six columns appended at the END through JN_CSV_EXT (in-place registry in jnCSV,
+     no override): map_list (A / B / On deck / blank), daily_plan_top5 (yes), new_discovery (yes), new_discovery_at (ISO),
+     hit_1r, hit_1r_1adr (win / loss / open / not triggered, or pending / no levels / no data). One row per logged name, as
+     before. New Discovery rows with no rec.n record are NOT added there (the Workflow test and any reader expect one row
+     per logged name with the full facts) — they go in a separate "Download scorecard CSV" on the card (safer option).
+   • Reads: JN.recs (rec.n, rec.plan.revs, rec.disc), HIST, jnLv / jnT0 / jnSim / jnScoreName. Writes nothing. No storage
+     keys. No overrides, no page watcher: the card is drawn by a "tab" hook each time the Board log page draws.
+   ===================================================================== */
+const MSC = {d1: "2026-10-26", days: 20, FILL: 5, HOLD: 10, bar: 50};
+const MSC_G = [["A", "MAP Focus A"], ["B", "MAP Focus B"], ["S", "MAP On deck / Stalk"], ["q5", "Daily Plan · Ready first 5"], ["nd", "New Discoveries"], ["oth", "Other Ready names"]];
+const MSC_K = {win: "win", loss: "loss", open: "open", nofill: "not triggered", pending: "pending", nolv: "no levels", nodata: "no data"};
+
+/* ---------- pure maths ---------- */
+// B(t) → [open, high, low, close] of session t; n = sessions stored; tf = fill session; stop / tgt; hold = sessions after tf
+function mscWalk(B, n, tf, stop, tgt, hold){
+  const ok = v => typeof v === "number" && isFinite(v), f = B(tf);
+  if (f[2] <= stop) return {k: "loss", xt: tf};
+  if (f[1] >= tgt) return {k: "win", xt: tf};
+  for (let j = 1; j <= hold; j++) {
+    const t = tf + j; if (t >= n) return {k: "open"};
+    const [o, h, l] = B(t); if (!ok(h) || !ok(l)) continue;
+    if (ok(o) && o <= stop) return {k: "loss", xt: t};
+    if (ok(o) && o >= tgt) return {k: "win", xt: t};
+    if (l <= stop) return {k: "loss", xt: t};            // touches the stop (and maybe +1R too): conservative = loss
+    if (h >= tgt) return {k: "win", xt: t};
+  }
+  return {k: "open"};
+}
+// lv = {entry, stop, last}; adrD = ADR in $ at listing (shadow 1 ADR stop); returns {k, sh, fill, tf, xt, sxt, ...}
+function msc1R(B, n, t0, lv, adrD, fillN = 5, holdN = 10){
+  const ok = v => typeof v === "number" && isFinite(v), E = lv ? lv.entry : null, SP = lv ? lv.stop : null;
+  if (!ok(E) || !ok(SP) || !(E > SP)) return {k: "nolv", sh: "nolv"};
+  if (t0 == null || !(n > 0)) return {k: "nodata", sh: "nodata"};
+  const above = ok(lv.last) && E > lv.last + 1e-9;
+  let tf = null, fill = null;
+  for (let k = 1; k <= fillN; k++) {
+    const t = t0 + k; if (t >= n) return {k: "pending", sh: "pending"};
+    const [o, h, l] = B(t); if (!ok(h) || !ok(l)) continue;
+    const op = ok(o) ? o : E;
+    if (above ? h >= E : l <= E) { fill = above ? Math.max(op, E) : Math.min(op, E); tf = t; break; }
+  }
+  if (tf == null) return {k: "nofill", sh: "nofill"};
+  const risk = E - SP, m = mscWalk(B, n, tf, SP, E + risk, holdN);
+  const s = ok(adrD) && adrD > 0 ? mscWalk(B, n, tf, fill - adrD, fill + adrD, holdN) : {k: "nolv"};
+  return {k: m.k, xt: m.xt ?? null, sh: s.k, sxt: s.xt ?? null, fill, tf, stop: SP, tgt: E + risk, risk, sStop: ok(adrD) ? fill - adrD : null, sTgt: ok(adrD) ? fill + adrD : null};
+}
+
+/* ---------- levels + scoring per plan day ---------- */
+function mscAdrD(sym, px){
+  let a = null;
+  try { const d = typeof dssOf === "function" && HIST.nD ? dssOf(sym) : null; if (d && d.s61 && fin(d.s61.adr) && d.s61.adr > 0) a = d.s61.adr; } catch (e) {}
+  const r = S.rowBySym && S.rowBySym.get(sym); if (a == null && r && fin(r.adr) && r.adr > 0) a = r.adr;
+  return a != null && fin(px) && px > 0 ? a / 100 * px : null;
+}
+// the levels: the Board-log record's (jnLv, the replay's own) when the name is in rec.n; else the frozen plan / discovery facts
+function mscLv(rec, sym, o, e){
+  if (o) { const lv = jnLv(o, rec), f = o.f || {}, g = f.s61; const adrD = g && g.r1 ? g.r1 / S61.risk : f.adr != null && f.last ? f.adr / 100 * f.last : null;
+    return {entry: lv.entry, stop: lv.stop, tgt: lv.tgt, last: lv.last, adrD, from: "Board log record"}; }
+  const f = (e && e.f) || {}, E = f.entry ?? null, adrD = mscAdrD(sym, f.last);
+  if (E == null || !adrD) return {entry: E, stop: null, tgt: null, last: f.last ?? null, adrD, from: "frozen facts"};
+  const r1 = S61.risk * adrD; return {entry: E, stop: jr(E - r1), tgt: jr(E + 2 * r1), last: f.last ?? null, adrD, from: "frozen facts (ADR from the row now)"};
+}
+function mscScoreOne(rec, sym, o, e, t0){
+  const lv = mscLv(rec, sym, o, e), i = HIST.idx ? HIST.idx.get(sym) : null;
+  if (!HIST.nD || i == null) return {lv, s: lv.entry != null && lv.stop != null ? {k: "nodata", sh: "nodata"} : {k: "nolv", sh: "nolv"}, sim: {k: "nodata"}};
+  const nD = HIST.nD, B = t => { const k = i * nD + t; return [HIST.O[k], HIST.Hh[k], HIST.L[k], HIST.C[k]]; };
+  const s = msc1R(B, nD, t0, lv, lv.adrD, MSC.FILL, MSC.HOLD);
+  let sim = {k: "nolv"}; try { sim = o ? jnScoreName(o, rec, t0).sim : jnSim({entry: lv.entry, stop: lv.stop, tgt: lv.tgt, last: lv.last}, i, t0); } catch (er) {}
+  return {lv, s, sim};
+}
+// every plan day → {rows: Map(sym → {sym, g: groups, o, d, top, map, lv, s: msc1R result, sim: the replay})}; every rec.n name
+// is scored (for the Decision-log CSV), plus the frozen top 5 and the discoveries
+function mscIndex(){
+  const out = new Map();
+  for (const p of Object.keys(JN.recs).sort()) {
+    const rec = JN.recs[p]; if (!rec || !Array.isArray(rec.n)) continue;
+    const t0 = HIST.nD ? jnT0(rec.d0) : null, byN = new Map(rec.n.map(o => [o.s, o])), disc = rec.disc || {};
+    const rev = rec.plan && Array.isArray(rec.plan.revs) && rec.plan.revs.length ? rec.plan.revs[rec.plan.revs.length - 1] : null;
+    const top = new Map(); if (rev) for (const e of rev.names || []) if (e && (e.l === "q" || (e.also || []).includes("q"))) top.set(e.s, e);
+    const mem = new Map(), put = (s, g, e) => { let m = mem.get(s); if (!m) mem.set(s, m = {s, g: new Set(), e: null}); if (g) m.g.add(g); if (e && !m.e) m.e = e; };
+    for (const o of rec.n) { put(o.s, null); for (const k of ["A", "B", "S"]) if (o.src.includes(k)) put(o.s, k); }
+    top.forEach((e, s) => put(s, "q5", e));
+    for (const s of Object.keys(disc)) put(s, "nd", disc[s]);
+    for (const o of rec.n) if (o.src.includes("a61")) { const m = mem.get(o.s); if (!m.g.size) m.g.add("oth"); }
+    const rows = new Map();
+    for (const m of mem.values()) {
+      const o = byN.get(m.s) || null, sc = mscScoreOne(rec, m.s, o, o ? null : m.e, t0);
+      rows.set(m.s, {p, sym: m.s, g: m.g, o, d: disc[m.s] || null, top: top.has(m.s), map: o ? (o.src.includes("A") ? "A" : o.src.includes("B") ? "B" : o.src.includes("S") ? "On deck" : "") : "", ...sc});
+    }
+    out.set(p, {p, rec, t0, rows});
+  }
+  return out;
+}
+function mscAgg(I, days){
+  const G = Object.fromEntries(MSC_G.map(([k]) => [k, {n: 0, win: 0, loss: 0, open: 0, nofill: 0, pend: 0, nolv: 0, R: [], sw: 0, sl: 0}]));
+  for (const p of days) { const d = I.get(p); if (!d) continue;
+    for (const x of d.rows.values()) for (const g of x.g) { const a = G[g]; if (!a) continue; a.n++;
+      const k = x.s.k; if (k === "win") a.win++; else if (k === "loss") a.loss++; else if (k === "open") a.open++; else if (k === "nofill") a.nofill++; else if (k === "pending") a.pend++; else a.nolv++;
+      if (jnFinished(x.sim) && fin(x.sim.R)) a.R.push(x.sim.R);
+      if (x.s.sh === "win") a.sw++; else if (x.s.sh === "loss") a.sl++; } }
+  for (const a of Object.values(G)) { a.trig = a.win + a.loss + a.open; a.res = a.win + a.loss; a.rate = a.res ? a.win / a.res * 100 : null;
+    a.avgR = a.R.length ? a.R.reduce((x, y) => x + y, 0) / a.R.length : null; a.sres = a.sw + a.sl; a.srate = a.sres ? a.sw / a.sres * 100 : null; }
+  return G;
+}
+function mscDays(I){ const today = jnET().d, all = [...I.keys()].filter(p => p <= today).sort(); return {last: all.slice(-MSC.days), since: all.filter(p => p >= MSC.d1)}; }
+
+/* ---------- the card ---------- */
+function mscRateHTML(v, res){
+  if (v == null) return `<span class="dim">—</span>`;
+  const c = v >= MSC.bar ? "ok" : "bad";
+  return `<span class="msc-r ${c}">${Math.round(v)}%</span><span class="msc-bar" title="50% line marked"><i class="${c}" style="width:${Math.max(0, Math.min(100, v)).toFixed(1)}%"></i><b></b></span><span class="small dim"> of ${res}</span>`;
+}
+function mscTable(I, days, title){
+  const G = mscAgg(I, days);
+  const row = ([k, l]) => { const a = G[k];
+    return `<tr data-msc="${k}"><td class="l"><b>${l}</b>${k === "nd" ? `<div class="small dim">exception, your call · counts toward the 15 entries a week</div>` : k === "oth" ? `<div class="small dim">baseline — Entry Check Ready, on none of the rows above</div>` : ""}</td>
+      <td>${a.n}</td><td>${a.trig}${a.nofill ? `<div class="small dim">${a.nofill} not triggered</div>` : ""}${a.pend ? `<div class="small dim">${a.pend} waiting for bars</div>` : ""}</td><td>${a.open}</td><td>${a.win}</td>
+      <td class="l msc-w">${mscRateHTML(a.rate, a.res)}${jnFew(a.res)}</td><td class="${jnCls(a.avgR)}">${jnFmtR(a.avgR)}<div class="small dim">${a.R.length} finished</div></td><td class="l msc-w">${mscRateHTML(a.srate, a.sres)}</td></tr>`; };
+  return `<h4 style="margin:8px 0 2px">${title} <span class="small dim">${days.length ? `${days.length} plan day${days.length === 1 ? "" : "s"} · ${esc(jnDay(days[0]))} – ${esc(jnDay(days[days.length - 1]))}` : "no plan days logged yet"}</span></h4>
+    <div class="tscroll" style="max-height:none"><table class="mini msc-t"><thead><tr><th class="l">List</th><th>Names scored</th><th>Triggered</th><th>Open</th><th>Wins</th><th class="l">Win rate (target 50%)</th><th>Avg R (replay)</th><th class="l">Win rate, 1 ADR stop</th></tr></thead><tbody>${MSC_G.map(row).join("")}</tbody></table></div>`;
+}
+function mscCardHTML(){
+  const I = mscIndex(), D = mscDays(I), hist = !!HIST.nD;
+  return `<div class="card g1" id="mscCard"><div class="hd"><h2>Does MAP surface winners? (target 50%)</h2><span class="sub">win = +1R before the stop · daily bars · tracking only</span><span class="spacer"></span><button class="btn sm" id="mscCsv" title="Every scored name per plan day, incl. New Discoveries found in Live mode">Download scorecard CSV</button></div><div class="bd">
+    ${hist ? "" : `<div class="jn-warn">Scoring needs the stored price history (Massive). <button class="btn sm" data-hist="full">Load price history</button></div>`}
+    ${mscTable(I, D.last, `Last ${MSC.days} plan days`)}${mscTable(I, D.since, "Since 26 Oct (test day 1)")}
+    <div class="small dim" style="margin-top:6px"><b>Triggered</b> = within 5 sessions after the plan's data, a daily bar trades through the planned entry (the Board log's own fill). <b>Win</b> = price then reaches entry + 1R before the stop (stop and 1R as the Board log scores them: planned entry − 0.6 ADR). On the fill day a win needs the high at +1R with the low above the stop; a day that touches both = a loss. Nothing in 10 sessions after the fill = <b>open</b>: counted, but left out of the win rate (wins ÷ wins + losses). <b>1 ADR stop</b> = the same fills with the stop 1 ADR under the fill and +1R = 1 ADR — if this row clears 50% and the other doesn't, the stop is the problem, not the picking. New Discoveries found in Live mode are scored from the facts frozen when they were found. Under 30 resolved names a row is a hint, not a result. Nothing here changes a list, a rank or the plan.</div></div></div>`;
+}
+// its own box right above the Board log body (#jnBody), so renderJournal's redraws never remove it — no page watcher
+function mscMount(){
+  const body = $("jnBody"); if (!body) return;
+  let box = $("mscBox"); if (!box) { body.insertAdjacentHTML("beforebegin", `<div id="mscBox"></div>`); box = $("mscBox"); }
+  try { box.innerHTML = mscCardHTML(); } catch (e) { console.warn("MAP scorecard", e); box.innerHTML = ""; }
+}
+hookOn("tab", "mapScorecard", t => { if (t !== "journal") return; if (JN.loaded) mscMount(); else JN.ready.then(() => { if (S.ui.tab === "journal") mscMount(); }); });
+
+/* ---------- CSVs ---------- */
+const mscIso = ms => fin(ms) ? new Date(ms).toISOString() : "";
+JN_CSV_EXT.push({h: ["map_list", "daily_plan_top5", "new_discovery", "new_discovery_at", "hit_1r", "hit_1r_1adr"], prep: () => mscIndex(),
+  cells: (x, I) => { const o = x.o, d = I && I.get(x.rec.p), m = d ? d.rows.get(o.s) : null, disc = x.rec.disc && x.rec.disc[o.s];
+    const map = o.src.includes("A") ? "A" : o.src.includes("B") ? "B" : o.src.includes("S") ? "On deck" : "";
+    return [map, m && m.top ? "yes" : "", disc ? "yes" : "", disc ? mscIso(disc.at) : "", m ? MSC_K[m.s.k] || m.s.k : "", m ? MSC_K[m.s.sh] || m.s.sh : ""]; }});
+function mscCsv(){
+  const q = v => { const x = v == null ? "" : String(v); return /[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x; }, n4 = v => v == null || !fin(v) ? "" : +v.toFixed(4);
+  const I = mscIndex(), dt = t => t != null && HIST.dates[t] ? HIST.dates[t] : "";
+  const H = ["plan_day", "data_session", "ticker", "groups", "map_list", "daily_plan_top5", "new_discovery", "new_discovery_at", "new_discovery_src", "in_board_log", "levels_from", "planned_entry", "stop", "one_r", "plus_1r", "adr_usd", "fill", "fill_date", "hit_1r", "hit_1r_date", "stop_1adr", "plus_1r_1adr", "hit_1r_1adr", "hit_1r_1adr_date", "replay_outcome", "replay_r"];
+  const L = [H.join(",")], GL = Object.fromEntries(MSC_G);
+  for (const [p, d] of I) for (const x of d.rows.values()) {
+    if (!x.g.size) continue;
+    const s = x.s, lv = x.lv, r1 = lv.entry != null && lv.stop != null ? lv.entry - lv.stop : null;
+    L.push([p, d.rec.d0 || "", x.sym, [...x.g].map(g => GL[g]).join(" + "), x.map, x.top ? "yes" : "", x.d ? "yes" : "", x.d ? mscIso(x.d.at) : "", x.d ? x.d.src || "" : "", x.o ? "yes" : "no", lv.from,
+      n4(lv.entry), n4(lv.stop), n4(r1), r1 != null ? n4(lv.entry + r1) : "", n4(lv.adrD), n4(s.fill), dt(s.tf), MSC_K[s.k] || s.k, dt(s.xt), n4(s.sStop), n4(s.sTgt), MSC_K[s.sh] || s.sh, dt(s.sxt),
+      JN_OUT[x.sim.k] || x.sim.k, jnFinished(x.sim) ? n4(x.sim.R) : ""].map(q).join(","));
+  }
+  if (L.length < 2) { toast("Nothing scored yet"); return; }
+  download(`deep-space-map-scorecard-${fmtDate(new Date())}.csv`, L.join("\n"), "text/csv");
+}
+document.addEventListener("click", e => { if (e.target && e.target.closest && e.target.closest("#mscCsv")) mscCsv(); });
+document.head.insertAdjacentHTML("beforeend", `<style>
+.msc-t td.msc-w{white-space:nowrap}
+.msc-r{font-weight:700;display:inline-block;min-width:34px}.msc-r.ok{color:var(--good)}.msc-r.bad{color:var(--crit)}
+.msc-bar{position:relative;display:inline-block;width:80px;height:8px;border-radius:4px;background:var(--chip);vertical-align:middle;margin:0 4px;overflow:hidden}
+.msc-bar i{position:absolute;left:0;top:0;bottom:0;border-radius:4px}.msc-bar i.ok{background:var(--good)}.msc-bar i.bad{background:var(--crit)}
+.msc-bar b{position:absolute;left:50%;top:-2px;bottom:-2px;width:2px;background:var(--ink)}
+</style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   LIQUID LEADERS (7 Nov 2026) — display + feed only. Never changes any list, rank, state, plan or size.
+   Eugene (chat, 7 Nov): "the first few tickers that i enter into from a book that is full cash should be the liquid
+   leaders/losers. the extremely liquid ones before i even start looking into other tickers." Threshold ruled: 20-day
+   average dollar volume ≥ $500M. "we still stick to focus a/B/on deck but add liquid leaders as an additional criteria"
+   — so the board only marks and exports; MAP keeps the lists.
+   • Liquid = 20-session mean of close × volume ≥ $500,000,000: the Entry Check's own dv20 (s61Calc on dssBars — the
+     stored Massive bars + today's file bar when it is newer, the same bars check 1 Liquidity reads). No history for the
+     name → the CSV's "Price × average volume, 30 days" (r.dv), marked as the source on screen. Neither → not rated.
+   • Liquid leader = liquid AND on the long side: Entry Check Ready to trade / On deck (A-eligible, OnDeck-L2,
+     OnDeck-1blocker, OnDeck-L3) or MAP Focus A / B / On deck (LISTS.focus, MAPL.b, MAPL.stalk).
+   • Badge "LIQ LEADER" (liquid elsewhere: "liquid") beside the ticker on Setups → Entry Check lists (s61Box), the Daily
+     Plan (dpBox), the Watchlist (watchBody, incl. the MAP groups) and Setups → MAP lists (focusBox), painted by a "tab"
+     hook (liqPaint pattern); a line in the ticker panel's Entry Check block ("panel" hook).
+   • Filter bar criterion "Liquid ≥ $500M/day" (Risk & calendar; visibility only — filters never change rankings).
+   • Deep Space feed (MAP's input): two columns appended at the very END through FEED_EXT — "DollarVol20 $M" (2 dp, $
+     millions) and "Liquid Leader" (yes / blank). Older columns byte-identical. Docs note for MAP:
+     docs/map-feed-liquid-leaders-2026-11-07.md (Notion MAP-page gap, needs Eugene's yes).
+   • Self-check: llSelf in SC_X — a separate plain mean of the last 20 bars' close × volume for the listed names, and the
+     leader flag from it.
+   Storage: none. No overrides.
+   ===================================================================== */
+const LL = {min: 500e6, key: "", map: new Map()};
+const LL_H = ["DollarVol20 $M", "Liquid Leader"];
+const LL_LONG = ["A-eligible", "OnDeck-L2", "OnDeck-1blocker", "OnDeck-L3"];
+// {dv, src: "hist" | "csv"} or null
+function llDv(sym){
+  const k = (typeof dssKey === "function" ? dssKey() : "") + "|" + (S.snap ? S.snap.asOf + "|" + S.rows.length : "");
+  if (LL.key !== k) { LL.key = k; LL.map = new Map(); }
+  if (LL.map.has(sym)) return LL.map.get(sym);
+  let q = null;
+  try {
+    const d = HIST.nD && typeof dssOf === "function" ? dssOf(sym) : null, x = d && d.s61;
+    if (x && fin(x.dv20)) q = {dv: x.dv20, src: "hist", to: d.to || ""};
+    else { const r = S.rowBySym && S.rowBySym.get(sym); if (r && fin(r.dv)) q = {dv: r.dv, src: "csv", to: S.snap ? S.snap.asOf : ""}; }
+  } catch (e) { console.warn("liquid leaders", sym, e); q = null; }
+  LL.map.set(sym, q); return q;
+}
+function llLong(sym){
+  if (LISTS.focus.has(sym) || (typeof MAPL !== "undefined" && (MAPL.b.has(sym) || MAPL.stalk.has(sym)))) return true;
+  const r = S.rowBySym && S.rowBySym.get(sym); if (!r || r.etf || !S.has.hist || typeof s61Of !== "function") return false;
+  let s = null; try { s = s61Of(r); } catch (e) {} return !!s && LL_LONG.includes(s.list);
+}
+function llOf(sym){ const q = llDv(sym); if (!q) return null; const liquid = q.dv >= LL.min; return {...q, liquid, leader: liquid && llLong(sym)}; }
+const llM = v => "$" + Math.round(v / 1e6).toLocaleString("en-US") + "M";
+const llSrc = q => q.src === "hist" ? `20-session average of close × volume (stored price history${q.to ? " to " + q.to : ""})` : "the CSV's 30-day price × average volume (no price history for this name)";
+function llBadge(sym){
+  const q = llOf(sym); if (!q || !q.liquid) return "";
+  const t = esc(`${q.leader ? "Liquid leader — " : "Liquid — "}${llM(q.dv)} a day, ${llSrc(q)}. Liquid = $500M+ a day${q.leader ? "; on the long side (Entry Check Ready / On deck, or a MAP list)" : ""}. A mark only: it never changes a list or a rank.`);
+  return q.leader ? `<span class="llb lll" title="${t}">LIQ LEADER</span>` : `<span class="llb" title="${t}">liquid</span>`;
+}
+function llPaint(root){ if (!root) return; root.querySelectorAll("tr[data-sym] td.sym").forEach(td => { if (td.querySelector(".llb")) return; const h = llBadge(td.closest("tr").dataset.sym); if (h) td.insertAdjacentHTML("beforeend", " " + h); }); }
+hookOn("tab", "liquidLeaders", () => { for (const id of ["s61Box", "dpBox", "watchBody", "focusBox"]) try { llPaint($(id)); } catch (e) {} });
+hookOn("panel", "liquidLeaders", (r, dr) => {
+  if (!r || !dr) return; const box = dr.querySelector(".s61p"); if (!box || box.querySelector(".llpl")) return;
+  const q = llOf(r.sym);
+  box.insertAdjacentHTML("beforeend", `<div class="llpl small">${q && q.liquid ? llBadge(r.sym) + " " : ""}Dollar volume: ${q ? `<b>${llM(q.dv)}</b> a day — ${esc(llSrc(q))}${q.liquid ? "" : " · under the $500M liquid line"}` : "no volume data"}</div>`);
+});
+// filter bar (visibility only)
+{ const c = {k: "liqLead", cat: "Risk & calendar", l: "Liquid ≥ $500M/day (20-day average dollar volume)", t: r => { const q = llDv(r.sym); return q ? q.dv >= LL.min : null; }}; CRIT.push(c); CRIT_BY[c.k] = c; }
+// Deep Space feed: two columns at the very end
+FEED_EXT.push({h: LL_H, cells: o => { const q = o && o.sym ? llOf(o.sym) : null; return q ? [+(q.dv / 1e6).toFixed(2), q.leader ? "yes" : ""] : ["", ""]; }});
+// self-check: a separate plain mean of the last 20 bars' close × volume for the listed names
+function llSelf(){
+  const out = []; if (!HIST.nD || !S.has.hist || typeof s61Lists !== "function" || typeof dssBars !== "function") return out;
+  const L = s61Lists(true), names = new Set([...LISTS.focus, ...(typeof MAPL !== "undefined" ? [...MAPL.b, ...MAPL.stalk] : [])]);
+  for (const k of LL_LONG) (L[k] || []).slice(0, 40).forEach(s => names.add(s.r.sym));
+  for (const sym of names) {
+    const q = llOf(sym), b = dssBars(sym); if (!q || q.src !== "hist" || !b || b.n < 20) continue;
+    let s = 0, good = true; for (let t = b.n - 20; t < b.n; t++) { const c = b.c[t], v = b.v[t]; if (c !== c || v !== v) { good = false; break; } s += c * v; }
+    if (!good) continue; const mine = s / 20;
+    out.push({sym, what: "Dollar volume 20d", ok: Math.abs(q.dv - mine) <= 1e-6 * mine, board: (q.dv / 1e6).toFixed(2), mine: (mine / 1e6).toFixed(2)});
+    out.push({sym, what: "Liquid leader", ok: q.leader === (mine >= 500e6), board: q.leader ? "yes" : "no", mine: mine >= 500e6 ? "yes" : "no"});
+  }
+  return out;
+}
+if (typeof SC_X !== "undefined") SC_X.push(llSelf);
+document.head.insertAdjacentHTML("beforeend", `<style>
+.llb{display:inline-block;font-size:10px;line-height:1.35;padding:0 5px;border-radius:8px;font-weight:700;white-space:nowrap;vertical-align:1px;border:1px solid var(--accent);color:var(--accent);background:transparent}
+.llb.lll{background:var(--accent);color:#fff}
+.llpl{margin-top:6px;line-height:1.5}
+</style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   PLAYBOOK 2 · FIRST PULLBACK (7 Nov 2026) — TRADING LOGIC for a NEW route, PAPER / WATCH ONLY. Never changes Playbook 1:
+   the Entry Check checks / lists / sizes / ranks, the Daily Plan, the Board log records, the Decision-log CSV and every
+   existing feed value stay byte-identical (the test proves it).
+   Rules: Notion "🧭 Playbook 2 · First Pullback — v1.0 (paper, from 7 Nov 2026)" (Reference & Doctrine; page last edited
+   7 Nov 2026, approved by Eugene in chat 7 Nov: "yes, put them into Notion and build"), same text as
+   docs/specs-2026-11-07-first-pullback-short.md section A. Eugene's rulings (chat, 7 Nov 2026): trigger = the high of the
+   09:30–10:00 ET 30-min candle, valid from 10:00 ET; stop = that candle's low; "build a full suite similar to entry check 6.1
+   so i flip between both"; "i want there to be a tracker for it on the board as well with a copy to tradingview and export
+   csv button similar to others as well. 2 things ease of tracking when i bring to claude for review and ease of bringing to
+   tradingview to review charts"; Shakeout Reclaim and Floor Bounce come off the playbook switch but stay computed (feed
+   columns and MAP's O-line import unchanged) and move to a Research card.
+   CHECKS (fpCalc = pure maths on dssBars — the stored Massive daily bars + today's file / live bar, split-adjusted, the same
+   bars the Entry Check reads; fpBuild adds the row facts). Thresholds = the v1.0 values, all in FPC.
+     1 Liquidity      = Playbook 1's check 1 incl. 1b, read from s61Of(r).ck[1] (cap ≥ $1B, ≥ $100M/day, > $10; tradeable
+                        liquidity not OUT — 1b folds OUT into check 1).                                         fail → Out
+     2 Data           ≥ 100 bars in dssBars, and no single close-to-close move > 40% in the last 50 bars (Playbook 1's
+                        window).                                                                                fail → Out
+     3 Trend          close > 50 SMA; 50 SMA ≥ its value 10 sessions ago × 0.995; the last COMPLETED week's close > its
+                        10-week SMA (weekly closes built the way the Entry Check builds them; the current week is not
+                        counted, as in Playbook 1).                                                             fail → Out
+     4 Stage          the board's Weinstein machine (stageOf / wsStage, 50 / 150 / 200-day): main stage 2 passes — labels
+                        "2" and "2A"; 2A = the first 20 sessions after a Stage 1 → 2 (or 4 → 2) change, which is how the
+                        board sees "a Stage 1 → 2 breakout within the last 20 sessions" (wsStage moves 1 → 2 on a range
+                        breakout above a rising 50-day). Stage 1 / 1A (no breakout yet) → On deck (soft). N/A (under ~230
+                        stored sessions, the machine can't call it) → treated like Stage 1: soft, On deck at best. Stage
+                        3 / 3A / 4 / 4B- → Out.
+     5 The leg        window = the last 63 bars (today included). Leg high = the highest close in it (the latest bar on a
+                        tie), leg low = the lowest close before the leg high inside the window. Pass: leg high ≥ 25% over
+                        the leg low AND the leg high was 3–15 sessions ago.                                     fail → Out
+     6 Depth          close ≥ leg low + 50% of the leg. Feed "FP Depth %" = share of the leg given back.         fail → Out
+     7 Location       ADR = Playbook 1's (20-day mean of (high − low) ÷ close, × today's close). d9 = (close − 9 EMA) ÷ ADR,
+                        d21 = (close − 21 EMA) ÷ ADR, daily EMAs as the board computes them (PZ.ema). More than 0.5 ADR
+                        under the 21 → Out (checked first, so a close near a 9 EMA that sits under the 21 is still Out);
+                        |d9| ≤ 0.5 → "at the 9"; else |d21| ≤ 0.5 → "at the 21"; more than 0.5 ADR above both → "Above,
+                        wait" (Not yet); anything else (between the lines, near neither) → Out, as the page's "Out: anything
+                        else" says (flagged to Eugene).
+     8 Drying volume  mean volume of the pullback sessions (the bars after the leg high, today included) < the 50-day mean
+                        volume (last 50 bars, today included). Feed "FP Vol Ratio" = the two divided.      fail → On deck
+     9 Contraction    mean high − low of the last 3 bars ≤ 0.75 × ADR (as in 7). Feed "FP Range Ratio".   fail → On deck
+    10 Leadership     board RS ≥ 70.                                                                             fail → Out
+    11 Group          group state not Lagging (unknown fails, as in Playbook 1).                                fail → Out
+    12 Earnings       Playbook 1's earnings read (s61Earn: 6+ sessions, unknown = fail).                     fail → On deck
+    13 Room           (leg high − entry) ÷ 1R — information only. Before the session: entry ≈ close, 1R ≈ 0.6 ADR (the
+                        Entry Check's estimate); with the first 30-min candle: entry = its high, 1R = high − low.
+    14 Live trigger   Live mode (Massive, 15 min delayed) with today's 30-min bars (LV.today, the same bars the Entry
+                        Check's live 30-min reads use): the 09:30 ET bar = the first candle, complete once the data time
+                        is 10:00 ET or later. Triggered = a later 30-min bar's high (or the live price) above its high.
+                        Stop = its low, 1R = high − low, in ADR; flags > 1.0 ADR "wide — size down or skip", < 0.25 ADR
+                        "very tight — costs are a large share of 1R". Before 10:00 ET: "Buy over the 09:30–10:00 high;
+                        stop = its low" with no number. Never a list check.
+   LISTS (fpBuild): Ready = 1–12 all pass · On deck = exactly one of 4 (Stage 1), 8, 9, 12 fails, all else passes · Not yet =
+   location "Above, wait" with everything else passing · Out = anything else. Ready order: at the 9 before at the 21 → Stage
+   Age tag EARLY → MID → (no tag) → LATE (lpOf, the Leader Pullback stage-age read) → liquid tier ($500M+/day 20-day dollar
+   volume = the Entry Check's dv20) first → RS → ticker. On deck / Not yet / Out: RS → ticker. Filters change visibility only.
+   ON SCREEN: the playbook switch's "2 · First Pullback" (PLAYBOOKS script, in place) → this card on Setups (#pbBox) +
+   "First Pullback tracker" (#fpTrackBox); ticker-panel tab "First Pullback" (hook "panel"); chart levels (in-place call in
+   the playbooks bcModel wrapper: 9 / 21 EMA ± 0.5 ADR, leg high, pullback low, first-candle high / low when live); filter
+   criteria (category Playbooks), preset "Playbook 2 · First Pullback", screens (group "Playbook 2 · First Pullback"); a
+   Watchlist card (#fpWatch, in-place call in the playbooks renderWatch wrapper); TradingView lists section "First
+   Pullback" (in-place spread in TVL_SECS, off DS Daily); a one-line count on Today's environment line (in-place call in the
+   playbooks envHTML wrapper). NOT on the frozen Daily Plan (paper).
+   RESEARCH CARD (#pbResBox, Setups, collapsed by default): Shakeout Reclaim + Floor Bounce cards (r1CardHTML / obCardHTML,
+   unchanged) one at a time. Readers of R1 / OB kept working, found by grep: r1Of / obOf / r1Rows / obRun (cards, Today line,
+   Watchlist card #pbWatch, ticker-panel tabs "Shakeout" / "Floor Bounce", screens r1arm / r1camp / obc / obur, criteria
+   r1st / obst), the R1 / OB feed columns (SHAKEOUT RECLAIM + FLOOR BOUNCE IN THE FEEDS, FEED_EXT / ES_FEED_EXT), the stricter
+   filters (r1s* / obs*), MAP's O lines (mapParse / mapApply / mapImpHTML / obMapO), TradingView lists r1 / ob / obe / camp
+   items + tvlCampSync campaigns, the short memory, pbSelf. The chart's R1 / OB lines were drawn only under Playbook 2 / 3 and
+   are no longer drawn (no playbook selects them).
+   TRACKER (adrb.fpLog = {v, d: {fileDate: {sym: [list, loc, price, adr %, leg high, pullback low]}}, tr: {"session|sym":
+   [candle high, low, seen ISO, triggered ISO | null]}}, last 90 file dates): every name on Ready or On deck is logged once
+   per file date (add only; first values kept), when the lists read completed daily bars (no Live / board intraday bar).
+   Rows = first listing of each name on each list (like the MAP lists tracker). Now: price, move % and in ADR of the price
+   then, best / worst since (mlRange — stored highs / lows after the date), sessions, First Pullback list now. Trigger: the
+   first 30-min candle of the session after the listing, stored when first seen in Live mode; result (fpResult, pure) from
+   the daily bars: not triggered (that day's high ≤ the candle high) / win (+1R = candle high + (high − low) before the
+   stop) / loss / open (nothing in the fill day + 10 sessions) / "no 30-min data" / pending. Fill day: a low UNDER the candle
+   low = loss (a daily bar can't say whether it came before or after the trigger — conservative), high ≥ +1R with the low not
+   under it = win; later days use the MAP scorecard's rules (open ≤ stop loss, open ≥ +1R win, a bar touching both = loss).
+   Card: All / Ready / On deck switch (adrb.fpTrackShow), Copy for TradingView (the rows shown — switch + filter bar),
+   Download CSV (raw numbers, ISO dates). Also a paper tally (triggered, wins, losses, open, win rate vs the 40% kill line).
+   FEED: seven columns appended at the END (FEED_EXT): FP List, FP Loc, FP First Fail, FP Leg %, FP Depth %, FP Vol Ratio,
+   FP Range Ratio. SELF-CHECK: fpSelf in SC_X — its own SMA / EMA / ADR / leg / location / volume / range loops for every
+   listed name and a sample of Out names, list and location compared.
+   Storage NEW: adrb.fpLog, adrb.fpTrackShow ("all" | "R" | "D"), adrb.pbRes ({open, k: "r1" | "ob"} — the Research card).
+   adrb.pb gains the value "fp"; adrb.pbGF the key "fp". No function overrides (hooks "tab" / "panel", registries, guarded
+   in-place calls). Test: tools/board-first-pullback-test.js.
+   ===================================================================== */
+const FPC = {minBars: 100, brk: 40, brkLB: 50, s50N: 50, s50LB: 10, s50Flat: 0.995, wkLen: 10, legN: 63, legMin: 25, legAgoMin: 3, legAgoMax: 15,
+  depthMax: 50, near: 0.5, volN: 50, rngN: 3, rngMax: 0.75, adrN: 20, rsMin: 70, liqTier: 500e6, risk: 0.6, wide: 1.0, tight: 0.25,
+  fcStart: 570, fcEnd: 600, logDays: 90, hold: 10, wash: 0};
+const FP_L = {R: {n: "Ready", c: "go"}, D: {n: "On deck", c: "zone"}, N: {n: "Not yet", c: ""}, O: {n: "Out", c: "bad"}};
+const FP_LOC = {9: "at the 9", 21: "at the 21", ABOVE: "Above, wait", UNDER: "Under the 21 — out", BETWEEN: "Between the lines — out"};
+const FP_LOCF = {9: "9", 21: "21", ABOVE: "Above", UNDER: "Under 21", BETWEEN: "Between"};
+const FP_CK = {1: "Liquidity", 2: "Data", 3: "Trend", 4: "Stage", 5: "The leg", 6: "Depth", 7: "Location", 8: "Drying volume", 9: "Contraction", 10: "Leadership", 11: "Group", 12: "Earnings", 13: "Room", 14: "Live trigger"};
+const FP_SOFT = [4, 8, 9, 12];
+
+/* ---------------- pure maths: one symbol's bars ---------------- */
+// b = {c, h, l, v, dates, n} (oldest first). Returns null under 2 bars.
+function fpCalc(b){
+  if (!b || !(b.n >= 2)) return null;
+  const C = FPC, {c, h, l, v} = b, n = b.n, t = n - 1;
+  const e9 = PZ.ema(c, 9), e21 = PZ.ema(c, 21);
+  // 50 SMA, rolling (plain sum)
+  const s50 = new Float64Array(n).fill(NaN); { let s = 0, bad = 0; for (let k = 0; k < n; k++) { s += c[k]; if (!isFinite(c[k])) bad++; if (k >= C.s50N) { s -= c[k - C.s50N]; if (!isFinite(c[k - C.s50N])) bad--; } if (k >= C.s50N - 1 && !bad) s50[k] = s / C.s50N; } }
+  // ADR (Playbook 1's): 20-day mean of (high − low) ÷ close × 100; in $ = × today's close
+  let adr = NaN; if (n >= C.adrN) { let s = 0; for (let k = n - C.adrN; k < n; k++) s += (h[k] - l[k]) / c[k] * 100; adr = s / C.adrN; }
+  const D = isFinite(adr) && adr > 0 ? adr / 100 * c[t] : NaN;
+  // 2 · data
+  let brkMax = 0; for (let k = Math.max(1, t - C.brkLB + 1); k <= t; k++) if (c[k - 1] > 0) brkMax = Math.max(brkMax, Math.abs(c[k] / c[k - 1] - 1) * 100);
+  const brk = brkMax > C.brk, prov = n < C.minBars;
+  // 3 · trend
+  const s50Ago = t - C.s50LB >= 0 ? s50[t - C.s50LB] : NaN;
+  const aboveS50 = isFinite(s50[t]) && c[t] > s50[t], s50Ok = isFinite(s50[t]) && isFinite(s50Ago) && s50[t] >= s50Ago * C.s50Flat;
+  const wk = b.dates.map(weekKey), wc = [];
+  for (let k = 0; k <= t; k++) { if (wk[k] >= wk[t]) break; if (k === 0 || wk[k] !== wk[k - 1]) wc.push(c[k]); else wc[wc.length - 1] = c[k]; }
+  const m = wc.length - 1; let wS = NaN; if (m - C.wkLen + 1 >= 0) { let s = 0; for (let k = m - C.wkLen + 1; k <= m; k++) s += wc[k]; wS = s / C.wkLen; }
+  const wC = m >= 0 ? wc[m] : NaN, wkOk = isFinite(wC) && isFinite(wS) && wC > wS;
+  const trendOk = aboveS50 && s50Ok && wkOk;
+  // 5 · the leg (closes, last 63 bars)
+  const w0 = Math.max(0, t - C.legN + 1); let iH = w0; for (let k = w0 + 1; k <= t; k++) if (c[k] >= c[iH]) iH = k;
+  let iL = -1; for (let k = w0; k < iH; k++) if (iL < 0 || c[k] < c[iL]) iL = k;
+  const legHi = c[iH], legLo = iL >= 0 ? c[iL] : NaN, legPct = iL >= 0 ? (legHi / legLo - 1) * 100 : NaN, ago = t - iH;
+  const legOk = isFinite(legPct) && legPct >= C.legMin && ago >= C.legAgoMin && ago <= C.legAgoMax;
+  // 6 · depth
+  const span = legHi - legLo, depth = isFinite(span) && span > 0 ? (legHi - c[t]) / span * 100 : NaN;
+  const depthOk = isFinite(span) && span > 0 && c[t] >= legLo + (C.depthMax / 100) * span;
+  // 7 · location
+  const d9 = isFinite(D) ? (c[t] - e9[t]) / D : NaN, d21 = isFinite(D) ? (c[t] - e21[t]) / D : NaN;
+  const loc = !isFinite(d9) || !isFinite(d21) ? null : d21 < -C.near ? "UNDER" : Math.abs(d9) <= C.near ? "9" : Math.abs(d21) <= C.near ? "21" : d9 > C.near && d21 > C.near ? "ABOVE" : "BETWEEN";
+  // 8 · drying volume
+  let pbVol = NaN, pbLow = NaN; if (ago >= 1) { let s = 0, lo = Infinity; for (let k = iH + 1; k <= t; k++) { s += v[k]; lo = Math.min(lo, l[k]); } pbVol = s / ago; pbLow = lo; }
+  let avg50 = NaN; if (n >= C.volN) { let s = 0; for (let k = n - C.volN; k < n; k++) s += v[k]; avg50 = s / C.volN; }
+  const volRatio = isFinite(pbVol) && avg50 > 0 ? pbVol / avg50 : NaN, volOk = isFinite(volRatio) && volRatio < 1;
+  // 9 · contraction
+  let rng3 = NaN; if (n >= C.rngN) { let s = 0; for (let k = n - C.rngN; k < n; k++) s += h[k] - l[k]; rng3 = s / C.rngN; }
+  const rngRatio = isFinite(rng3) && isFinite(D) && D > 0 ? rng3 / D : NaN, rngOk = isFinite(rngRatio) && rngRatio <= C.rngMax;
+  // 13 · room (estimate before the session: entry ≈ close, 1R ≈ 0.6 ADR)
+  const room = isFinite(D) && D > 0 ? (legHi - c[t]) / (C.risk * D) : NaN;
+  return {t, n, to: b.dates[t], close: c[t], hi: h[t], lo: l[t], e9: e9[t], e21: e21[t], s50: s50[t], s50Ago, aboveS50, s50Ok, wk: {c: wC, s: wS}, wkOk, trendOk,
+    adr, D, brk, brkMax, prov, leg: {hi: legHi, lo: legLo, pct: legPct, ago, iH, iL, hiDate: b.dates[iH], loDate: iL >= 0 ? b.dates[iL] : ""}, legOk,
+    depth, depthOk, d9, d21, loc, pbVol, avg50, volRatio, volOk, pbLow, rng3, rngRatio, rngOk, room};
+}
+// the list from the check results (pure). ck[n].ok must be exactly true to pass; loc = fpCalc's location code
+function fpListOf(ck, loc, stageMain){
+  const hard = [1, 2, 3, 5, 6, 10, 11].filter(n => ck[n].ok !== true);
+  if (stageMain !== "2" && stageMain !== "1" && stageMain !== null) hard.push(4);   // Stage 3 / 4 = Out; Stage 1 or not called = soft
+  if (loc !== "9" && loc !== "21" && loc !== "ABOVE") hard.push(7);
+  const soft = FP_SOFT.filter(n => ck[n].ok !== true && !hard.includes(n));
+  if (hard.length) return {list: "O", soft, hard};
+  if (loc === "ABOVE") return {list: soft.length ? "O" : "N", soft, hard};
+  return {list: soft.length === 0 ? "R" : soft.length === 1 ? "D" : "O", soft, hard};
+}
+// tracker result from the daily bars (pure). b = {o, h, l, dates, n}; s1 = the session after the listing;
+// fc = [candle high, candle low, seen, triggered] or null; hold = sessions after the fill day
+function fpResult(b, s1, fc, hold = FPC.hold){
+  const has = b && b.n ? b.dates.indexOf(s1) : -1, lastD = b && b.n ? b.dates[b.n - 1] : "";
+  if (!fc || !(fc[0] > fc[1])) return {k: has >= 0 || (lastD && lastD > s1) ? "nodata" : "pending"};
+  const E = fc[0], SP = fc[1], R = E - SP, tgt = E + R;
+  if (has < 0) return fc[3] ? {k: "open", trig: true, E, SP, R, tgt} : {k: "pending", E, SP, R, tgt};
+  const ok = x => typeof x === "number" && isFinite(x), H0 = b.h[has], L0 = b.l[has];
+  if (!(ok(H0) && H0 > E)) return {k: "nofill", E, SP, R, tgt};
+  const out = k => ({k, trig: true, E, SP, R, tgt});
+  if (ok(L0) && L0 < SP) return {...out("loss"), xt: s1};
+  if (H0 >= tgt) return {...out("win"), xt: s1};
+  for (let j = 1; j <= hold; j++) { const t = has + j; if (t >= b.n) return out("open");
+    const o = b.o[t], hh = b.h[t], ll = b.l[t]; if (!ok(hh) || !ok(ll)) continue;
+    if (ok(o) && o <= SP) return {...out("loss"), xt: b.dates[t]}; if (ok(o) && o >= tgt) return {...out("win"), xt: b.dates[t]};
+    if (ll <= SP) return {...out("loss"), xt: b.dates[t]}; if (hh >= tgt) return {...out("win"), xt: b.dates[t]}; }
+  return out("open");
+}
+const FP_RES = {win: "win", loss: "loss", open: "open", nofill: "not triggered", pending: "pending", nodata: "no 30-min data"};
+
+/* ---------------- per symbol ---------------- */
+const FPX = {key: "", map: new Map()};
+function fpCalcOf(sym){
+  const k = dssKey(); if (FPX.key !== k) { FPX.key = k; FPX.map = new Map(); }
+  if (FPX.map.has(sym)) return FPX.map.get(sym);
+  let x = null; try { x = fpCalc(dssBars(sym)); } catch (e) { console.warn("first pullback", sym, e); x = null; }
+  FPX.map.set(sym, x); return x;
+}
+const FPB = new WeakMap();
+// one stock: every check, its list, first fail, next action (cached on the Entry Check's own result object)
+function fpOf(r){
+  if (!r || r.etf || !S.has || !S.has.hist || !HIST.nD) return null;
+  let s = null; try { s = s61Of(r); } catch (e) { s = null; } if (!s) return null;
+  if (FPB.has(s)) return FPB.get(s);
+  let f = null; try { f = fpBuild(r, s); } catch (e) { console.warn("first pullback", r.sym, e); f = null; }
+  FPB.set(s, f); return f;
+}
+function fpBuild(r, s){
+  const x = fpCalcOf(r.sym); if (!x) return null;
+  const C = FPC, ck = {}, add = (n, ok, v, lim, kind) => { ck[n] = {n, l: FP_CK[n], ok, v, lim, kind}; };
+  const c1 = s.ck[1], c1b = s.ck["1b"];
+  add(1, c1.ok === true, c1.v + (c1b && c1b.kind === "hard" ? ` · 1b ${c1b.short}` : ""), "as Playbook 1: cap ≥ $1B · ≥ $100M/day · > $10 · tradeable liquidity not OUT", "hard");
+  add(2, !x.prov && !x.brk, `${x.n} sessions stored · biggest 1-day move ${x.brkMax.toFixed(0)}% (last 50)`, "≥ 100 sessions · no single move > 40%", "hard");
+  add(3, x.trendOk, `close ${p2(x.close)} vs 50 SMA ${p2(x.s50)} ${x.aboveS50 ? "✓" : "✗"} · 50 SMA vs 10 sessions ago ${p2(x.s50Ago)} ${x.s50Ok ? "✓" : "✗"} · last weekly close ${p2(x.wk.c)} vs 10-week ${p2(x.wk.s)} ${x.wkOk ? "✓" : "✗"}`, "close above the 50 SMA · 50 SMA rising or flat (≥ 10 sessions ago × 0.995) · weekly close above the 10-week SMA", "hard");
+  const stg = s.stage || null, main = stg ? (WS_MAIN[stg.lab] ?? null) : null;
+  add(4, main === "2", stg ? `Stage ${stg.lab}${WSL[stg.lab] ? " · " + WSL[stg.lab].t : ""}${stg.since != null && stg.lab !== "N/A" ? ` · ${stg.since} sessions in it` : ""}` : "no stage", "Stage 2 (2A = the first 20 sessions after a Stage 1 → 2 breakout) · Stage 1 = On deck · Stage 3 / 4 = Out", main === "2" || main === "1" || main == null ? "soft" : "hard");
+  add(5, x.legOk, fin(x.leg.pct) ? `+${x.leg.pct.toFixed(1)}% from ${p2(x.leg.lo)} (${x.leg.loDate}) to ${p2(x.leg.hi)} (${x.leg.hiDate}) · high ${x.leg.ago} session${x.leg.ago === 1 ? "" : "s"} ago` : "no close before the high in the last 63 sessions", "highest close of 63 sessions ≥ 25% over the lowest close before it · that high 3–15 sessions ago", "hard");
+  add(6, x.depthOk, fin(x.depth) ? `${x.depth.toFixed(0)}% of the leg given back · half-way ${p2(x.leg.lo + (x.leg.hi - x.leg.lo) / 2)}` : "—", "no more than half the leg given back", "hard");
+  add(7, x.loc === "9" || x.loc === "21", x.loc ? `${FP_LOC[x.loc]} · close ${sg(x.d9, 2)} ADR from the 9 EMA ${p2(x.e9)} · ${sg(x.d21, 2)} ADR from the 21 EMA ${p2(x.e21)}` : "no ADR", "within ±0.5 ADR of the daily 9 EMA or the daily 21 EMA · > 0.5 above both = Not yet · > 0.5 under the 21 = Out", "loc");
+  add(8, x.volOk, fin(x.volRatio) ? `pullback volume ${x.volRatio.toFixed(2)}× the 50-day average (${x.leg.ago} session${x.leg.ago === 1 ? "" : "s"})` : "no pullback sessions yet", "pullback volume below the 50-day average", "soft");
+  add(9, x.rngOk, fin(x.rngRatio) ? `last 3 ranges ${x.rngRatio.toFixed(2)} ADR` : "—", "average range of the last 3 sessions ≤ 0.75 ADR", "soft");
+  add(10, r.rs != null && r.rs >= C.rsMin, `RS ${r.rs ?? "—"}`, `≥ ${C.rsMin}`, "hard");
+  const gs = r.gState && r.gState !== "—" ? r.gState : null;
+  add(11, gs != null && gs !== "Lagging", gs || "no group state", "not Lagging", "hard");
+  const er = s.er; add(12, er.n != null && er.n >= S61.erMin, er.n == null ? "earnings date unknown" : `in ${er.n} session${er.n === 1 ? "" : "s"}`, "none in the next 5 sessions (as Playbook 1)", "soft");
+  const L = fpListOf(ck, x.loc, main);
+  const ff = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].find(n => ck[n].ok !== true) ?? null;
+  const ffTxt = ff == null ? "" : ff === 7 ? `7 Location ${x.loc ? FP_LOCF[x.loc] : "no ADR"}` : ff === 4 ? `4 Stage ${stg ? stg.lab : "?"}` : ff === 5 ? `5 Leg ${fin(x.leg.pct) ? x.leg.pct.toFixed(1) + "% · " + x.leg.ago + "d" : "none"}`
+    : ff === 6 ? `6 Depth ${fin(x.depth) ? x.depth.toFixed(0) + "%" : "?"}` : ff === 8 ? `8 Volume ${fin(x.volRatio) ? x.volRatio.toFixed(2) + "x" : "?"}` : ff === 9 ? `9 Range ${fin(x.rngRatio) ? x.rngRatio.toFixed(2) + " ADR" : "?"}`
+    : ff === 10 ? `10 RS ${r.rs ?? "?"}<${C.rsMin}` : ff === 11 ? `11 Group ${gs || "unknown"}` : ff === 12 ? `12 Earnings ${er.n == null ? "unknown" : er.n + "<" + S61.erMin}` : ff === 2 ? `2 Data ${x.prov ? x.n + " bars" : x.brkMax.toFixed(0) + "%"}` : ff === 3 ? `3 Trend ${!x.aboveS50 ? "50S" : !x.s50Ok ? "50S slope" : "10W"}` : `1 Liquidity`;
+  add(13, null, fin(x.room) ? `${x.room.toFixed(1)}R to the leg high ${p2(x.leg.hi)} (est.: entry ≈ close, 1R ≈ 0.6 ADR)` : "—", "information only", "info");
+  add(14, null, "watched live", "over the 09:30–10:00 ET candle's high, from 10:00 ET · stop = its low", "live");
+  return {r, s, x, ck, list: L.list, soft: L.soft, hard: L.hard, ff, ffTxt, stage: stg, stageMain: main, er, dv20: s.x.dv20};
+}
+// Live: the first 30-min candle (09:30–10:00 ET) of today's session, from the Live 30-min bars (Massive, 15 min delayed)
+function fpLive(sym){
+  if (typeof LV === "undefined" || !LV.cfg || !LV.cfg.on || !LV.frame || LV.frame.phase !== "rth" || !LV.frame.dataMs) return null;
+  const F = LV.frame, dm = etMin(F.dataMs - 1) + 1, T = LV.today && LV.today.get(sym), out = {date: F.date, dataMs: F.dataMs};
+  if (dm < FPC.fcEnd) return {...out, wait: true};
+  if (!T || T.d !== F.date || !T.bars) return {...out, none: true};
+  const fc = T.bars.find(q => etMin(q.t) === FPC.fcStart); if (!fc || !(fc.h > fc.l)) return {...out, none: true};
+  let trigAt = null; for (const q of T.bars) if (etMin(q.t) >= FPC.fcEnd && q.h > fc.h) { trigAt = q.t; break; }
+  const r = S.rowBySym && S.rowBySym.get(sym);
+  if (trigAt == null && r && fin(r.last) && r.last > fc.h) trigAt = F.dataMs;
+  return {...out, hi: fc.h, lo: fc.l, at: fc.t, R: fc.h - fc.l, trig: trigAt != null, trigAt};
+}
+function fpGeo(f, q){
+  if (!q || !fin(q.hi) || !f || !fin(f.x.D)) return null;
+  const rA = q.R / f.x.D, room = q.R > 0 ? (f.x.leg.hi - q.hi) / q.R : NaN;
+  return {rA, room, flag: rA > FPC.wide ? "wide — size down or skip" : rA < FPC.tight ? "very tight — costs are a large share of 1R" : ""};
+}
+const fpHM = ms => hhmm(etMin(ms));
+function fpTrigTxt(f, q){
+  if (!q) return "Buy over the 09:30–10:00 ET high; stop = its low (from 10:00 ET; watch TradingView's live chart)";
+  if (q.wait) return "Buy over the 09:30–10:00 ET high; stop = its low — the candle isn't finished yet (Massive is 15 min behind)";
+  if (q.none) return "Buy over the 09:30–10:00 ET high; stop = its low — no 30-min bars for this name in Live mode";
+  const g = fpGeo(f, q);
+  return `Buy over ${p2(q.hi)} (09:30–10:00 high); stop ${p2(q.lo)} = its low · 1R ${p2(q.R)}${g ? ` = ${g.rA.toFixed(2)} ADR` : ""}${g && g.flag ? ` — ${g.flag}` : ""}${q.trig ? ` · TRIGGERED ${fpHM(q.trigAt)} ET` : " · not triggered yet"}`;
+}
+// the next action, in words
+function fpNext(f){
+  if (!f) return "";
+  const x = f.x, W = {4: `Stage ${f.stage ? f.stage.lab : "?"} — wait for the Stage 2 breakout`, 8: `wait for volume to dry up (pullback ${fin(x.volRatio) ? x.volRatio.toFixed(2) : "?"}× the 50-day)`,
+    9: `wait for tighter ranges (last 3 days ${fin(x.rngRatio) ? x.rngRatio.toFixed(2) : "?"} ADR, needs ≤ 0.75)`, 12: `earnings in ${f.er.n == null ? "? (unknown)" : f.er.n} sessions — no entry before it`};
+  if (f.list === "R") return fpTrigTxt(f, fpLive(f.r.sym));
+  if (f.list === "D") return "On deck: " + (W[f.soft[0]] || "one thing missing");
+  if (f.list === "N") return `Above both lines — wait for the pullback to the 9 EMA ${p2(x.e9)} or the 21 EMA ${p2(x.e21)} (±0.5 ADR)`;
+  return "Out — " + (f.ff ? `${f.ff}. ${FP_CK[f.ff]}: ${f.ck[f.ff].v}` : "");
+}
+// whole-file lists (filters change visibility only)
+const fpLiq = f => fin(f.dv20) && f.dv20 >= FPC.liqTier;
+function fpRankR(a, b){
+  const lo = v => fin(v) ? v : Infinity, la = a.x.loc === "9" ? 0 : 1, lb = b.x.loc === "9" ? 0 : 1; if (la !== lb) return la - lb;
+  const ta = typeof lpOf === "function" ? lpTagO((lpOf(a.r.sym) || {}).tag) : 2, tb = typeof lpOf === "function" ? lpTagO((lpOf(b.r.sym) || {}).tag) : 2; if (ta !== tb) return ta - tb;
+  const qa = fpLiq(a) ? 0 : 1, qb = fpLiq(b) ? 0 : 1; if (qa !== qb) return qa - qb;
+  const ra = lo(a.r.rs == null ? NaN : -a.r.rs), rb = lo(b.r.rs == null ? NaN : -b.r.rs); if (ra !== rb) return ra - rb;
+  return a.r.sym < b.r.sym ? -1 : a.r.sym > b.r.sym ? 1 : 0;
+}
+const fpRankRS = (a, b) => ((b.r.rs ?? -1) - (a.r.rs ?? -1)) || (a.r.sym < b.r.sym ? -1 : a.r.sym > b.r.sym ? 1 : 0);
+function fpLists(all){
+  const L = {R: [], D: [], N: [], O: []}; if (!S.snap || !S.has || !S.has.hist) return L;
+  for (const r of S.stocks) { if (!all && !gOK(r)) continue; const f = fpOf(r); if (f) L[f.list].push(f); }
+  L.R.sort(fpRankR); L.D.sort(fpRankRS); L.N.sort(fpRankRS); L.O.sort(fpRankRS);
+  return L;
+}
+const fpPill = f => f ? `<span class="pill ${FP_L[f.list].c}">${FP_L[f.list].n}</span>` : "";
+const fpLocPill = f => f && f.x.loc ? `<span class="pill ${f.x.loc === "9" || f.x.loc === "21" ? "go" : f.x.loc === "ABOVE" ? "wait" : "bad"}">${esc(FP_LOC[f.x.loc])}</span>` : "—";
+
+/* ---------------- Setups card ---------------- */
+function fpCardHTML(){
+  const hd = sub => `<div class="hd"><h2>Playbook 2 · First Pullback</h2><span class="ectag" title="Notion: Playbook 2 · First Pullback — v1.0 (paper, from 7 Nov 2026)">v1.0 · paper</span><span class="sub">${sub}</span><span class="spacer"></span>${pbHH() ? `<button class="btn sm" id="fpTv" data-tvc title="Copies Ready + On deck as one line — paste into TradingView's Add symbol box">Copy for TradingView</button>` : ""}</div>`;
+  if (!pbHH()) return hd("paper / watch only") + `<div class="bd"><div class="empty">First Pullback reads the stored daily bars. <button class="btn sm" data-hist="full">Load price history</button></div></div>`;
+  const L = fpLists(false), A = fpLists(true), n = k => A[k].length, shown = L.R.length + L.D.length, tot = n("R") + n("D");
+  const ffc = {}; A.O.forEach(f => { if (f.ff) ffc[f.ff] = (ffc[f.ff] || 0) + 1; });
+  const to = (A.R[0] || A.D[0] || A.O[0] || {x: {}}).x.to || HIST.dates[HIST.nD - 1] || "—";
+  const er = f => `<td class="${f.ck[12].ok ? "" : "neg"}">${f.er.n == null ? "?" : f.er.n}</td>`;
+  const row = f => { const x = f.x, r = f.r;
+    return `<tr data-sym="${esc(r.sym)}"><td class="l sym">${esc(r.sym)}${typeof fpPivTag === "function" ? fpPivTag(f) : ""}${typeof lpBadge === "function" ? " " + lpBadge(r.sym) : ""}</td><td>${rsBadge(r.rs)}</td><td class="l small">${esc(r.group || "")}<br><span class="dim">${esc(r.gState || "")}</span></td>
+      <td class="l">${fpLocPill(f)}</td><td>${sg(x.d9, 2)}</td><td>${sg(x.d21, 2)}</td><td title="Leg: ${esc(f.ck[5].v)}">${fin(x.leg.pct) ? "+" + x.leg.pct.toFixed(0) + "%" : "—"}<br><span class="dim small">${x.leg.ago}d ago</span></td>
+      <td title="Share of the leg given back">${fin(x.depth) ? x.depth.toFixed(0) + "%" : "—"}</td><td class="${f.ck[8].ok ? "pos" : "neg"}">${fin(x.volRatio) ? x.volRatio.toFixed(2) + "×" : "—"}</td><td class="${f.ck[9].ok ? "pos" : "neg"}">${fin(x.rngRatio) ? x.rngRatio.toFixed(2) : "—"}</td>
+      <td class="l small">${f.stage ? esc(f.stage.lab) : "—"}</td>${er(f)}<td>${p2(x.leg.hi)}<br><span class="dim small">${fin(x.room) ? x.room.toFixed(1) + "R est." : ""}</span></td><td class="l small">${esc(fpNext(f))}</td></tr>`; };
+  const head = `<thead><tr><th class="l">Ticker</th><th>RS</th><th class="l">Group</th><th class="l">Location</th><th title="Close vs the daily 9 EMA, in ADR">9 ADR</th><th title="Close vs the daily 21 EMA, in ADR">21 ADR</th><th title="The leg: highest close of 63 sessions over the lowest close before it · sessions since the high">Leg</th><th title="Share of the leg given back (Out over 50%)">Depth</th><th title="Pullback volume ÷ 50-day average volume (needs under 1)">Volume</th><th title="Average range of the last 3 sessions, in ADR (needs ≤ 0.75)">Range</th><th class="l">Stage</th><th title="Sessions to earnings — needs 6+">Earn.</th><th title="Leg high = first resistance · room in R (estimate)">Leg high</th><th class="l">Next action</th></tr></thead>`;
+  const tbl = (rows, empty) => rows.length ? `<div class="tscroll" style="max-height:420px"><table class="mini fpt">${head}<tbody>${rows.map(row).join("")}</tbody></table></div>` : `<div class="empty" style="padding:4px 0">${empty}</div>`;
+  const fl = shown < tot ? ` <span class="small">(filters on: ${shown} shown of ${tot})</span>` : "";
+  const ro = L.O.filter(f => f.x.legOk || f.x.loc === "9" || f.x.loc === "21");
+  return hd(`paper / watch only · never sized · every stock in the file, filter bar applied · daily close ${esc(to)}`) + `<div class="bd">
+    <div class="small" style="margin-bottom:6px">A stock fresh off a strong leg (often early Stage 2) pulls back quietly to its daily <b>9 or 21 EMA</b> (±0.5 ADR) on <b>drying volume</b> with <b>tight ranges</b>. <b>Trigger</b>: over the 09:30–10:00 ET candle's high, from 10:00 ET · <b>stop</b> = that candle's low · exits as Playbook 1. Watch the trigger on TradingView's live chart — the board is 15 minutes behind.</div>
+    <div class="kpis" style="margin:8px 0"><div class="kpi card"><div class="k">Ready</div><div class="v">${n("R")}</div><div class="n">checks 1–12 pass · at the 9 first</div></div>
+      <div class="kpi card"><div class="k">On deck</div><div class="v">${n("D")}</div><div class="n">one of stage 1 · volume · ranges · earnings missing</div></div>
+      <div class="kpi card"><div class="k">Not yet</div><div class="v">${n("N")}</div><div class="n">more than 0.5 ADR above both lines</div></div>
+      <div class="kpi card"><div class="k">Out</div><div class="v">${n("O")}</div><div class="n" title="The first check that fails">${Object.entries(ffc).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => `${FP_CK[k]}: ${v}`).join(" · ")}</div></div></div>
+    <h4 style="margin:8px 0 2px">Ready${fl}</h4>${tbl(L.R, "No name passes every First Pullback check today.")}
+    <h4 style="margin:12px 0 2px">On deck</h4>${tbl(L.D, "Nothing on deck.")}
+    <details class="tp-fold" style="margin-top:8px"><summary>Not yet (${L.N.length})</summary><div style="padding:6px 0">${L.N.slice(0, 80).map(f => tkChip(f.r, sg(f.x.d9, 1))).join("") || `<span class="dim small">none</span>`}</div></details>
+    <details class="tp-fold"><summary>Out but close — a leg or the location is there (${ro.length})</summary><div class="small" style="padding:6px 0">${ro.slice(0, 60).map(f => `<span class="tk" data-sym="${esc(f.r.sym)}">${esc(f.r.sym)}</span> <span class="dim">${esc(f.ffTxt)}</span>`).join(" · ") || "none"}</div></details>
+    <details class="tp-fold"><summary>How the lists work (Notion v1.0)</summary><div class="small" style="padding:6px 0"><b>Ready</b> = checks 1–12 pass · <b>On deck</b> = exactly one of 4 Stage 1, 8 drying volume, 9 contraction or 12 earnings missing · <b>Not yet</b> = more than 0.5 ADR above both lines, everything else passes · <b>Out</b> = anything else. Checks: 1 liquidity as Playbook 1 (incl. 1b) · 2 ≥ 100 sessions, no move over 40% · 3 close over a rising or flat 50 SMA, weekly close over the 10-week · 4 Stage 2 (2A = fresh from Stage 1) · 5 a leg of 25%+ in 63 sessions, its high 3–15 sessions ago · 6 no more than half the leg given back · 7 within ±0.5 ADR of the daily 9 or 21 EMA · 8 pullback volume under the 50-day average · 9 last 3 ranges ≤ 0.75 ADR · 10 RS ≥ 70 · 11 group not Lagging · 12 no earnings in 5 sessions · 13 room to the leg high (information) · 14 the live trigger. Ready order: at the 9 → stage age EARLY / MID / LATE → $500M+ a day → RS. Paper only: never on the Daily Plan, the Entry Check lists or the Board log.</div></details>
+  </div>`;
+}
+
+/* ---------------- ticker panel tab ---------------- */
+function fpPaneHTML(r){
+  const f = fpOf(r);
+  if (!f) return `<div class="fpp"><div class="small">${pbHH() ? "Not enough stored bars for First Pullback." : "First Pullback needs the price history (Data check → Load price history)."}</div></div>`;
+  const q = fpLive(r.sym), g = fpGeo(f, q);
+  const live = !q ? `<b>Trigger</b>: buy over the 09:30–10:00 ET candle's high, from 10:00 ET · stop = its low · 1R = high − low. In Live mode the board fills in the numbers after about 10:15 ET (Massive is 15 minutes behind); watch the real trigger on TradingView.`
+    : q.wait ? `<b>Trigger</b>: buy over the 09:30–10:00 ET high; stop = its low — the first candle isn't finished in the delayed data yet.`
+    : q.none ? `<b>Trigger</b>: no 30-min bars for this name in Live mode (Live → "30-min bars for" covers liquid names and your lists).`
+    : `<b>First candle</b> (09:30–10:00 ET): high <b>${p2(q.hi)}</b> · low <b>${p2(q.lo)}</b> · 1R ${p2(q.R)}${g ? ` = <b>${g.rA.toFixed(2)} ADR</b>` : ""}${g && g.flag ? ` <span class="neg">${esc(g.flag)}</span>` : ""}${g && fin(g.room) ? ` · room to the leg high ${g.room.toFixed(1)}R` : ""} · ${q.trig ? `<b class="pos">triggered ${fpHM(q.trigAt)} ET</b>` : "not triggered yet"} <span class="dim">(Massive, 15 min delayed)</span>`;
+  const rows = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].map(n => s61RowHTML(f.ck[n])).join("");
+  return `<div class="fpp"><div class="pbh"><b>First Pullback · ${esc(r.sym)}</b> <span class="small dim">Playbook 2 · v1.0 · paper / watch only</span><span class="spacer"></span>${fpPill(f)} ${fpLocPill(f)}</div>
+    <div class="small" style="margin:4px 0"><b>Next:</b> ${esc(fpNext(f))}</div>
+    <div class="small fplive" style="margin:4px 0">${live}</div>${typeof fpPivPaneLine === "function" ? fpPivPaneLine(f) : ""}
+    <div class="s61chk fpchk">${rows}</div>
+    <div class="small dim" style="margin-top:4px">${f.list === "O" && f.ff ? `First failing check: ${f.ff}. ${esc(FP_CK[f.ff])}. ` : ""}Daily checks on the close of ${esc(f.x.to)}. Exits as Playbook 1 (⅓ at 2R or the T+3 close, stop to breakeven, runner on a daily close under the 9 EMA). Paper only — never on the Entry Check lists or the Daily Plan.</div></div>`;
+}
+hookOn("panel", "firstPullback", (r, dr, ws) => {
+  if (!r || r.etf || !dr || dr.querySelector(".fpp")) return;
+  const html = fpPaneHTML(r);
+  if (ws) {
+    const tabs = dr.querySelector(".tp-tabs"), right = dr.querySelector(".tp-right"), plan = dr.querySelector('.tp-tabs button[data-tpt="plan"]'); if (!tabs || !right) return;
+    const b = document.createElement("button"); b.dataset.tpt = "fp"; b.textContent = "First Pullback"; if (plan) plan.after(b); else tabs.appendChild(b);
+    const d = document.createElement("div"); d.className = "tp-pane"; d.dataset.p = "fp"; d.innerHTML = html; right.appendChild(d);
+    let want = null; try { want = store.get("adrb.tpTab", null); } catch (e) {}
+    if (want === "fp") { WSI.tpTab = "fp"; dr.querySelectorAll("[data-tpt]").forEach(x => x.classList.toggle("on", x.dataset.tpt === "fp")); dr.querySelectorAll(".tp-pane").forEach(p => p.classList.toggle("on", p.dataset.p === "fp")); }
+  } else {
+    const at = dr.querySelector(".pbcls") || dr.querySelector(".dpn") || dr.querySelector(".s61p");
+    if (at) at.insertAdjacentHTML("afterend", `<div class="fpcls">${html}</div>`); else dr.insertAdjacentHTML("beforeend", `<div class="fpcls">${html}</div>`);
+  }
+});
+
+/* ---------------- board chart (called in place from the playbooks bcModel wrapper when the switch is on 2) ---------------- */
+BCL_CODE.push([/^FP 9 EMA \+0\.5/, "fp9h", "9+.5"], [/^FP 9 EMA −0\.5/, "fp9l", "9−.5"], [/^FP 21 EMA \+0\.5/, "fp21h", "21+.5"], [/^FP 21 EMA −0\.5/, "fp21l", "21−.5"],
+  [/^FP leg high/, "fpleg", "LEG"], [/^FP pullback low/, "fppbl", "PB LO"], [/^FP first 30m high/, "fptrg", "TRIG"], [/^FP first 30m low/, "fpstp", "STOP"]);
+function fpChartLines(r, L, M){
+  const f = fpOf(r); if (!f) return; const x = f.x, h = FPC.near * x.D;
+  if (fin(h)) { L(x.e9 + h, BC_STYLE.e9, "FP 9 EMA +0.5 ADR", 1); L(x.e9 - h, BC_STYLE.e9, "FP 9 EMA −0.5 ADR", 1); L(x.e21 + h, BC_STYLE.e21, "FP 21 EMA +0.5 ADR", 1); L(x.e21 - h, BC_STYLE.e21, "FP 21 EMA −0.5 ADR", 1); }
+  L(x.leg.hi, BC_STYLE.res, "FP leg high (first resistance)", 2); L(x.pbLow, BC_STYLE.zone, "FP pullback low", 2);
+  const q = fpLive(r.sym); if (q && fin(q.hi)) { L(q.hi, BC_STYLE.trig, "FP first 30m high (trigger)", 0); L(q.lo, BC_STYLE.stop, "FP first 30m low (stop)", 0); }
+  if (typeof fpPivChart === "function") fpPivChart(f, L);   // 7 Nov 2026: pivot ★ level (script "FIRST PULLBACK · PIVOT CONFLUENCE ★"; mark only)
+  M.pb = {k: "fp", list: f.list};
+}
+
+/* ---------------- filters, preset, screens ---------------- */
+GF_PRESETS["Playbook 2 · First Pullback"] = {gates: {dvMin: 100, mcapMin: 1, pxMin: 10}, crit: {}};
+for (const c of [
+  {k: "fpList", cat: "Playbooks", l: "First Pullback (Playbook 2) list is", type: "multi", p: ["R", "D"], need: HH, opts: () => Object.entries(FP_L).map(([k, o]) => [k, o.n]), t: (r, p) => { const f = fpOf(r); return f ? p.includes(f.list) : null; }},
+  {k: "fpLoc", cat: "Playbooks", l: "First Pullback location is", type: "multi", p: ["9", "21"], need: HH, opts: () => Object.entries(FP_LOC).map(([k, n]) => [k, n]), t: (r, p) => { const f = fpOf(r); return f && f.x.loc ? p.includes(f.x.loc) : null; }}
+]) { CRIT.push(c); CRIT_BY[c.k] = c; }
+SC_ORDER.splice(SC_ORDER.indexOf("Playbooks 2 · 3") >= 0 ? SC_ORDER.indexOf("Playbooks 2 · 3") : SC_ORDER.length, 0, "Playbook 2 · First Pullback");
+for (const sc of [
+  {k: "fpR", t: "First Pullback · Ready (Playbook 2, paper)", d: "A strong leg (25%+ in 63 sessions, high 3–15 sessions ago), pulled back to within ±0.5 ADR of the daily 9 or 21 EMA on drying volume with tight ranges; every First Pullback check passes. Trigger: over the 09:30–10:00 ET candle's high.", need: ["hist"], f: r => { const f = fpOf(r); return !!f && f.list === "R"; }},
+  {k: "fpD", t: "First Pullback · On deck (one thing missing)", d: "Every First Pullback check but one of: Stage 2 (still Stage 1), drying volume, tight ranges, earnings.", need: ["hist"], f: r => { const f = fpOf(r); return !!f && f.list === "D"; }},
+  {k: "fpN", t: "First Pullback · Not yet (above both lines)", d: "A fresh leg and everything else in place, but more than 0.5 ADR above the daily 9 and 21 EMA — wait for the pullback.", need: ["hist"], f: r => { const f = fpOf(r); return !!f && f.list === "N"; }}
+]) { SCREENS.push(sc); SC_CAT[sc.k] = "Playbook 2 · First Pullback"; }
+
+/* ---------------- Today line, Watchlist card, TradingView lists ---------------- */
+function fpTodayLine(){
+  if (!S.snap || !pbHH()) return "";
+  const A = fpLists(true), tk = L => L.slice(0, 6).map(f => `<span class="tk" data-sym="${esc(f.r.sym)}">${esc(f.r.sym)}</span>`).join(" ");
+  return `<div class="small pbline fpline" style="margin-top:6px"><b>Playbook 2 · First Pullback (paper):</b> ${A.R.length} ready${A.R.length ? ` (${tk(A.R)})` : ""} · ${A.D.length} on deck${A.D.length ? ` (${tk(A.D)})` : ""} — <a href="#" data-pbgo="fp">open First Pullback</a></div>`;
+}
+function fpWatchHTML(){
+  const hd = `<div class="hd"><h2>Playbook 2 · First Pullback — Ready and On deck</h2><span class="sub">paper / watch only · never on the Entry Check lists or the Daily Plan · trigger over the 09:30–10:00 ET high</span></div>`;
+  if (!pbHH()) return hd + `<div class="bd"><div class="empty">Needs the stored price history.</div></div>`;
+  const L = fpLists(false), rows = [...L.R, ...L.D];
+  return hd + `<div class="bd">${rows.length ? `<div class="tscroll" style="max-height:340px"><table class="mini fpt"><thead><tr><th class="l">Ticker</th><th class="l">List</th><th class="l">Location</th><th>RS</th><th class="l">Group</th><th class="l">Next action</th></tr></thead><tbody>
+    ${rows.map(f => `<tr data-sym="${esc(f.r.sym)}"><td class="l sym">${esc(f.r.sym)}</td><td class="l">${fpPill(f)}</td><td class="l">${fpLocPill(f)}</td><td>${rsBadge(f.r.rs)}</td><td class="l small">${esc(f.r.group || "")}</td><td class="l small">${esc(fpNext(f))}</td></tr>`).join("")}</tbody></table></div>`
+    : `<div class="empty" style="padding:4px 0">Nothing on Ready or On deck${L.R.length + L.D.length < fpLists(true).R.length + fpLists(true).D.length ? " (filter bar on)" : ""}.</div>`}
+    <div class="small"><a href="#" data-pbgo="fp">Open Playbook 2 · First Pullback</a></div></div>`;
+}
+function fpWatchPaint(box, pbw){
+  let c = $("fpWatch"); if (!c) { (pbw || box.lastElementChild || box).insertAdjacentHTML(pbw ? "beforebegin" : "beforeend", `<div class="card g1" id="fpWatch"></div>`); c = $("fpWatch"); }
+  if (pbw && c.nextElementSibling !== pbw) pbw.before(c);
+  c.innerHTML = fpWatchHTML();
+}
+function fpTvlSecs(C, H){
+  const items = (k, n, def) => () => { if (!pbHH()) return null; const L = fpLists(true); return L[k].map(f => tvlE(f.r.sym, `First Pullback · ${n} · ${FP_LOC[f.x.loc] || ""}`, n)); };
+  return [{k: "fp", h: "FIRST PULLBACK", n: "First Pullback · stocks", perm: "Playbook 2 · paper / watch only", items: [
+      {k: "fpR", n: "Ready", def: 0, pre: 1, need: H, f: items("R", "Ready")},
+      {k: "fpD", n: "On deck", def: 0, pre: 1, need: H, f: items("D", "On deck")},
+      {k: "fpT", n: "First Pullback tracker (every name tracked)", def: 0, f: () => fpTrackRows("all").map(o => tvlE(o.s, `First Pullback tracker · ${FP_L[o.k].n} ${o.d}`))},
+      {k: "fpN", n: "Not yet (above both lines)", def: 0, need: H, f: items("N", "Not yet")}]},
+    {k: "fpe", h: "FIRST PULLBACK ETFS", n: "First Pullback · ETFs", etf: 1, perm: "", none: "The board runs First Pullback on stocks only — there's no ETF version to list.", items: []}];
+}
+
+/* ---------------- Research card: Shakeout Reclaim + Floor Bounce (off the switch, still computed) ---------------- */
+function pbResCfg(){
+  let o = null; try { o = store.get("adrb.pbRes", null); } catch (e) {}
+  if (!o || typeof o !== "object") { let old = 1; try { old = store.get("adrb.pb", 1); } catch (e) {} o = old === 2 || old === 3 || old === "2" || old === "3" ? {open: 1, k: +old === 2 ? "r1" : "ob"} : {open: 0, k: "r1"}; }
+  return {open: o.open ? 1 : 0, k: o.k === "ob" ? "ob" : "r1"};
+}
+// an old stored Shakeout Reclaim / Floor Bounce selection (adrb.pb = 2 / 3): once, its filter set is saved under its own number
+// in adrb.pbGF, Playbook 1's set (or its first-visit default) is loaded, the Research card opens on that playbook, and adrb.pb
+// goes back to 1 — never to "fp"
+(function pbResMigrate(){
+  let v = 1; try { v = store.get("adrb.pb", 1); } catch (e) { return; } if (v !== 2 && v !== 3) return;
+  try { const all = store.get("adrb.pbGF", {}) || {}; all[v] = structuredClone(GF);
+    GF = all[1] ? {...structuredClone(GF_DEF), ...structuredClone(all[1]), gates: {...GF_DEF.gates, ...(all[1].gates || {})}, crit: structuredClone(all[1].crit || {})} : pbDefaultGF(1);
+    store.set("adrb.pbGF", all); gfSave(); if (!store.get("adrb.pbRes", null)) store.set("adrb.pbRes", {open: 1, k: v === 2 ? "r1" : "ob"}); store.set("adrb.pb", 1);
+  } catch (e) { console.warn("playbook switch", e); }
+})();
+function pbResSet(p){ try { store.set("adrb.pbRes", {...pbResCfg(), ...p}); } catch (e) { console.warn("research card", e); } }
+function pbResOpen(k){ pbResSet({open: 1, k: k === "ob" ? "ob" : "r1"}); if (S.snap && S.ui && S.ui.tab === "plan") renderTab("plan"); }
+function pbResHTML(){
+  const c = pbResCfg(), seg = `<span class="seg" id="pbResSeg">${[["r1", "Shakeout Reclaim"], ["ob", "Floor Bounce"]].map(([k, l]) => `<button data-pbres="${k}" class="${c.open && c.k === k ? "on" : ""}">${l}</button>`).join("")}</span>`;
+  let sub = "off the playbook switch since 7 Nov · still computed — feed columns, MAP's O lines, screens and the ticker-panel tabs unchanged";
+  try { if (pbHH()) { const R = r1Rows() || [], O = obRun(); sub = `Shakeout Reclaim ${R.filter(o => o.x.state === 3).length} armed · Floor Bounce ${O ? O.rows.filter(o => obCandOK(o) && !o.etf).length : 0} at or near a floor · ` + sub; } } catch (e) {}
+  const hd = `<div class="hd"><h2>Research · Shakeout Reclaim and Floor Bounce</h2><span class="sub">${sub}</span><span class="spacer"></span>${seg}<button class="btn sm" data-pbresopen="${c.open ? 0 : 1}">${c.open ? "Close" : "Open"}</button></div>`;
+  if (!c.open) return hd;
+  let inner = ""; try { inner = c.k === "r1" ? r1CardHTML() : obCardHTML(); } catch (e) { console.warn("research card", e); inner = `<div class="bd"><div class="empty">Couldn't build this card: ${esc(e.message)}</div></div>`; }
+  inner = inner.replace("<h2>Playbook 2 · Shakeout Reclaim (R1)</h2>", "<h2>Shakeout Reclaim (R1) · research</h2>").replace("<h2>Playbook 3 · Floor Bounce</h2>", "<h2>Floor Bounce · research</h2>");   // headings only — the cards are unchanged
+  return hd + `<div class="bd"><div class="card g1 pbres-in" data-pb="${c.k === "r1" ? 2 : 3}">${inner}</div></div>`;
+}
+function pbResPaint(){
+  const tab = $("tab-plan"); if (!tab) return;
+  let box = $("pbResBox"); if (!box) { tab.insertAdjacentHTML("beforeend", `<div class="card g1" id="pbResBox"></div>`); box = $("pbResBox"); }
+  box.innerHTML = pbResHTML();
+}
+document.addEventListener("click", e => {
+  const t = e.target && e.target.closest ? e.target : null; if (!t) return;
+  const b = t.closest("[data-pbres], [data-pbresopen]");
+  if (b && b.closest("#pbResBox")) { e.preventDefault(); e.stopPropagation(); if (b.dataset.pbres) pbResSet({open: 1, k: b.dataset.pbres}); else pbResSet({open: +b.dataset.pbresopen}); try { pbResPaint(); } catch (er) { console.warn("research card", er); } return; }
+  const row = t.closest("#pbResBox tr[data-sym], #pbResBox .tk[data-sym], #fpTrackBox tr[data-sym], #fpWatch tr[data-sym], #fpWatch .tk[data-sym]");
+  if (row && !t.closest("button, a, summary, select, input, [data-wlpin]")) { e.stopPropagation(); const s = row.dataset.sym; if (S.rowBySym && S.rowBySym.has(s)) openDrawer(s); }
+}, true);
+
+/* ---------------- tracker ---------------- */
+const FPLOG = "adrb.fpLog";
+const FPT = {show: (() => { let v = "all"; try { v = store.get("adrb.fpTrackShow", "all"); } catch (e) {} return ["all", "R", "D"].includes(v) ? v : "all"; })(), js: ""};
+function fpLogGet(){ let o = null; try { o = store.get(FPLOG, null); } catch (e) {} if (!o || typeof o !== "object" || !o.d || typeof o.d !== "object") o = {v: 1, d: {}, tr: {}}; if (!o.tr || typeof o.tr !== "object") o.tr = {}; return o; }
+function fpLogSet(o){
+  const keep = Object.keys(o.d).sort().slice(-FPC.logDays), d = Object.fromEntries(keep.map(k => [k, o.d[k]])), from = keep[0] || "";
+  const tr = Object.fromEntries(Object.entries(o.tr).filter(([k]) => k.slice(0, 10) >= from));
+  const v = {v: 1, d, tr}, js = JSON.stringify(v); if (js === FPT.js) return; FPT.js = js;
+  try { store.set(FPLOG, v); } catch (e) { console.warn("first pullback tracker", e); }
+}
+// the date the lists were read on — null while they read an intraday bar (Live / board), which isn't a close yet
+function fpDataDate(){
+  if (!S.snap || !S.has || !S.has.hist || !HIST.nD) return null;
+  const ts = todaySource(); if (ts && ts.src !== "csv") return null;
+  return ts ? ts.date : HIST.dates[HIST.nD - 1];
+}
+function fpLogRecord(){
+  const d = fpDataDate(), log = fpLogGet(); let ch = false;
+  if (d) { const L = fpLists(true), day = log.d[d] || {};
+    for (const f of [...L.R, ...L.D]) { const s = f.r.sym; if (day[s]) { if (typeof fpPivFill === "function" && fpPivFill(day[s], f)) ch = true; continue; } const x = f.x;   // 7 Nov: pivot ★ fields appended (PIVOT CONFLUENCE ★ script)
+      day[s] = [f.list, x.loc, +x.close.toFixed(4), fin(x.adr) ? +x.adr.toFixed(3) : null, +x.leg.hi.toFixed(4), fin(x.pbLow) ? +x.pbLow.toFixed(4) : null, ...(typeof fpPivLog === "function" ? fpPivLog(f) : [])]; ch = true; }
+    if (ch) log.d[d] = day; }
+  // the first 30-min candle of the session after a listing, as first seen in Live mode
+  if (typeof LV !== "undefined" && LV.frame && LV.frame.phase === "rth") { const F = LV.frame;
+    for (const [dd, day] of Object.entries(log.d)) { if (nextSess(dd) !== F.date) continue;
+      for (const s of Object.keys(day)) { const q = fpLive(s); if (!q || !fin(q.hi)) continue; const k = F.date + "|" + s, o = log.tr[k];
+        if (!o) { log.tr[k] = [+q.hi.toFixed(4), +q.lo.toFixed(4), new Date(F.dataMs).toISOString(), q.trig ? new Date(q.trigAt).toISOString() : null]; ch = true; }
+        else if (!o[3] && q.trig && Math.abs(q.hi - o[0]) < 1e-3) { o[3] = new Date(q.trigAt).toISOString(); ch = true; } } } }
+  if (ch) fpLogSet(log);
+  return ch;
+}
+// one row per name per list, from its first listing (like the MAP lists tracker)
+function fpTrackRows(show){
+  const log = fpLogGet(), dates = Object.keys(log.d).sort(), by = S.rowBySym || new Map(), first = new Map();
+  for (const d of dates) for (const [s, e] of Object.entries(log.d[d] || {})) { if (!Array.isArray(e)) continue; const id = e[0] + ":" + s;
+    if (!first.has(id)) first.set(id, {k: e[0], s, d, last: d, loc: e[1], px: e[2], adr: e[3], legHi: e[4], pbLow: e[5], pv: e.length > 6 ? e.slice(6, 10) : null}); else first.get(id).last = d; }
+  const sw = show || FPT.show;
+  return [...first.values()].filter(o => FP_L[o.k] && (sw === "all" || o.k === sw)).map(o => {
+    const r = by.get(o.s), unit = fin(o.px) && fin(o.adr) ? o.px * o.adr / 100 : null, now = r && fin(r.last) ? r.last : null, rg = typeof mlRange === "function" ? mlRange(o.s, o.d) : null;
+    let f = null; try { f = r ? fpOf(r) : null; } catch (e) {}
+    const s1 = nextSess(o.d), fc = log.tr[s1 + "|" + o.s] || null; let b = null; try { b = HIST.nD ? dssBars(o.s) : null; } catch (e) {}
+    const res = fpResult(b, s1, fc);
+    return {...o, r, now, pct: fin(o.px) && now != null ? (now / o.px - 1) * 100 : null, u: unit && now != null ? (now - o.px) / unit : null,
+      best: unit && rg ? (rg.hi - o.px) / unit : null, worst: unit && rg ? (rg.lo - o.px) / unit : null, sess: rg ? rg.n : 0, f, s1, fc, res,
+      rA: fc && unit ? (fc[0] - fc[1]) / unit : null};
+  }).sort((a, b) => a.d < b.d ? 1 : a.d > b.d ? -1 : (a.k === b.k ? (a.s < b.s ? -1 : 1) : a.k === "R" ? -1 : 1));
+}
+const fpShown = rows => rows.filter(o => !o.r || gOK(o.r));
+function fpTally(rows){ const t = {sig: 0, trig: 0, win: 0, loss: 0, open: 0, nofill: 0, nodata: 0, pend: 0};
+  for (const o of rows) { const k = o.res.k; if (k === "nodata") t.nodata++; else if (k === "pending") t.pend++; else { t.sig++; if (k === "nofill") t.nofill++; else { t.trig++; t[k]++; } } } return t; }
+function fpTrackHTML(){
+  const all = fpTrackRows(FPT.show), rows = fpShown(all), log = fpLogGet(), nd = Object.keys(log.d).length, hid = all.length - rows.length, T = fpTally(rows);
+  const fu = v => v == null || !fin(v) ? "—" : (v > 0 ? "+" : "") + v.toFixed(2);
+  const wr = T.win + T.loss ? T.win / (T.win + T.loss) * 100 : null;
+  const hd = `<div class="hd"><h2>First Pullback tracker</h2><span class="sub">every name on Ready or On deck, from the day it was first listed · moves in ADR of the price then · ${nd} file date${nd === 1 ? "" : "s"} logged (last ${FPC.logDays} kept) · paper</span><span class="spacer"></span>
+    <span class="seg" id="fpTrShow">${[["all", "All"], ["R", "Ready"], ["D", "On deck"]].map(([k, l]) => `<button data-fpshow="${k}" class="${FPT.show === k ? "on" : ""}">${l}</button>`).join("")}</span>
+    <button class="btn sm" id="fpTrTv" data-tvc title="Copies the tracked names shown (the switch + the filter bar) as one line for TradingView's Add symbol box">Copy for TradingView</button><button class="btn sm" id="fpTrCsv" title="Download the tracker as a CSV (raw numbers, ISO dates; follows the switch and the filter bar)">Download CSV</button></div>`;
+  if (!nd) return hd + `<div class="bd"><div class="empty" style="padding:4px 0">Nothing logged yet. Each file date's Ready and On deck names are logged by themselves once the price history is loaded and the lists read a completed daily close (not during the Live session).</div></div>`;
+  const resC = k => k === "win" ? "pos" : k === "loss" ? "neg" : "dim";
+  return hd + `<div class="bd">
+    <div class="small" style="margin-bottom:6px"><b>Paper tally</b> (rows shown): ${T.sig} signal${T.sig === 1 ? "" : "s"} with first-candle data · ${T.trig} triggered · <b class="pos">${T.win} win${T.win === 1 ? "" : "s"}</b> · <b class="neg">${T.loss} loss${T.loss === 1 ? "" : "es"}</b> · ${T.open} open · ${T.nofill} not triggered${T.nodata ? ` · ${T.nodata} with no 30-min data` : ""}${T.pend ? ` · ${T.pend} pending` : ""} · win rate ${wr == null ? "—" : `<b class="${wr >= 40 ? "pos" : "neg"}">${wr.toFixed(0)}%</b>`} <span class="dim">(win = +1R before the stop; kill rule: after 30 paper signals, drop it under a 40% win rate or if it isn't +0.15R a trade better than Leader Pullback)</span></div>${typeof fpPivTally === "function" ? fpPivTally(rows) : ""}
+    <div class="tscroll" style="max-height:440px"><table class="mini fptr"><thead><tr><th class="l">First seen</th><th class="l">List</th><th class="l">Ticker</th><th class="l">Location</th><th>Then</th><th>ADR</th><th>Leg high</th><th>PB low</th><th>Now</th><th>Move</th><th>Move ADR</th><th>Best</th><th>Worst</th><th>Sessions</th><th class="l">List now</th><th class="l">First 30-min candle (${"next session"})</th><th class="l">Result</th></tr></thead><tbody>
+    ${rows.map(o => `<tr ${o.r ? `data-sym="${esc(o.s)}"` : ""}><td class="l">${esc(o.d)}${o.last !== o.d ? `<div class="small dim">to ${esc(o.last)}</div>` : ""}</td><td class="l"><span class="pill ${FP_L[o.k].c}">${FP_L[o.k].n}</span></td><td class="l sym">${esc(o.s)}${typeof fpPivTrTag === "function" ? fpPivTrTag(o) : ""}</td>
+      <td class="l small">${esc(FP_LOC[o.loc] || "—")}</td><td>${p2(o.px)}</td><td>${fin(o.adr) ? o.adr.toFixed(1) + "%" : "—"}</td><td>${p2(o.legHi)}</td><td>${p2(o.pbLow)}</td><td>${o.now == null ? "—" : p2(o.now)}</td>
+      <td class="${o.pct == null ? "" : o.pct >= 0 ? "pos" : "neg"}">${o.pct == null ? "—" : sg(o.pct, 1) + "%"}</td><td class="${o.u == null ? "" : o.u >= 0 ? "pos" : "neg"}"><b>${fu(o.u)}</b></td><td>${fu(o.best)}</td><td>${fu(o.worst)}</td><td>${o.sess || "—"}</td>
+      <td class="l">${o.f ? fpPill(o.f) : `<span class="dim small">${o.r ? "—" : "not in the file"}</span>`}</td>
+      <td class="l small">${esc(o.s1)}: ${o.fc ? `${p2(o.fc[0])} / ${p2(o.fc[1])}${fin(o.rA) ? ` · 1R ${o.rA.toFixed(2)} ADR` : ""}${o.fc[3] ? ` · triggered ${esc(fpHM(Date.parse(o.fc[3])))} ET` : ""}` : `<span class="dim">${o.res.k === "pending" ? "not traded yet" : "no 30-min data (Live mode wasn't on)"}</span>`}</td>
+      <td class="l ${resC(o.res.k)}"><b>${esc(FP_RES[o.res.k])}</b>${o.res.xt ? `<div class="small dim">${esc(o.res.xt)}</div>` : ""}</td></tr>`).join("")}</tbody></table></div>
+    <div class="small" style="margin-top:6px">${hid ? `${hid} row${hid === 1 ? "" : "s"} hidden by the filter bar. ` : ""}Move, best and worst are in ADR of the price when first listed; best / worst use the stored daily highs and lows after that date. The first 30-min candle (high / low) is stored the first time the board sees it in Live mode on the session after the listing; the result is read from the daily bars after: triggered = that day's high over the candle high; win = +1R (candle high + its range) before the stop (candle low); a fill day that also trades under the candle low counts as a loss; nothing within 10 sessions = open.</div></div>`;
+}
+function fpTrackPaint(){
+  const tab = $("tab-plan"); if (!tab) return; const k = typeof pbCur === "function" ? pbCur() : 1;
+  let box = $("fpTrackBox"); if (!box) { const pb = $("pbBox"); if (pb) pb.insertAdjacentHTML("afterend", `<div class="card g1" id="fpTrackBox"></div>`); else tab.insertAdjacentHTML("beforeend", `<div class="card g1" id="fpTrackBox"></div>`); box = $("fpTrackBox"); }
+  const pb = $("pbBox"); if (pb && box.previousElementSibling !== pb) pb.after(box);
+  box.classList.toggle("hidden", k !== "fp");
+  box.innerHTML = k === "fp" ? fpTrackHTML() : "";
+}
+const fpCsvQ = v => { const x = v == null ? "" : String(v); return /[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x; };
+const FP_CSV_H = ["first_seen", "last_seen", "list_then", "ticker", "location_then", "price_then", "adr_pct_then", "leg_high_then", "pullback_low_then", "price_now", "now_from", "move_pct", "move_adr", "best_since_adr", "worst_since_adr", "sessions",
+  "fp_list_now", "fp_location_now", "trade_session", "first_candle_high", "first_candle_low", "first_candle_seen_at", "triggered_at", "one_r_adr", "triggered", "result", "result_on", "in_current_file"];
+function fpTrackCsvText(rows){
+  const n4 = v => v == null || !fin(v) ? "" : +v.toFixed(4);
+  const src = S.snap && S.snap.live && S.snap.live.dataMs ? `Live (Massive, 15 min delayed) ${new Date(S.snap.live.dataMs).toISOString()}` : `File ${S.snap ? S.snap.asOf || "" : ""}`;
+  const L = [FP_CSV_H.join(",")];
+  for (const o of rows) L.push([o.d, o.last, FP_L[o.k].n, o.s, FP_LOCF[o.loc] || "", n4(o.px), n4(o.adr), n4(o.legHi), n4(o.pbLow), n4(o.now), o.now == null ? "" : src, n4(o.pct), n4(o.u), n4(o.best), n4(o.worst), o.sess,
+    o.f ? FP_L[o.f.list].n : "", o.f && o.f.x.loc ? FP_LOCF[o.f.x.loc] : "", o.s1, o.fc ? n4(o.fc[0]) : "", o.fc ? n4(o.fc[1]) : "", o.fc ? o.fc[2] || "" : "", o.fc ? o.fc[3] || "" : "", n4(o.rA),
+    o.res.trig ? "yes" : o.res.k === "nofill" ? "no" : "", FP_RES[o.res.k], o.res.xt || "", o.r ? "yes" : "no", ...(typeof fpPivCsvCells === "function" ? fpPivCsvCells(o) : [])].map(fpCsvQ).join(","));
+  return L.join("\n");
+}
+function fpTrackCsv(){
+  if (!S.snap) { toast("Load the files first"); return; }
+  const rows = fpShown(fpTrackRows(FPT.show)); if (!rows.length) { toast("Nothing tracked yet"); return; }
+  download(`deep-space-first-pullback-tracker-${fmtDate(new Date())}.csv`, fpTrackCsvText(rows), "text/csv");
+}
+document.addEventListener("click", e => {
+  const t = e.target && e.target.closest ? e.target : null; if (!t) return;
+  if (t.closest("#fpTv")) { e.preventDefault(); e.stopPropagation(); const L = fpLists(false); tvCopy([...L.R, ...L.D].map(f => f.r.sym), "First Pullback ready + on deck"); return; }
+  if (t.closest("#fpTrTv")) { e.preventDefault(); e.stopPropagation(); tvCopy(fpShown(fpTrackRows(FPT.show)).map(o => o.s), "First Pullback tracker"); return; }
+  if (t.closest("#fpTrCsv")) { e.preventDefault(); e.stopPropagation(); fpTrackCsv(); return; }
+  const b = t.closest("[data-fpshow]"); if (b && b.closest("#fpTrackBox")) { e.preventDefault(); e.stopPropagation(); FPT.show = b.dataset.fpshow; try { store.set("adrb.fpTrackShow", FPT.show); } catch (er) {} fpTrackPaint(); }
+}, true);
+// log after every page draw (writes only on change), then paint the Setups boxes
+hookOn("tab", "firstPullback", t => {
+  if (!S.snap) return;
+  try { if (S.has && S.has.hist) fpLogRecord(); } catch (e) { console.warn("first pullback tracker", e); }
+  if (t !== "plan") return;
+  try { fpTrackPaint(); } catch (e) { console.warn("first pullback tracker", e); }
+  try { pbResPaint(); } catch (e) { console.warn("research card", e); }
+});
+
+/* ---------------- Deep Space feed: seven columns at the very end ---------------- */
+const FP_FEED_H = ["FP List", "FP Loc", "FP First Fail", "FP Leg %", "FP Depth %", "FP Vol Ratio", "FP Range Ratio"];
+FEED_EXT.push({h: FP_FEED_H, cells: o => { const r = o && o.r; if (!r || r.etf) return null; const f = fpOf(r); if (!f) return null; const x = f.x, n = (v, d) => fin(v) ? +v.toFixed(d) : "";
+  return [FP_L[f.list].n, x.loc ? FP_LOCF[x.loc] : "", f.ffTxt, n(x.leg.pct, 2), n(x.depth, 2), n(x.volRatio, 3), n(x.rngRatio, 3)]; }});
+
+/* ---------------- self-check: a separate short recompute of the lists ---------------- */
+function fpSelf(){
+  const out = []; if (!S.snap || !S.has || !S.has.hist || !HIST.nD) return out;
+  const A = fpLists(true), pick = [...A.R.slice(0, 40), ...A.D.slice(0, 40), ...A.N.slice(0, 20), ...A.O.filter(f => f.x.legOk).slice(0, 20)];
+  for (const f of pick) {
+    const b = dssBars(f.r.sym); if (!b || b.n < 63) continue;
+    const c = [...b.c], h = [...b.h], l = [...b.l], v = [...b.v], n = c.length, t = n - 1;
+    if (![c, h, l, v].every(a => a.every(isFinite))) continue;
+    const ema = p => { const al = 2 / (p + 1); let e = NaN, s = 0; for (let k = 0; k < n; k++) { if (k < p) { s += c[k]; if (k === p - 1) e = s / p; } else e = al * c[k] + (1 - al) * e; } return e; };
+    const mean = (a, i0, i1) => { let s = 0; for (let k = i0; k <= i1; k++) s += a[k]; return s / (i1 - i0 + 1); };
+    let D = 0; for (let k = t - 19; k <= t; k++) D += (h[k] - l[k]) / c[k]; D = D / 20 * c[t];
+    const e9 = ema(9), e21 = ema(21), sma50 = mean(c, t - 49, t), sma50a = mean(c, t - 59, t - 10);
+    let hiK = t - 62; for (let k = t - 62; k <= t; k++) if (c[k] >= c[hiK]) hiK = k;
+    let loV = Infinity; for (let k = t - 62; k < hiK; k++) loV = Math.min(loV, c[k]);
+    const leg = hiK > t - 62 ? (c[hiK] / loV - 1) * 100 : NaN, ago = t - hiK;
+    const d9 = (c[t] - e9) / D, d21 = (c[t] - e21) / D;
+    const loc = d21 < -0.5 ? "UNDER" : Math.abs(d9) <= 0.5 ? "9" : Math.abs(d21) <= 0.5 ? "21" : d9 > 0.5 && d21 > 0.5 ? "ABOVE" : "BETWEEN";
+    const vr = ago >= 1 ? mean(v, hiK + 1, t) / mean(v, t - 49, t) : NaN, rr = mean(h.map((x, k) => x - l[k]), t - 2, t) / D;
+    let brk = 0; for (let k = Math.max(1, t - 49); k <= t; k++) brk = Math.max(brk, Math.abs(c[k] / c[k - 1] - 1) * 100);
+    // weekly: the last completed week's close vs the 10 completed weekly closes ending with it
+    const wkOf = d => { const w = new Date(d + "T12:00:00Z").getUTCDay(), x = new Date(Date.parse(d + "T12:00:00Z") - ((w + 6) % 7) * 864e5); return x.toISOString().slice(0, 10); };
+    const wks = []; let cur = wkOf(b.dates[t]); for (let k = 0; k < t; k++) { const w = wkOf(b.dates[k]); if (w >= cur) break; if (!wks.length || wks[wks.length - 1].w !== w) wks.push({w, c: c[k]}); else wks[wks.length - 1].c = c[k]; }
+    const wOk = wks.length >= 10 && wks[wks.length - 1].c > wks.slice(-10).reduce((s, q) => s + q.c, 0) / 10;
+    const ok = {1: f.s.ck[1].ok === true, 2: n >= 100 && brk <= 40, 3: c[t] > sma50 && sma50 >= sma50a * 0.995 && wOk, 5: leg >= 25 && ago >= 3 && ago <= 15, 6: hiK > t - 62 && c[t] >= loV + 0.5 * (c[hiK] - loV),
+      8: vr < 1, 9: rr <= 0.75, 10: f.r.rs != null && f.r.rs >= 70, 11: !!f.r.gState && f.r.gState !== "—" && f.r.gState !== "Lagging", 12: f.s.er.n != null && f.s.er.n >= S61.erMin};
+    const st = f.stage ? WS_MAIN[f.stage.lab] ?? null : null, hard = [1, 2, 3, 5, 6, 10, 11].filter(k => !ok[k]);
+    if (st === "3" || st === "4") hard.push(4); if (!["9", "21", "ABOVE"].includes(loc)) hard.push(7);
+    const soft = [st === "2" ? null : 4, ok[8] ? null : 8, ok[9] ? null : 9, ok[12] ? null : 12].filter(k => k != null && !hard.includes(k));
+    const list = hard.length ? "O" : loc === "ABOVE" ? (soft.length ? "O" : "N") : soft.length === 0 ? "R" : soft.length === 1 ? "D" : "O";
+    out.push({sym: f.r.sym, what: "First Pullback list", ok: list === f.list, board: FP_L[f.list].n, mine: FP_L[list].n});
+    out.push({sym: f.r.sym, what: "First Pullback location", ok: loc === f.x.loc, board: f.x.loc || "—", mine: loc});
+    if (isFinite(leg)) out.push({sym: f.r.sym, what: "First Pullback leg %", ok: Math.abs(leg - f.x.leg.pct) <= 1e-6 * Math.max(1, Math.abs(leg)), board: fin(f.x.leg.pct) ? f.x.leg.pct.toFixed(3) : "—", mine: leg.toFixed(3)});
+  }
+  return out;
+}
+if (typeof SC_X !== "undefined") SC_X.push(fpSelf);
+document.head.insertAdjacentHTML("beforeend", `<style>
+.fpt td{vertical-align:top} .fptr td{vertical-align:top} #fpTrackBox tr[data-sym],#fpWatch tr[data-sym],#pbResBox tr[data-sym],#pbResBox .tk,#fpWatch .tk{cursor:pointer}
+#pbResBox table td{vertical-align:top} #pbResBox .pbres-in{margin:0;box-shadow:none}
+.fpp .pbh{display:flex;align-items:center;gap:6px;flex-wrap:wrap} .fpp .fplive{padding:4px 6px;border-left:3px solid var(--accent);background:var(--chip)}
+.fpcls{margin-top:10px;padding-top:8px;border-top:1px solid var(--line)}
+</style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   SHORT · FORMER LEADER, LOWER HIGH (7 Nov 2026) — TRADING LOGIC for a NEW short route, PAPER / WATCH ONLY. Never sized.
+   Never changes any long list, rank, size, the Entry Check, the Daily Plan, the Board log records, the Decision-log CSV, the
+   MAP import, the short watch / short gate, the failed-rally card or any existing Deep Space / ETF feed value (the test
+   proves the feeds and lists byte-identical with this script taken out).
+   Rules: Notion "🩳 Short · Former leader, lower high — v1.0 (paper, from 7 Nov 2026)" (Reference & Doctrine; page last
+   edited 7 Nov 2026) https://app.notion.com/p/411ff58fe7ad81f5b2b8eb51df36d0cd — "Status: PAPER / WATCH ONLY. Approved by
+   Eugene in chat 7 Nov 2026 ("short setup yes"; "yes, put them into Notion and build")". Same text: docs/specs-2026-11-07-
+   first-pullback-short.md section B. Eugene's asks (chat, 7 Nov): "Right now there are far too many tickers appearing. I dont
+   really know how to really get that list down to an executable one. It's like 20-50 tickers for every one of the setups. I
+   dont really want to take those that are already extended to the downside." · "short setup yes" · every tracker-style card
+   gets "Copy for TradingView" and "Download CSV" ("ease of tracking when i bring to claude for review and ease of bringing
+   to tradingview to review charts").
+   Where Notion is silent the board follows its TradingView twin indicators/structure/former-leader-short/former-leader-short.pine
+   (v1.0, same day) exactly.
+   CHECKS (flsCalc = pure maths on dssBars — the stored Massive daily bars + today's file / live bar, split-adjusted):
+     1 Market gate     MAP's call (mapRegime) = Defensive AND SPY close < SPY 50 SMA AND SPY daily 9 EMA < 21 EMA (SPY's own
+                       dssBars, last bar; SMA-seeded EMAs as PZ.ema). No SPY bars → "can't check SPY", gate stays closed.
+                       Closed = the whole list closed ("Short side closed today — <reason>").
+     2 Former leader   either (a) on MAP's lists (A / B / On deck-Stalk) in the MAP lists tracker log (adrb.mapLog, written by
+                       mlogRecord) on a file date within the last 63 sessions (today and the 62 before, NYSE calendar), or
+                       (b) the Pine proxy: the highest HIGH of the last 63 bars (the latest bar on a tie) ≥ 30% above the
+                       lowest LOW of the 63 bars before that high (needs 63 bars before it, else (b) fails).
+     3 Broken          close < 50 SMA AND the 50 SMA below its value 5 sessions ago (Pine: "falling" = under its value 5 ago).
+     4 Weak group      the name's group is one of the 3 weakest by the board's composite group RS — the same ranking the
+                       Shorts page "Weakest groups" card reads (S.groups with a group RS, lowest first).
+     5 Bounce          the failed-rally research stage (frCalc, FAILED RALLY RESEARCH STATES, code map 63) is "Testing
+                       resistance" or "Rejection confirmed" (resistance = falling 21 EMA, 50 SMA or broken support).
+                       frCalc is called on the bars directly: damaged by PRICE only (close < 50 SMA), as the Pine twin — the
+                       failed-rally card's extra "on the short watch in the last 20 sessions" memory gate is not used here.
+     6 Not extended    the failed-rally stage is not "Extended — too late" (close > 2 ADR under the test-day low; the stage is
+                       checked before rejection / testing, so a testing / rejected name is never extended). Out: "too late —
+                       don't chase". An extended name fails 5 and 6 (first fail 5, as the Pine's FLS First Fail).
+     7 Stop            stop above the bounce high (frCalc's failed-rally high = highest high from the test session to today);
+                       (bounce high − close) ÷ ADR ≤ 1.5, bounce high above the close.
+     8 Room            (close − first support) ÷ (bounce high − close) ≥ 2R; first support = frCalc's (nearest swing low under
+                       the close — lower than the 3 sessions each side, last 60 sessions — else the 20-session low).
+     9 Earnings        Playbook 1's earnings read (s61Earn on the CSV's upcoming date, the BMO marks, the last bar's date):
+                       6+ sessions = pass; inside the next 5 sessions or unknown = Out.
+    10 Liquidity       tradeable liquidity (liqOf, check 1b) not OUT; "not checked" (no trade counts stored) passes and says
+                       so. Shortable at IBKR: shown as "check at IBKR" — the board can't see the borrow.
+   ADR = frCalc's: 20-day mean(high ÷ low − 1) × the bar's close (the failed-rally ADR the Pine twin uses too) — NOT the
+   Playbook 1 ADR (mean (high − low) ÷ close) used by First Pullback / Leader Pullback.
+   LIST: every check 2–10 passes → passing; ranked by board RS ascending (weakest first), ticker on a tie, missing RS last.
+   Gate open: the first 3 are the list ("No short today" when none), the rest = "Also passing (beyond 3)". Near miss = exactly
+   one of checks 2–10 fails. Gate closed: nothing is listed; a fold shows what would have passed (learning only, not
+   tradeable). Trigger (Notion §3 / research route A) on TradingView only: a 30-min close below the 30-min 21 EMA after a
+   close at or above it, no earlier than 10:00 ET; stop above the bounce high. The long filter bar never applies here (a
+   long RS / dollar-volume preset would hide every weak name); the list is the whole file.
+   ON SCREEN: card #flsBox at the top of the Shorts page (hook "tab", inserted once after the page's lede, above the short
+   gate and the existing short research cards) with "Copy for TradingView" (data-tvc, the board's card copy: the names the
+   card shows — the up-to-3 plus any fold opened; when the side is closed the button sits inside the would-have-passed fold)
+   and "Download CSV" (every stock evaluated, raw numbers, first failing check);
+   TradingView lists item "Short · Former leader" (shFL, in the SHORT RESEARCH section, off DS Daily like the other short
+   research items — guarded in-place spread in TVL_SECS); a ticker-panel line in the History · short score pane (hook "panel").
+   NOT in the feeds: no Deep Space / ETF feed columns (MAP's Defensive hedge line uses its own inputs; nothing asked for MAP).
+   SELF-CHECK: flsSelf in SC_X — its own SPY SMA / EMA loops for the gate, its own former-leader / 50 SMA / weak-group /
+   bounce-high / swing-support / stop / room loops for every passing and near-miss name and a sample of Out names, and the
+   top 3 re-sorted. Storage: none new (reads adrb.mapLog and adrb.mapRegime only). No function overrides, no page watcher.
+   Test: tools/board-former-leader-short-test.js.
+   ===================================================================== */
+const FLS = {mapN: 63, leadN: 63, leadPct: 30, s50N: 50, s50Slope: 5, weakN: 3, stopMax: 1.5, roomMin: 2.0, top: 3};
+const FLS_CK = {1: "Market gate", 2: "Former leader", 3: "Broken", 4: "Weak group", 5: "Bounce into resistance", 6: "Not extended", 7: "Stop", 8: "Room", 9: "Earnings", 10: "Liquidity"};
+const FLS_NEXT = "On TradingView: 30-min close below the 30-min 21 EMA after a close at or above it, from 10:00 ET; stop above the bounce high";
+const FLSX = {key: null, run: null};
+
+/* ---------------- pure maths ---------------- */
+// the market gate: MAP's call + SPY's own daily bars (b = dssBars("SPY") or null)
+function flsGateCalc(mapV, b){
+  const why = []; let spy = null;
+  if (mapV !== "Defensive") why.push(mapV ? `MAP says ${mapV} (needs Defensive)` : "MAP's call isn't set (needs Defensive)");
+  if (!b || !(b.n >= 50)) why.push("can't check SPY (no stored SPY bars)");
+  else {
+    const t = b.n - 1, s50 = PZ.sma(b.c, 50)[t], e9 = PZ.ema(b.c, 9)[t], e21 = PZ.ema(b.c, 21)[t], c = b.c[t];
+    spy = {c, s50, e9, e21, to: b.dates[t]};
+    if (!(fin(c) && fin(s50))) why.push("can't check SPY (no 50 SMA)");
+    else if (!(c < s50)) why.push(`SPY ${p2(c)} is not below its 50 SMA ${p2(s50)}`);
+    if (!(fin(e9) && fin(e21))) why.push("can't check SPY (no 9 / 21 EMA)");
+    else if (!(e9 < e21)) why.push(`SPY's daily 9 EMA ${p2(e9)} is not under its 21 EMA ${p2(e21)}`);
+  }
+  return {open: !why.length, why, spy, mapV: mapV || ""};
+}
+// 2 · the Pine proxy: highest high of the last 63 bars (latest on a tie) vs the lowest low of the 63 bars before it
+function flsLead(b){
+  const {h, l} = b, t = b.n - 1, N = FLS.leadN, w0 = t - N + 1;
+  if (w0 < 0) return {pct: NaN, hi: NaN, lo: NaN, hiDate: null, loDate: null};
+  let iH = w0; for (let k = w0 + 1; k <= t; k++) if (h[k] >= h[iH]) iH = k;
+  if (iH - N < 0) return {pct: NaN, hi: h[iH], lo: NaN, hiDate: b.dates[iH], loDate: null};
+  let iL = iH - N; for (let k = iH - N + 1; k < iH; k++) if (l[k] < l[iL]) iL = k;
+  return {pct: l[iL] > 0 ? (h[iH] / l[iL] - 1) * 100 : NaN, hi: h[iH], lo: l[iL], hiDate: b.dates[iH], loDate: b.dates[iL]};
+}
+// checks 2–10 for one name. f = {mapSeen: date | null, weak: rank 1–3 | 0, gRank, gN, group, er: {n}, liq: state | null}
+function flsCalc(b, f){
+  if (!b || !(b.n >= 2)) return null;
+  const C = FLS, t = b.n - 1, close = b.c[t], s50A = PZ.sma(b.c, C.s50N), s50 = s50A[t], s50b = t - C.s50Slope >= 0 ? s50A[t - C.s50Slope] : NaN;
+  const lead = flsLead(b), fr = frCalc(b), ck = {};
+  let testLow = NaN, below = NaN;
+  if (fr && fr.testDate) { const j = b.dates.lastIndexOf(fr.testDate); if (j >= 0) { testLow = b.l[j]; below = fin(fr.adrD) && fr.adrD > 0 ? (testLow - close) / fr.adrD : NaN; } }
+  const add = (n, ok, v) => { ck[n] = {n, l: FLS_CK[n], ok: !!ok, v}; };
+  const leadOk = fin(lead.pct) && lead.pct >= C.leadPct;
+  add(2, leadOk || !!f.mapSeen, `${fin(lead.pct) ? `63-session high ${p2(lead.hi)} (${lead.hiDate}) is ${lead.pct.toFixed(1)}% over the prior 63-session low ${p2(lead.lo)}` : "not enough bars for the 63 + 63-session run"}${leadOk ? " ✓" : ""} · ${f.mapSeen ? `on MAP's lists ${f.mapSeen} ✓` : "not on MAP's lists in the last 63 sessions"}`);
+  add(3, fin(s50) && close < s50 && fin(s50b) && s50 < s50b, `close ${p2(close)} vs 50 SMA ${p2(s50)} · 50 SMA vs 5 sessions ago ${p2(s50b)}`);
+  add(4, f.weak > 0, f.gRank ? `${f.group} is #${f.gRank} weakest of ${f.gN} groups` : `${f.group || "no group"} has no group RS`);
+  const st = fr ? fr.st : null;
+  add(5, st === "test" || st === "rej", fr ? `${FR_ST[st].n}${fr.kind ? ` · ${fr.kind} ${p2(fr.lv)}` : ""}${fr.testDate ? ` · test ${fr.testDate}` : ""}` : "not under its 50 SMA (no failed-rally stage)");
+  add(6, st !== "ext", st === "ext" ? `too late — don't chase: ${fin(below) ? (-below).toFixed(2) : "?"} ADR under the test-day low ${p2(testLow)}` : fin(below) ? `${below >= 0 ? below.toFixed(2) + " ADR above" : (-below).toFixed(2) + " ADR under"} the test-day low ${p2(testLow)}` : "no test yet");
+  const stopOk = !!fr && fin(fr.frHi) && fr.frHi > close && fin(fr.stopA) && fr.stopA <= C.stopMax;
+  add(7, stopOk, fr && fin(fr.frHi) ? `stop above the bounce high ${p2(fr.frHi)} = ${fin(fr.stopA) ? fr.stopA.toFixed(2) : "—"} ADR` : "no bounce high");
+  add(8, !!fr && fin(fr.room) && fr.room >= C.roomMin, fr && fin(fr.room) ? `${fr.room.toFixed(2)}R to the first support ${p2(fr.support)}` : "no room (no bounce high above the close)");
+  const er = f.er || {n: null};
+  add(9, er.n != null && er.n >= S61.erMin, er.n == null ? "earnings date unknown" : `earnings in ${er.n} session${er.n === 1 ? "" : "s"}`);
+  add(10, f.liq !== "OUT", f.liq ? `tradeable liquidity ${f.liq}` : "tradeable liquidity not checked (no trade counts stored)");
+  const fails = [2, 3, 4, 5, 6, 7, 8, 9, 10].filter(n => !ck[n].ok);
+  return {ck, fails, ff: fails.length ? fails[0] : null, pass: !fails.length, fr, lead, leadOk, s50, s50b, close, testLow, below, to: b.dates[t], n: b.n, mapSeen: f.mapSeen || null, gRank: f.gRank || 0, erN: er.n, liq: f.liq || null};
+}
+const flsFfTxt = x => { if (!x) return "no stored bars"; if (x.ff == null) return ""; const k = x.ff;
+  if (k === 5 && x.fr && x.fr.st === "ext") return "5 Extended — too late, don't chase";
+  return `${k} ${FLS_CK[k]}${k === 5 ? " · " + (x.fr ? FR_ST[x.fr.st].n : "not under the 50 SMA") : k === 7 && x.fr && fin(x.fr.stopA) ? ` ${x.fr.stopA.toFixed(2)} ADR` : k === 8 && x.fr && fin(x.fr.room) ? ` ${x.fr.room.toFixed(2)}R` : ""}`; };
+
+/* ---------------- the board's inputs ---------------- */
+// the 3 weakest groups — the Weakest groups card's ranking (composite group RS, lowest first)
+function flsWeak(){ const G = (S.groups || []).filter(g => g.grs != null).sort((a, b) => a.grs - b.grs); return {list: G.slice(0, FLS.weakN), n: G.length, rank: new Map(G.map((g, i) => [g.name, i + 1]))}; }
+// names on MAP's lists (tracker log) on a file date within the last 63 sessions up to `to` → Map sym → latest such date
+function flsMapSeen(to){
+  const out = new Map(); let log = {}; try { log = store.get(MLOG, {}) || {}; } catch (e) { log = {}; }
+  for (const d of Object.keys(log).sort()) { if (!(d <= to) || frSessBetween(d, to) > FLS.mapN - 1) continue; const e = log[d] || {};
+    for (const k of ["A", "B", "S"]) for (const x of e[k] || []) if (x && x[0]) out.set(x[0], d); }
+  return out;
+}
+function flsKey(){ return [typeof pbKey === "function" ? pbKey() : dssKey(), JSON.stringify(mapRegime()), store._g, flsWeak().list.map(g => g.name).join(","), typeof liqKey === "function" ? liqKey() : "", S.stocks.length].join("|"); }
+const flsByRS = (a, b) => ((a.r.rs ?? 1e9) - (b.r.rs ?? 1e9)) || (a.r.sym < b.r.sym ? -1 : a.r.sym > b.r.sym ? 1 : 0);
+function flsRun(){
+  if (!S.snap || !pbHH()) return null;
+  const key = flsKey(); if (FLSX.key === key && FLSX.run) return FLSX.run;
+  const W = flsWeak(), weakSet = new Map(W.list.map((g, i) => [g.name, i + 1])), seenBy = new Map(), bmo = s61Bmo();
+  let gate; try { gate = flsGateCalc(mapRegime().v || "", HIST.idx && HIST.idx.has("SPY") ? dssBars("SPY") : null); } catch (e) { gate = flsGateCalc(mapRegime().v || "", null); }
+  const rows = [];
+  for (const r of S.stocks) {
+    let x = null;
+    try { const b = dssBars(r.sym);
+      if (b && b.n >= 2) { const to = b.dates[b.n - 1]; if (!seenBy.has(to)) seenBy.set(to, flsMapSeen(to));
+        const q = typeof liqOf === "function" ? liqOf(r.sym) : null, er = (() => { try { return s61Earn(r.eru, to, bmo.has(r.sym)); } catch (e) { return {n: null}; } })();
+        x = flsCalc(b, {mapSeen: seenBy.get(to).get(r.sym) || null, weak: weakSet.get(r.group) || 0, gRank: W.rank.get(r.group) || 0, gN: W.n, group: r.group, er, liq: q && q.state ? q.state : null}); } } catch (e) { console.warn("former leader short", r.sym, e); x = null; }
+    rows.push({r, x});
+  }
+  const pass = rows.filter(o => o.x && o.x.pass).sort(flsByRS), near = rows.filter(o => o.x && o.x.fails.length === 1).sort(flsByRS);
+  const top = gate.open ? pass.slice(0, FLS.top) : [], also = gate.open ? pass.slice(FLS.top) : [];
+  const verdict = new Map();
+  rows.forEach(o => verdict.set(o.r.sym, !o.x ? "Out" : o.x.pass ? (gate.open ? (top.includes(o) ? `Top ${FLS.top} #${top.indexOf(o) + 1}` : "Also passing") : "Would pass — side closed") : o.x.fails.length === 1 ? "Near miss" : "Out"));
+  const run = {gate, rows, pass, top, also, near, verdict, weak: W, by: new Map(rows.map(o => [o.r.sym, o]))};
+  FLSX.key = key; FLSX.run = run; return run;
+}
+const flsOf = sym => { const R = flsRun(); return R ? R.by.get(sym) || null : null; };
+
+/* ---------------- the card (top of the Shorts page) ---------------- */
+function flsRowsHTML(L, next){
+  return `<div class="tscroll" style="max-height:${next ? "none" : "360px"}"><table class="mini flst"><thead><tr><th>#</th><th class="l">Ticker</th><th>RS</th><th class="l">Group</th><th class="l">State</th><th class="l">Resistance</th><th title="Highest high since the test — the stop goes above it">Bounce high (stop)</th><th title="(bounce high − close) ÷ ADR (the failed-rally ADR)">Stop, ADR</th><th title="Nearest swing low under the close, else the 20-session low">First support</th><th title="(close − support) ÷ (bounce high − close)">Room, R</th><th class="l">Earnings</th><th class="l">Shortable</th></tr></thead><tbody>
+    ${L.map((o, i) => { const x = o.x, fr = x.fr; return `<tr data-sym="${esc(o.r.sym)}"><td>${i + 1}</td><td class="l sym">${esc(o.r.sym)}</td><td>${rsBadge(o.r.rs)}</td><td class="l small">${esc(o.r.group || "—")} <span class="dim">#${x.gRank || "—"}</span></td>
+      <td class="l"><span class="pill ${FR_ST[fr.st].c}">${fr.st === "test" ? "Testing" : "Rejected"}</span>${fr.testDate ? ` <span class="small dim">test ${esc(fr.testDate)}</span>` : ""}</td><td class="l small">${esc(fr.kind || "—")} <b>${p2(fr.lv)}</b></td><td><b>${p2(fr.frHi)}</b></td><td>${fr.stopA.toFixed(2)}</td><td>${p2(fr.support)}</td><td class="pos">${fr.room.toFixed(1)}</td>
+      <td class="l small">${esc(x.ck[9].v.replace(/^earnings /, ""))}</td><td class="l small dim">check at IBKR</td></tr>${next ? `<tr class="flsnxr"><td></td><td colspan="11" class="l small"><b>Next:</b> ${esc(FLS_NEXT)} <b>${p2(fr.frHi)}</b></td></tr>` : ""}`; }).join("")}</tbody></table></div>`;
+}
+function flsNearHTML(L){
+  return `<div class="tscroll" style="max-height:360px"><table class="mini flst"><thead><tr><th class="l">Ticker</th><th>RS</th><th class="l">Group</th><th class="l">State</th><th class="l">The one check short</th></tr></thead><tbody>
+    ${L.map(o => { const x = o.x, k = x.ff; return `<tr data-sym="${esc(o.r.sym)}"><td class="l sym">${esc(o.r.sym)}</td><td>${rsBadge(o.r.rs)}</td><td class="l small">${esc(o.r.group || "—")}</td><td class="l small">${x.fr ? esc(FR_ST[x.fr.st].n) : "—"}</td><td class="l small"><b>${k}. ${esc(FLS_CK[k])}</b> — ${esc(x.ck[k].v)}</td></tr>`; }).join("")}</tbody></table></div>`;
+}
+function flsCardHTML(){
+  const R0 = pbHH() ? flsRun() : null, tv = !!(R0 && R0.gate.open && R0.top.length);   // the header copy only when the card shows names (tvcopy contract: a card's button copies what it shows)
+  const hd = `<div class="hd"><h2>Former leader, lower high — up to 3</h2><span class="sub">short · paper / watch only · never sized · Notion v1.0 (7 Nov) · the 3 weakest by RS that pass every check</span><span class="spacer"></span>
+    ${tv ? `<button class="btn sm" id="flsTv" data-tvc title="Copies the names this card shows (the up-to-3, plus any fold you opened) as one line for TradingView's Add symbol box">Copy for TradingView</button>` : ""}<button class="btn sm" id="flsCsv" title="Every stock evaluated, raw numbers, with its first failing check">Download CSV</button></div>`;
+  if (!pbHH()) return hd + `<div class="bd"><div class="empty">Needs the stored price history. <button class="btn sm" data-hist="full">Load price history</button></div></div>`;
+  const R = R0; if (!R) return hd + `<div class="bd"><div class="empty">Load the files first.</div></div>`;
+  const g = R.gate, sp = g.spy, gl = `<div class="small" style="margin-bottom:6px">Market gate: MAP <b>${esc(g.mapV || "not set")}</b> · ${sp ? `SPY ${p2(sp.c)} vs 50 SMA ${p2(sp.s50)} · 9 EMA ${p2(sp.e9)} vs 21 EMA ${p2(sp.e21)} (${esc(sp.to)})` : "SPY: no stored bars"} · ${R.rows.filter(o => o.x).length} stocks checked</div>`;
+  const foot = `<div class="small dim" style="margin-top:6px">Checks: market gate · former leader (on MAP's lists in the last 63 sessions, or a 63-session high ≥ 30% over the prior 63-session low) · close under a falling 50 SMA · group in the weakest 3 · testing or rejected at resistance (failed-rally stage) · not more than 2 ADR under the test-day low · stop above the bounce high ≤ 1.5 ADR · room ≥ 2R to first support · no earnings in the next 5 sessions · tradeable liquidity not OUT · shortable at IBKR (by hand). ADR = the failed-rally ADR (20-day mean of high ÷ low − 1). Paper, or puts / an inverse ETF at grade C, until tested on more bear years. Kill rule: after 20 paper signals, park it if they average 0R or less.</div>`;
+  if (!g.open) return hd + `<div class="bd">${gl}<div class="flsclosed"><b>Short side closed today — ${esc(g.why.join("; "))}</b></div>
+    <details class="flsf" style="margin-top:6px"><summary>What would have passed (${R.pass.length}) — learning only, not tradeable today</summary>${R.pass.length ? `<div class="small neg" style="margin:4px 0">Not tradeable: the short side is closed. <button class="btn sm" id="flsTvW" data-tvc title="Copies these would-have-passed names for TradingView (chart review only)">Copy for TradingView</button></div>${flsRowsHTML(R.pass, false)}` : `<div class="empty" style="padding:4px 0">Nothing would have passed either.</div>`}</details>${foot}</div>`;
+  return hd + `<div class="bd">${gl}${R.top.length ? flsRowsHTML(R.top, true) : `<div class="empty" style="padding:4px 0"><b>No short today</b> — no stock passes every check.</div>`}
+    <details class="flsf" style="margin-top:6px"><summary>Also passing (beyond ${FLS.top}) (${R.also.length})</summary>${R.also.length ? flsRowsHTML(R.also, false) : `<div class="empty" style="padding:4px 0">None.</div>`}</details>
+    <details class="flsf"><summary>Near misses (one check short) (${R.near.length})</summary>${R.near.length ? flsNearHTML(R.near) : `<div class="empty" style="padding:4px 0">None.</div>`}</details>${foot}</div>`;
+}
+function flsPaint(){
+  const tab = $("tab-shorts"); if (!tab || !S.snap) return;
+  let box = $("flsBox"); if (!box) { const lede = tab.querySelector(".lede"); (lede || tab.firstElementChild || tab).insertAdjacentHTML(lede ? "afterend" : "beforebegin", `<div class="card g1" id="flsBox"></div>`); box = $("flsBox"); }
+  if (!box) return;
+  const open = [...box.querySelectorAll("details.flsf")].map(d => d.open);
+  try { box.innerHTML = flsCardHTML(); } catch (e) { console.error("former leader short", e); box.innerHTML = `<div class="hd"><h2>Former leader, lower high — up to 3</h2></div><div class="bd"><div class="empty">Couldn't be drawn (error logged).</div></div>`; }
+  box.querySelectorAll("details.flsf").forEach((d, i) => { if (open[i]) d.open = true; });
+}
+hookOn("tab", "formerLeaderShort", t => { if (t === "shorts") flsPaint(); });
+
+/* ---------------- Download CSV: every stock evaluated ---------------- */
+const FLS_CSV_H = ["ticker", "verdict", "first_failing_check", "checks_failed", "gate_open", "gate_reason", "map_says", "spy_close", "spy_sma50", "spy_ema9", "spy_ema21", "data_to", "rs", "group", "group_weak_rank", "groups_ranked",
+  "former_leader_pct", "leader_high", "leader_high_date", "prior_low", "prior_low_date", "on_map_lists_date", "close", "sma50", "sma50_5_ago", "fr_state", "resistance", "resistance_kind", "test_date", "test_day_low", "adr_under_test_low",
+  "bounce_high", "stop_adr", "first_support", "room_r", "adr_usd", "earnings_sessions", "liquidity", "shortable", "ck2_former_leader", "ck3_broken", "ck4_weak_group", "ck5_bounce", "ck6_not_extended", "ck7_stop", "ck8_room", "ck9_earnings", "ck10_liquidity"];
+const flsQ = v => { const x = v == null ? "" : String(v); return /[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x; };
+function flsCsvText(R){
+  const n4 = v => v == null || !fin(v) ? "" : +v.toFixed(4), g = R.gate, sp = g.spy || {}, L = [FLS_CSV_H.join(",")];
+  const order = [...R.rows].sort((a, b) => { const va = R.verdict.get(a.r.sym), vb = R.verdict.get(b.r.sym), rk = v => /^Top/.test(v) ? 0 : v === "Also passing" || /^Would/.test(v) ? 1 : v === "Near miss" ? 2 : 3; return rk(va) - rk(vb) || flsByRS(a, b); });
+  for (const o of order) { const x = o.x, fr = x && x.fr, yn = n => x ? (x.ck[n].ok ? "pass" : "fail") : "";
+    L.push([o.r.sym, R.verdict.get(o.r.sym), flsFfTxt(x), x ? x.fails.length : "", g.open ? "yes" : "no", g.open ? "" : g.why.join("; "), g.mapV, n4(sp.c), n4(sp.s50), n4(sp.e9), n4(sp.e21), x ? x.to : "", o.r.rs ?? "", o.r.group || "", R.weak.rank.get(o.r.group) || "", R.weak.n,
+      x ? n4(x.lead.pct) : "", x ? n4(x.lead.hi) : "", x ? x.lead.hiDate || "" : "", x ? n4(x.lead.lo) : "", x ? x.lead.loDate || "" : "", x ? x.mapSeen || "" : "",
+      x ? n4(x.close) : "", x ? n4(x.s50) : "", x ? n4(x.s50b) : "", fr ? FR_ST[fr.st].n : "", fr ? n4(fr.lv) : "", fr ? fr.kind : "", fr ? fr.testDate || "" : "", x ? n4(x.testLow) : "", x && fin(x.below) ? n4(-x.below) : "",
+      fr ? n4(fr.frHi) : "", fr ? n4(fr.stopA) : "", fr ? n4(fr.support) : "", fr ? n4(fr.room) : "", fr ? n4(fr.adrD) : "", x && x.erN != null ? x.erN : "", x ? x.liq || "not checked" : "", "check at IBKR",
+      yn(2), yn(3), yn(4), yn(5), yn(6), yn(7), yn(8), yn(9), yn(10)].map(flsQ).join(","));
+  }
+  return L.join("\n");
+}
+function flsCsv(){
+  const R = flsRun(); if (!R) { toast(S.snap ? "Load the price history first" : "Load the files first"); return; }
+  download(`deep-space-former-leader-short-${fmtDate(new Date())}.csv`, flsCsvText(R), "text/csv");
+}
+document.addEventListener("click", e => {
+  const t = e.target && e.target.closest ? e.target : null; if (!t || !t.closest("#flsBox")) return;
+  if (t.closest("#flsCsv")) { e.preventDefault(); flsCsv(); return; }
+  const tr = t.closest("tr[data-sym]"); if (tr && S.rowBySym && S.rowBySym.has(tr.dataset.sym)) openDrawer(tr.dataset.sym);
+});   // the Copy for TradingView buttons carry data-tvc: the board's own card copy handles them (the names the card shows)
+
+/* ---------------- TradingView lists item (spread in place into the SHORT RESEARCH section) ---------------- */
+function flsTvlItems(H){
+  return [{k: "shFL", n: "Short · Former leader", def: 0, need: H, f: () => { const R = flsRun(); if (!R) return null;
+    return R.top.map((o, i) => tvlE(o.r.sym, `Short · Former leader, lower high #${i + 1} · ${FR_ST[o.x.fr.st].n} · ${o.x.fr.kind} ${frP(o.x.fr.lv)} · stop above ${frP(o.x.fr.frHi)}`, o.x.fr.st === "test" ? "Testing" : "Rejected")); }}];
+}
+
+/* ---------------- ticker panel: one line in the History · short score pane ---------------- */
+function flsPanelHTML(sym){
+  const R = flsRun(), o = R ? R.by.get(sym) : null; if (!o) return "";
+  const v = R.verdict.get(sym), x = o.x, fr = x && x.fr;
+  const det = !x ? "no stored bars" : x.pass ? `${FR_ST[fr.st].n} at the ${fr.kind} ${p2(fr.lv)} · stop above ${p2(fr.frHi)} (${fr.stopA.toFixed(2)} ADR) · support ${p2(fr.support)} (${fr.room.toFixed(1)}R)` : `first failing check ${esc(flsFfTxt(x))}${x.fails.length > 1 ? ` (${x.fails.length} checks fail)` : ""}`;
+  return `<div class="flspl small"><b>Former leader, lower high</b> <span class="dim">(short, paper)</span>: <span class="pill ${/^Top/.test(v) ? "go" : v === "Near miss" || /^Would|^Also/.test(v) ? "zone" : ""}">${esc(v)}</span> — ${det}${R.gate.open ? "" : ` · <span class="neg">short side closed today</span>`}</div>`;
+}
+hookOn("panel", "formerLeaderShort", (r, dr) => {
+  if (!r || r.etf || !dr || dr.querySelector(".flspl")) return;
+  const html = flsPanelHTML(r.sym); if (!html) return;
+  const at = dr.querySelector('.tp-pane[data-p="hist"] .hx') || dr.querySelector(".hx") || dr.querySelector(".s61p");
+  if (at) at.insertAdjacentHTML("beforeend", html);
+});
+
+/* ---------------- self-check: a separate short recompute of the gate and the passing list ---------------- */
+function flsSelf(){
+  const out = []; const R = flsRun(); if (!R) return out;
+  // gate — own SMA / SMA-seeded EMA loops on SPY's bars
+  { const b = HIST.idx && HIST.idx.has("SPY") ? dssBars("SPY") : null; let ok = (mapRegime().v || "") === "Defensive";
+    if (!b || b.n < 50) ok = false; else { const c = [...b.c], n = c.length, t = n - 1; let s = 0; for (let k = t - 49; k <= t; k++) s += c[k];
+      const em = p => { const al = 2 / (p + 1); let e = NaN, q = 0; for (let k = 0; k < n; k++) { if (k < p) { q += c[k]; if (k === p - 1) e = q / p; } else e = al * c[k] + (1 - al) * e; } return e; };
+      ok = ok && c[t] < s / 50 && em(9) < em(21); }
+    out.push({sym: "SPY", what: "Former leader short gate", ok: ok === R.gate.open, board: R.gate.open ? "open" : "closed", mine: ok ? "open" : "closed"}); }
+  const G = (S.groups || []).filter(g => g.grs != null).map(g => [g.name, g.grs]); G.sort((a, b) => a[1] - b[1]); const weak = new Set(G.slice(0, 3).map(g => g[0]));
+  const pick = [...R.pass.slice(0, 40), ...R.near.slice(0, 30), ...R.rows.filter(o => o.x && !o.x.pass && o.x.fails.length > 1 && o.x.fr).slice(0, 20)];
+  const mine = [];
+  for (const o of pick) {
+    const b = dssBars(o.r.sym), x = o.x; if (!b || b.n < 70) continue;
+    const c = [...b.c], h = [...b.h], l = [...b.l], n = c.length, t = n - 1; if (![c, h, l].every(a => a.every(isFinite))) continue;
+    const m50 = e => { let s = 0; for (let k = e - 49; k <= e; k++) s += c[k]; return s / 50; };
+    let iH = t - 62; for (let k = t - 62; k <= t; k++) if (h[k] >= h[iH]) iH = k;
+    let lo = Infinity; if (iH >= 63) for (let k = iH - 63; k < iH; k++) lo = Math.min(lo, l[k]);
+    const lead = iH >= 63 && (h[iH] / lo - 1) * 100 >= 30;
+    const ok = {2: lead || !!x.mapSeen, 3: c[t] < m50(t) && m50(t) < m50(t - 5), 4: weak.has(o.r.group), 5: !!x.fr && (x.fr.st === "test" || x.fr.st === "rej"), 6: !x.fr || x.fr.st !== "ext", 9: x.ck[9].ok, 10: x.ck[10].ok};
+    // stop / room: own bounce high (highest high from the test session) and own swing-low support
+    let stopA = NaN, room = NaN;
+    if (x.fr && x.fr.testDate) { const j0 = b.dates.lastIndexOf(x.fr.testDate); let hi = -Infinity; for (let k = j0; k <= t; k++) hi = Math.max(hi, h[k]);
+      let a = 0; for (let k = t - 19; k <= t; k++) a += h[k] / l[k]; const D = (a / 20 - 1) * c[t];
+      let sup = -Infinity; for (let k = Math.max(3, n - 60); k <= t - 3; k++) { let sw = true; for (let u = 1; u <= 3; u++) if (!(l[k] < l[k - u] && l[k] < l[k + u])) { sw = false; break; } if (sw && l[k] < c[t]) sup = Math.max(sup, l[k]); }
+      if (!isFinite(sup)) { sup = Infinity; for (let k = t - 19; k <= t; k++) sup = Math.min(sup, l[k]); }
+      if (hi > c[t]) { stopA = (hi - c[t]) / D; room = (c[t] - sup) / (hi - c[t]); } }
+    ok[7] = isFinite(stopA) && stopA <= 1.5; ok[8] = isFinite(room) && room >= 2;
+    const pass = [2, 3, 4, 5, 6, 7, 8, 9, 10].every(k => ok[k]);
+    out.push({sym: o.r.sym, what: "Former leader short passes", ok: pass === x.pass, board: x.pass ? "passes" : "fails " + x.fails.join("/"), mine: pass ? "passes" : "fails " + [2, 3, 4, 5, 6, 7, 8, 9, 10].filter(k => !ok[k]).join("/")});
+    if (pass) mine.push(o);
+  }
+  if (R.gate.open && R.pass.length <= 40) { const T = mine.sort((a, b) => ((a.r.rs ?? 1e9) - (b.r.rs ?? 1e9)) || (a.r.sym < b.r.sym ? -1 : 1)).slice(0, 3).map(o => o.r.sym).join(","), B = R.top.map(o => o.r.sym).join(",");
+    out.push({sym: "—", what: "Former leader short top 3", ok: T === B, board: B || "none", mine: T || "none"}); }
+  return out;
+}
+if (typeof SC_X !== "undefined") SC_X.push(flsSelf);
+document.head.insertAdjacentHTML("beforeend", `<style>
+#flsBox tr[data-sym]{cursor:pointer} .flst td{vertical-align:top} #flsBox details.flsf>summary{cursor:pointer;font-size:12px;margin:4px 0}
+#flsBox .flsclosed{padding:6px 8px;border-left:3px solid var(--down, #c62828);background:var(--chip)} .flspl{margin-top:8px;line-height:1.5}
+#flsBox tr.flsnxr td{white-space:normal;border-top:0;padding-top:0;color:var(--ink-2)}
+</style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   FIRST PULLBACK · PIVOT CONFLUENCE ★ (7 Nov 2026) — DISPLAY / TRACKING ONLY. A mark, never a trigger or a gate: the ★
+   never hides, re-ranks, gates or changes any First Pullback list (Ready / On deck / Not yet / Out), rank, size, the
+   Entry Check (Playbook 1), the Daily Plan, the Board log records, the Decision-log CSV, or any existing Deep Space feed /
+   tracker CSV value (the test proves every list / rank / older column byte-identical with this script taken out).
+   Ruling: Notion "🧭 Playbook 2 · First Pullback — v1.0 (paper, from 7 Nov 2026)" https://app.notion.com/p/411ff58fe7ad81b98765f5d7552ae888,
+   green callout "7 Nov 2026 — two rulings (Eugene, chat)", ruling (2): "Pivot confluence ★ (marks only, never a trigger or
+   a gate): a First Pullback name gets a ★ when an old pivot level — a swing high turned support, an intact swing low, or
+   an open gap edge, as the board's Floor Bounce levels define them — sits within 0.5 ADR of its 9 / 21 EMA zone. The ★ never
+   hides, re-ranks or changes a list; the First Pullback tracker and its CSV record it, and after 30 paper signals the ★
+   names' win rate (+1R before the stop) is compared with the rest to decide whether it becomes a ranking factor or a
+   requirement." Eugene (chat, 7 Nov 2026), after asking "Under floor bounce there were multiple pivots. Does it make sense to
+   have those as confluence?": "yes to both, add the star and update Notion".
+   HOW IT IS READ (fpPivCalc, pure; on the same dssBars + fpCalc result the First Pullback checks use):
+     "within the zone" = |level − the daily EMA the name is AT| ≤ 0.5 ADR — the EMA from check 7 (loc "9" → the 9 EMA,
+       loc "21" → the 21 EMA), ADR = check 7's ADR (Playbook 1's 20-day mean (high − low) ÷ close × today's close), i.e. the
+       same ±0.5 ADR band that defines "at the 9 / at the 21". A name that is not at the 9 or the 21 (Above / Under /
+       Between) gets no ★.
+     levels = Floor Bounce's obCalc definitions, COPIED (obCalc's level loop is inline in obCalc, not a separate helper),
+       with obCalc's drop high (iH) replaced by First Pullback's leg-high session (check 5's iH = the highest close of 63):
+         swing high turned support — a 5/5 pivot high (ties count) with a close above it after it, up to the leg high;
+         intact swing low — a 5/5 pivot low with no close below it after it, up to the leg high;
+         open gap edge — a gap-up bar (low > the prior bar's high); the edge = the prior bar's high; open = no low at or
+           under it after the gap bar, up to the leg high;
+         within 252 sessions (counting today) and under the leg-high session's high, as Floor Bounce.
+     "before the pullback" = set on bars up to and including the leg high's session: a pivot needs its 5 bars after it
+       inside that, so its own bar ≤ leg high − 5 (= Floor Bounce's rule); a gap bar ≤ the leg high itself (Floor Bounce
+       asks ≤ high − 5 for gaps too — here the gap only has to be there before the pullback began, as the ruling reads).
+       Swing lows / gaps that a pullback day breaks stay counted (their state is read at the leg high — the old level the
+       pullback is coming back to).
+     a level counts once: sorted high → low, a level within 0.25 ADR (check 7's ADR) of the current cluster's top joins
+       it; the cluster price = its top (Floor Bounce's merge). The ★ uses the cluster nearest the EMA (ties: the higher).
+   ON SCREEN: ★ after the ticker on the First Pullback card rows (tooltip "pivot confluence: <kind> at <price>, <x> ADR
+   from the 9/21") and on the tracker rows; a line in the ticker panel's "First Pullback" tab; the ★ level on the board chart
+   under Playbook 2 ("FP pivot ★ …", pill PIV ★); filter criterion "First Pullback ★ pivot confluence" (category Playbooks;
+   visibility only); the tracker's paper tally gets a split line "★ names: n, win rate · others: n, win rate".
+   TRACKER: adrb.fpLog day entries [list, loc, px, adr %, leg high, pullback low] get four fields APPENDED when a name is
+   first logged (existing fields unchanged): [★ 1 | 0, cluster price, kind, signed distance (level − EMA) ÷ ADR] — the
+   nearest old level even without a ★ (for the review); null / "" when there is no old level. An entry already logged for
+   the current file date without them (logged before this script) gets them once, from the same close. Older dates stay
+   without (CSV blank, tally "logged before the ★"). Tracker CSV: pivot_star, pivot_level, pivot_kind, pivot_dist_adr
+   appended at the END of FP_CSV_H.
+   FEED: one column appended at the END of the Deep Space feed (FEED_EXT, after the seven FP columns): "FP Pivot ★" =
+   yes | blank. SELF-CHECK: fpPivSelf in SC_X — its own EMA / ADR / leg-high / pivot / gap / merge loops for the Ready and
+   On deck names, ★ and level compared.
+   Plugs in: guarded in-place calls in the PLAYBOOK 2 · FIRST PULLBACK script (card row, panel tab, chart lines, log record,
+   tracker rows / tally / CSV), CRIT, FEED_EXT, SC_X, BCL_CODE. No function overrides, no page watcher. Storage NEW: none
+   (new fields inside adrb.fpLog entries). Twin: indicators/structure/first-pullback/first-pullback.pine ("FP Pivot Star").
+   Test: tools/board-fp-pivot-test.js. On trial to 21 Nov 2026 (docs/trials.md).
+   ===================================================================== */
+const FPPV = {piv: 5, lb: 252, merge: 0.25, near: 0.5};
+const FPPV_K = {"swing high": "swing high turned support", "swing low": "intact swing low", gap: "open gap edge"};
+// b = {c, h, l, dates, n}; x = fpCalc(b). Returns null without a leg / ADR.
+function fpPivCalc(b, x){
+  if (!b || !x || !x.leg || !(x.D > 0) || !(x.leg.iH >= 0)) return null;
+  const C = FPPV, {c, h, l} = b, D0 = b.dates, t = x.t, iL = x.leg.iH, D = x.D, z = C.merge * D, H = h[iL];
+  const at = x.loc === "9" ? 9 : x.loc === "21" ? 21 : null, ema = at === 9 ? x.e9 : at === 21 ? x.e21 : NaN;
+  const P = C.piv, Lv = [], first = Math.max(P, t - C.lb + 1), lastP = iL - P;
+  for (let p = first; p <= lastP; p++) {
+    let ph = true, pl = true; for (let u = p - P; u <= p + P; u++) { if (u === p) continue; if (!(h[p] >= h[u])) ph = false; if (!(l[p] <= l[u])) pl = false; }
+    if (ph) { let fl = false; for (let j = p + 1; j <= iL; j++) if (c[j] > h[p]) { fl = true; break; } if (fl) Lv.push({p: h[p], s: "swing high", d: D0[p]}); }
+    if (pl) { let ok = true; for (let j = p + 1; j <= iL; j++) if (c[j] < l[p]) { ok = false; break; } if (ok) Lv.push({p: l[p], s: "swing low", d: D0[p]}); }
+  }
+  for (let k = Math.max(1, t - C.lb + 1); k <= iL; k++) if (l[k] > h[k - 1]) { const g = h[k - 1]; let open = true; for (let j = k + 1; j <= iL; j++) if (l[j] <= g) { open = false; break; } if (open) Lv.push({p: g, s: "gap", d: D0[k]}); }
+  const cl = []; for (const q of Lv.filter(q => q.p < H).sort((a, b) => b.p - a.p)) { const cur = cl[cl.length - 1]; if (cur && cur.p - q.p <= z) cur.src.push(q); else cl.push({p: q.p, src: [q]}); }
+  let best = null, bd = Infinity;
+  if (fin(ema)) for (const q of cl) { const d = Math.abs(q.p - ema); if (d < bd) { bd = d; best = q; } }
+  const kind = best ? [...new Set(best.src.map(s => FPPV_K[s.s]))].join(" + ") : "";
+  const dist = best ? (best.p - ema) / D : NaN;
+  return {star: !!best && Math.abs(dist) <= C.near, at, ema, level: best ? best.p : NaN, kind, dist, set: best ? best.src.map(s => s.d).sort()[0] : "", src: best ? best.src : [], n: cl.length, cl, iL, z};
+}
+const FPPVB = new WeakMap();
+// one First Pullback result (fpOf) → its pivot read (cached on the result object, so it follows every recompute)
+function fpPivOf(f){
+  if (!f || !f.x || !f.r) return null;
+  if (FPPVB.has(f)) return FPPVB.get(f);
+  let v = null; try { v = fpPivCalc(dssBars(f.r.sym), f.x); } catch (e) { console.warn("first pullback ★", f.r.sym, e); v = null; }
+  FPPVB.set(f, v); return v;
+}
+const fpPivLine = v => v.at ? `the ${v.at} EMA` : "the 9 / 21 EMA";
+const fpPivDistTxt = v => `${Math.abs(v.dist).toFixed(2)} ADR ${v.dist >= 0 ? "above" : "below"} ${fpPivLine(v)}`;
+const fpPivTip = v => `pivot confluence: ${v.kind} at ${p2(v.level)}, ${fpPivDistTxt(v)}${v.set ? ` (set ${v.set}, before the pullback)` : ""} — a mark only, never a trigger`;
+function fpPivTag(f){ const v = fpPivOf(f); return v && v.star ? ` <span class="fpstar" title="${esc(fpPivTip(v))}">★</span>` : ""; }
+function fpPivPaneLine(f){
+  const v = fpPivOf(f); let t;
+  if (!v) t = `<b>Pivot confluence</b>: — (no leg or no ADR)`;
+  else if (v.star) t = `<b class="fpstar">★ Pivot confluence</b>: ${esc(v.kind)} at <b>${p2(v.level)}</b>${v.set ? ` (set ${esc(v.set)})` : ""}, ${esc(fpPivDistTxt(v))} ${p2(v.ema)}. An old level set before the pullback sits in the zone — a mark only, never a trigger; the tracker records it.`;
+  else if (!v.at) t = `<b>Pivot confluence</b>: none — the close isn't at the 9 or the 21.`;
+  else if (!fin(v.level)) t = `<b>Pivot confluence</b>: none — no swing level or open gap set before the pullback (last 252 sessions).`;
+  else t = `<b>Pivot confluence</b>: none — the nearest old level (${esc(v.kind)} at ${p2(v.level)}) is ${esc(fpPivDistTxt(v))} ${p2(v.ema)} (a ★ needs within ${FPPV.near} ADR).`;
+  return `<div class="small fppiv" style="margin:4px 0">${t}</div>`;
+}
+BCL_CODE.push([/^FP pivot ★/, "fppiv", "PIV ★"]);
+function fpPivChart(f, L){ const v = fpPivOf(f); if (v && v.star && fin(v.level)) L(v.level, BC_STYLE.entry, `FP pivot ★ ${v.kind}`, 0); }
+// tracker: the four fields appended to an adrb.fpLog day entry
+const fpPivLog = f => { const v = fpPivOf(f); return v ? [v.star ? 1 : 0, fin(v.level) ? +v.level.toFixed(4) : null, v.kind || "", fin(v.dist) ? +v.dist.toFixed(4) : null] : [0, null, "", null]; };
+function fpPivFill(e, f){ if (!Array.isArray(e) || e.length !== 6) return false; e.push(...fpPivLog(f)); return true; }
+function fpPivTrTag(o){ const v = o && o.pv; if (!v || v[0] !== 1) return "";
+  return ` <span class="fpstar" title="${esc(`pivot confluence when first listed: ${v[2]} at ${p2(v[1])}, ${fin(v[3]) ? `${Math.abs(v[3]).toFixed(2)} ADR ${v[3] >= 0 ? "above" : "below"} the ${o.loc === "21" ? "21" : "9"} EMA` : ""} — a mark only`)}">★</span>`; }
+function fpPivTally(rows){
+  const st = rows.filter(o => o.pv && o.pv[0] === 1), ot = rows.filter(o => o.pv && o.pv[0] === 0), un = rows.length - st.length - ot.length;
+  const part = (n, R) => { const T = fpTally(R), wr = T.win + T.loss ? T.win / (T.win + T.loss) * 100 : null; return `${n}: <b>${T.sig}</b>, win rate ${wr == null ? "—" : `<b>${wr.toFixed(0)}%</b>`}`; };
+  return `<div class="small fppivt" style="margin:-2px 0 6px" title="Signals = rows with first-candle data; win rate = wins ÷ (wins + losses), +1R before the stop. After 30 paper signals the ★ names' win rate is compared with the rest to decide whether the ★ becomes a ranking factor or a requirement (Notion, 7 Nov 2026).">${part("★ names", st)} · ${part("others", ot)}${un ? ` <span class="dim">· ${un} row${un === 1 ? "" : "s"} logged before the ★ was recorded</span>` : ""}</div>`;
+}
+const FP_PIV_CSV_H = ["pivot_star", "pivot_level", "pivot_kind", "pivot_dist_adr"];
+FP_CSV_H.push(...FP_PIV_CSV_H);
+function fpPivCsvCells(o){ const v = o && o.pv, n4 = x => x == null || !fin(x) ? "" : +x.toFixed(4); return v ? [v[0] === 1 ? "yes" : "no", n4(v[1]), v[2] || "", n4(v[3])] : ["", "", "", ""]; }
+
+/* ---------------- filter criterion (visibility only) ---------------- */
+for (const c of [
+  {k: "fpPiv", cat: "Playbooks", l: "First Pullback ★ pivot confluence", need: HH, t: r => { const f = fpOf(r); if (!f) return null; const v = fpPivOf(f); return v ? v.star : null; }}
+]) { CRIT.push(c); CRIT_BY[c.k] = c; }
+
+/* ---------------- Deep Space feed: one column at the very end ---------------- */
+const FP_PIV_FEED_H = ["FP Pivot ★"];
+FEED_EXT.push({h: FP_PIV_FEED_H, cells: o => { const r = o && o.r; if (!r || r.etf) return null; const f = fpOf(r); if (!f) return null; const v = fpPivOf(f); return [v && v.star ? "yes" : ""]; }});
+
+/* ---------------- self-check: a separate short recompute of the ★ (Ready + On deck) ---------------- */
+function fpPivSelf(){
+  const out = []; if (!S.snap || !S.has || !S.has.hist || !HIST.nD) return out;
+  const A = fpLists(true);
+  for (const f of [...A.R.slice(0, 40), ...A.D.slice(0, 40)]) {
+    const b = dssBars(f.r.sym); if (!b || b.n < 63) continue;
+    const c = [...b.c], h = [...b.h], l = [...b.l], n = c.length, t = n - 1;
+    if (![c, h, l].every(a => a.slice(Math.max(0, t - 260)).every(isFinite))) continue;
+    const ema = p => { const al = 2 / (p + 1); let e = NaN, s = 0; for (let k = 0; k < n; k++) { if (k < p) { s += c[k]; if (k === p - 1) e = s / p; } else e = al * c[k] + (1 - al) * e; } return e; };
+    let D = 0; for (let k = t - 19; k <= t; k++) D += (h[k] - l[k]) / c[k]; D = D / 20 * c[t];
+    const e9 = ema(9), e21 = ema(21), d9 = (c[t] - e9) / D, d21 = (c[t] - e21) / D;
+    const at = d21 < -0.5 ? null : Math.abs(d9) <= 0.5 ? 9 : Math.abs(d21) <= 0.5 ? 21 : null, E = at === 9 ? e9 : e21;
+    let iL = t - 62; for (let k = t - 62; k <= t; k++) if (c[k] >= c[iL]) iL = k;
+    const lv = [], lo0 = Math.max(0, t - 251);
+    for (let p = Math.max(5, lo0); p + 5 <= iL; p++) {
+      const win = [...Array(11).keys()].map(i => p - 5 + i).filter(u => u !== p);
+      if (win.every(u => h[p] >= h[u]) && c.slice(p + 1, iL + 1).some(x => x > h[p])) lv.push(h[p]);
+      if (win.every(u => l[p] <= l[u]) && c.slice(p + 1, iL + 1).every(x => x >= l[p])) lv.push(l[p]);
+    }
+    for (let k = Math.max(1, lo0); k <= iL; k++) if (l[k] > h[k - 1] && l.slice(k + 1, iL + 1).every(x => x > h[k - 1])) lv.push(h[k - 1]);
+    const tops = []; lv.filter(p => p < h[iL]).sort((a, b) => b - a).forEach(p => { if (!tops.length || tops[tops.length - 1] - p > 0.25 * D) tops.push(p); });
+    let near = NaN; for (const p of tops) if (!isFinite(near) || Math.abs(p - E) < Math.abs(near - E)) near = p;
+    const star = at != null && isFinite(near) && Math.abs(near - E) <= 0.5 * D, v = fpPivOf(f);
+    out.push({sym: f.r.sym, what: "First Pullback pivot ★", ok: !!v && v.star === star && (!star || Math.abs(v.level - near) <= 1e-6 * Math.max(1, near)), board: v ? (v.star ? "★ " + p2(v.level) : "no ★") : "—", mine: star ? "★ " + p2(near) : "no ★"});
+  }
+  return out;
+}
+if (typeof SC_X !== "undefined") SC_X.push(fpPivSelf);
+document.head.insertAdjacentHTML("beforeend", `<style>
+.fpstar{color:#f5b800;cursor:help;font-weight:700} .fppiv{padding:3px 6px;border-left:3px solid #f5b800;background:var(--chip)} .fppivt{color:var(--ink-2)}
 </style>`);
 </script>
