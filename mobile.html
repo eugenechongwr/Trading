@@ -1544,7 +1544,7 @@ for (const m of ["setItem", "removeItem", "clear"]) { const f = Storage.prototyp
 window.addEventListener("storage", () => { store._c.clear(); store._g++; });
 // Hook points (BOARD HOOKS script, 28 Oct; moved up here 31 Oct so every section can use them — the installers that call
 // hookRun stay in BOARD HOOKS). Hooks run in the order they were added (= file order), each in its own try/catch.
-const HOOK = {panel: [], tab: [], chart: []};
+const HOOK = {panel: [], tab: [], chart: [], map: []};   // 7 Nov 2026: "map" = MAP import (phase "parse" | "apply" | "html"; called in place in mapParse / mapApply / mapImpHTML — MAP · FP / FS PAPER LINES)
 // 3 Nov (display only): sort keys a Table can sort on that aren't one of its own columns — {key: row => value}; a value of
 // null always sorts last. Used by the Ext. hours column (it's added after each draw, so it isn't in COLS).
 const TBL_XSORT = {};
@@ -9737,7 +9737,8 @@ H NVDA
 OVER-B: SHOP over FRSH — RS 96 vs 94 and a separate driver`;
 function mapParse(text){
   const out = {session: null, data: null, regime: null, code: "", A: [], B: [], S: [], H: [], items: {}, overB: "", warn: [], errs: []};
-  const t = String(text || "").trim(); if (!t) { out.errs.push("Nothing pasted."); return out; }
+  const hx = {text: String(text || ""), out}; hookRun("map", "parse", hx);   // 7 Nov 2026: hook point "map" — lines a later section reads (FP / FS) take themselves out first; nothing else changes
+  const t = hx.text.trim(); if (!t) { out.errs.push("Nothing pasted."); return out; }
   const item = (l, sym, k, f) => { sym = String(sym || "").toUpperCase().replace(/^.*:/, "").replace(/[^A-Z0-9.\-]/g, ""); if (!sym) return;
     const L = l === "D" ? "S" : l; if (L !== "H") { const dup = ["A", "B", "S"].find(x => out[x].includes(sym)); if (dup) { out.warn.push(`${sym} is on ${dup === "S" ? "On deck" : dup} and ${L === "S" ? "On deck" : L} — kept on ${dup === "S" ? "On deck" : dup}`); return; } }
     out[L].push(sym); if (L !== "H") out.items[sym] = {l: L, k: k || out[L].length, ...f}; };
@@ -9773,7 +9774,9 @@ function mapApply(P){
   if (C.mismatch && !confirm(`${C.w.find(x => /plan day/.test(x))}\n\nImport it anyway? (The lists are dated to the board's plan day.)`)) return false;
   listsSet(P.A.join(" "), P.B.join(" "), P.S.join(" "), P.H.length ? P.H.join(" ") : null);
   if (P.regime) setMapRegime(P.regime, P.code || "");
-  store.set(MAPI_K, {session: P.session || curPlanDay(), data: P.data, at: Date.now(), regime: P.regime, items: P.items, overB: P.overB, n: {A: P.A.length, B: P.B.length, S: P.S.length, H: P.H.length}, warn: C.w});
+  const rec = {session: P.session || curPlanDay(), data: P.data, at: Date.now(), regime: P.regime, items: P.items, overB: P.overB, n: {A: P.A.length, B: P.B.length, S: P.S.length, H: P.H.length}, warn: C.w};
+  hookRun("map", "apply", {P, rec});   // 7 Nov 2026: hook point "map" — later sections add their own fields to the record (FP / FS); none renamed
+  store.set(MAPI_K, rec);
   store.set("adrb.listsDay", curPlanDay());
   toast(`MAP imported: ${P.A.length} A · ${P.B.length} B · ${P.S.length} on deck${P.H.length ? " · " + P.H.length + " held" : ""}${C.w.length ? " — " + C.w.length + " note" + (C.w.length > 1 ? "s" : "") : ""}`);
   if (typeof mlogRecord === "function") mlogRecord();
@@ -9781,11 +9784,12 @@ function mapApply(P){
 }
 function mapImpHTML(){
   const m = mapImp(), p = curPlanDay(), cur = m && (m.session === p || m.session === prevSess(p));
+  const hx = {m, cur, row: "", fmt: ""}; hookRun("map", "html", hx);   // 7 Nov 2026: hook point "map" — a row under the last import line + a line in the format fold (FP / FS)
   return `<div class="hd"><h2>Import today's MAP</h2><span class="sub">optional — paste MAP's block or open its JSON; typing in the boxes below works as always</span></div><div class="bd mapimp">
-    ${m ? `<div class="small" style="margin-bottom:6px">Last import: <b>MAP for ${esc(m.session || "?")}</b>${m.data ? ` · data ${esc(m.data)}` : ""} · ${esc(fmtWhen(m.at))} · ${m.n.A} A · ${m.n.B} B · ${m.n.S} on deck${m.regime ? ` · call ${esc(m.regime)}` : ""}${cur ? "" : ` · <span class="neg">not for today's plan (${esc(p)}) — its notes are hidden</span>`}${m.warn && m.warn.length ? `<div class="dim">${m.warn.map(esc).join("<br>")}</div>` : ""}${m.overB && cur ? `<div>Why the last A beat the best B: <b>${esc(m.overB)}</b></div>` : ""}</div>` : ""}
+    ${m ? `<div class="small" style="margin-bottom:6px">Last import: <b>MAP for ${esc(m.session || "?")}</b>${m.data ? ` · data ${esc(m.data)}` : ""} · ${esc(fmtWhen(m.at))} · ${m.n.A} A · ${m.n.B} B · ${m.n.S} on deck${m.regime ? ` · call ${esc(m.regime)}` : ""}${cur ? "" : ` · <span class="neg">not for today's plan (${esc(p)}) — its notes are hidden</span>`}${m.warn && m.warn.length ? `<div class="dim">${m.warn.map(esc).join("<br>")}</div>` : ""}${m.overB && cur ? `<div>Why the last A beat the best B: <b>${esc(m.overB)}</b></div>` : ""}${hx.row}</div>` : ""}
     <textarea id="mapPaste" placeholder="${esc(MAPI_EX)}"></textarea>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px"><button class="btn sm primary" data-mapi="go">Check and import</button><button class="btn sm" data-mapi="file">Open a JSON / text file…</button><button class="btn sm" data-mapi="ex">Copy the format</button><span class="small dim" id="mapChk"></span></div>
-    <details class="tp-fold"><summary>The format</summary><div class="small" style="padding:6px 0">One header line, then one line per name — fields after a "|" as <i>key: value</i>:<pre style="white-space:pre-wrap;font-size:11.5px">${esc(MAPI_EX)}</pre>A = Focus A, B = Focus B, D (or S) = On deck / stalk, H = held. Keys: why, now (why now / what could fail), blocker, clears, skip, promote, catalyst. JSON works too: <code>{"session":"2026-10-20","data":"2026-10-19","regime":"Mixed","A":[{"t":"TEAM","why":"…","now":"…"}],"B":[…],"D":[…],"H":["NVDA"],"overB":"…"}</code>. The import fills the four boxes below (you can still edit them), sets MAP's call, and checks the date, duplicates and names missing from the files.</div></details></div>`;
+    <details class="tp-fold"><summary>The format</summary><div class="small" style="padding:6px 0">One header line, then one line per name — fields after a "|" as <i>key: value</i>:<pre style="white-space:pre-wrap;font-size:11.5px">${esc(MAPI_EX)}</pre>A = Focus A, B = Focus B, D (or S) = On deck / stalk, H = held. Keys: why, now (why now / what could fail), blocker, clears, skip, promote, catalyst. JSON works too: <code>{"session":"2026-10-20","data":"2026-10-19","regime":"Mixed","A":[{"t":"TEAM","why":"…","now":"…"}],"B":[…],"D":[…],"H":["NVDA"],"overB":"…"}</code>. The import fills the four boxes below (you can still edit them), sets MAP's call, and checks the date, duplicates and names missing from the files.${hx.fmt}</div></details></div>`;
 }
 document.body.insertAdjacentHTML("beforeend", `<input type="file" id="fileMap" accept=".json,.txt,text/plain,application/json" class="hidden">`);
 $("fileMap").onchange = async e => { const f = e.target.files[0]; e.target.value = ""; if (!f) return; mapApply(mapParse(await f.text())); };
@@ -9819,6 +9823,7 @@ function wlGroups(){
   G.push(["MAP Focus A", [...LISTS.focus].map(s => mk(s, "A"))]);
   G.push(["MAP Focus B", [...(typeof MAPL !== "undefined" ? MAPL.b : [])].map(s => mk(s, "B"))]);
   G.push(["MAP On deck / Stalk", [...(typeof MAPL !== "undefined" ? MAPL.stalk : [])].map(s => mk(s, "S"))]);
+  if (typeof mppWlGroups === "function") { try { G.push(...mppWlGroups(mk)); } catch (e) { console.warn("MAP paper lists", e); } }   // 7 Nov 2026: MAP's FP / FS paper lists, only when imported (MAP · FP / FS PAPER LINES)
   let bq = [];
   if (S.has.hist && typeof s61Lists === "function") bq = s61Lists(true)["A-eligible"].slice(0, 5).map(x => mk(x.r.sym, "q"));
   const disc = rec && rec.disc ? Object.values(rec.disc).filter(e => typeof ndxKeep !== "function" || ndxKeep(e.s)).map(e => mk(e.s, "nd")) : [];   // 3 Nov: sector / industry filter (display only)
@@ -9838,14 +9843,14 @@ function wlRowHTML(e, all){
   const er = s ? (s.er.n == null ? `<span class="neg">?</span>` : `${s.er.n}${s.er.n < S61.erMin ? ` <span class="neg">✕</span>` : ""}`) + (typeof erTimingChip === "function" ? " " + erTimingChip(s) : "") : r.erIn == null || r.erIn < 0 ? "?" : r.erIn + "d";
   return `<tr data-sym="${esc(e.s)}"><td>${wlPin(e.s)}</td><td class="l sym"><b>${esc(e.s)}</b></td><td class="l small">${esc(WL_SRC[e.src])}${also.length ? `<div class="dim">also ${also.map(k => esc(WL_SRC[k])).join(", ")}</div>` : ""}</td>
     <td class="l small">${esc(r.group || r.sector || "—")}<div class="dim">${esc(r.gState && r.gState !== "—" ? r.gState : "")}</div></td><td title="Rank among the ${S.stocks.length} stocks in your file">${rsBadge(r.rs)}</td><td class="l">${loc}</td><td class="l">${st}</td>
-    <td title="Estimated: (first resistance − planned entry) ÷ 0.6 ADR — information only, check the chart">${room}</td><td class="l small">${er}</td><td class="l small">${esc(nextAction(r, e.src === "H"))}${mn ? `<div class="mapwhy">MAP: ${esc(mapNoteTxt(mn))}</div>` : ""}</td></tr>`;
+    <td title="Estimated: (first resistance − planned entry) ÷ 0.6 ADR — information only, check the chart">${room}</td><td class="l small">${er}</td><td class="l small">${esc(nextAction(r, e.src === "H"))}${mn ? `<div class="mapwhy">MAP: ${esc(mapNoteTxt(mn))}</div>` : ""}${e.note ? `<div class="mapwhy mppwhy">${esc(e.note)}</div>` : ""}</td></tr>`;
 }
 function renderWatch(){
   const box = $("watchBody"); if (!box) return;
   if (!S.snap) { box.innerHTML = ""; return; }
   const G = wlGroups(), all = {}; G.forEach(([, L]) => L.forEach(e => { (all[e.src] = all[e.src] || new Set()).add(e.s); }));
   const head = `<thead><tr><th></th><th class="l">Ticker</th><th class="l">Source</th><th class="l">Group</th><th>RS</th><th class="l">Location</th><th class="l">Status</th><th>Room est.</th><th class="l">Earn.</th><th class="l">Next action</th></tr></thead>`;
-  const tbl = (t, L, extra = "") => `<div class="card g1 wlg"><div class="hd"><h2>${esc(t)}</h2><span class="sub">${L.length} name${L.length === 1 ? "" : "s"}</span>${extra}</div><div class="bd">${L.length ? `<div class="tscroll" style="max-height:none"><table class="mini wlt">${head}<tbody>${L.map(e => wlRowHTML(e, all)).join("")}</tbody></table></div>` : `<div class="empty" style="padding:4px 0">${t.startsWith("MAP") ? "Empty — type tickers in the boxes above or import today's MAP." : t.startsWith("My Fav") ? "Pin any name with ☆ (here, on the Daily Plan, the Entry Check lists or the ticker panel), or add tickers below." : t.startsWith("Held") ? "No held names — type them in the Held box." : S.has.hist ? "None today." : "Needs the price history."}</div>`}
+  const tbl = (t, L, extra = "") => `<div class="card g1 wlg${/\(paper\)$/.test(t) ? " wlpaper" : ""}"><div class="hd"><h2>${esc(t)}</h2><span class="sub">${L.length} name${L.length === 1 ? "" : "s"}</span>${extra}</div><div class="bd">${L.length ? `<div class="tscroll" style="max-height:none"><table class="mini wlt">${head}<tbody>${L.map(e => wlRowHTML(e, all)).join("")}</tbody></table></div>` : `<div class="empty" style="padding:4px 0">${t.startsWith("MAP") ? "Empty — type tickers in the boxes above or import today's MAP." : t.startsWith("My Fav") ? "Pin any name with ☆ (here, on the Daily Plan, the Entry Check lists or the ticker panel), or add tickers below." : t.startsWith("Held") ? "No held names — type them in the Held box." : S.has.hist ? "None today." : "Needs the price history."}</div>`}
     ${t.startsWith("My Fav") ? `<div style="display:flex;gap:6px;margin-top:6px"><input type="text" id="wlAddIn" placeholder="Add tickers (any separator)" style="flex:1;max-width:320px"><button class="btn sm" data-wla>Add</button></div>` : ""}</div></div>`;
   if (!$("mapImpBox")) box.insertAdjacentHTML("beforebegin", `<div class="card g1" id="mapImpBox"></div>`);
   if (!$("mapImpBox").contains(document.activeElement)) $("mapImpBox").innerHTML = mapImpHTML();
@@ -14669,7 +14674,8 @@ function TVL_SECS(C){
       {k: "obeP", n: "Approaching", def: 1, need: H, f: tvlOBItems(C, true, S2("ap"))},
       {k: "obeW", n: "Second test / tested — watch only", def: 0, need: H, f: tvlOBItems(C, true, OB_WATCH)}]},
     {k: "sh", h: "SHORT RESEARCH", n: "Short research · stocks", perm: "watch only · no live stock shorts", items: [
-      ...(typeof flsTvlItems === "function" ? flsTvlItems(H) : []),   // 7 Nov 2026: Short · Former leader, lower high (paper; script "SHORT · FORMER LEADER, LOWER HIGH") — off DS Daily like every short research item
+      ...(typeof flsTvlItems === "function" ? flsTvlItems(H) : []),
+      ...(typeof mppTvlFS === "function" ? mppTvlFS(false) : []),   // 7 Nov 2026: MAP's FS paper list, stocks (MAP · FP / FS PAPER LINES) — off DS Daily   // 7 Nov 2026: Short · Former leader, lower high (paper; script "SHORT · FORMER LEADER, LOWER HIGH") — off DS Daily like every short research item
       {k: "shF", n: "At a failed bounce, no blocker", def: 0, need: H, f: () => shortList().filter(r => r.sLoc && !r.sBlock.length).sort((a, b) => (b.ss.n - a.ss.n) || ((a.rs ?? 99) - (b.rs ?? 99))).map(r => tvlE(r.sym, `Short watch · ${r.sLoc} · weakness ${r.ss.n}/7`))},
       {k: "shM", n: "Rebounding — kept in short research memory", def: 0, need: H, f: () => tvlCampOpen(["SH"]).filter(c => c.reb || c.miss).map(c => tvlE(c.s, `Short research memory · since ${c.since} · ${c.st}${c.miss ? ` · not in today's data (last on the watch ${c.seen})` : ` · ${c.off} session${c.off === 1 ? "" : "s"} off the watch`}`, c.st))},
       {k: "shFR", n: "Failed rally · rejection confirmed", def: 0, need: H, f: () => typeof frRows === "function" ? frRows().filter(o => o.x.st === "rej").map(o => tvlE(o.r.sym, `Failed rally research · Rejection confirmed · ${o.x.kind} ${frP(o.x.lv)}`, "Rejection confirmed")) : null},
@@ -14678,6 +14684,7 @@ function TVL_SECS(C){
       {k: "shA", n: `Weakness score ${CFG.shortMin}+ of 7 (all)`, def: 0, need: H, f: () => shortList().sort((a, b) => ((!!a.sBlock.length) - (!!b.sBlock.length)) || (b.ss.n - a.ss.n) || ((a.rs ?? 99) - (b.rs ?? 99))).map(r => tvlE(r.sym, `Short watch · weakness ${r.ss.n}/7${r.sBlock.length ? " · blocked" : ""}`))}]},
     {k: "she", h: "SHORT RESEARCH ETFS", n: "Short research · ETFs", etf: 1, perm: "ETF setups short side · experiment", items: [
       {k: "sheE", n: "MAP ETF list · short", def: 1, f: tvlMapE("short")},
+      ...(typeof mppTvlFS === "function" ? mppTvlFS(true) : []),   // 7 Nov 2026: MAP's FS paper list, ETFs (MAP · FP / FS PAPER LINES) — off DS Daily
       {k: "sheR", n: "ETF setups · Ready (short)", def: 1, need: H, f: tvlESItems(C, "short", true)},
       {k: "sheW", n: "ETF setups · Reclaim watch (short)", def: 1, need: H, f: tvlESItems(C, "short", false)},
       {k: "sheX", n: "Their inverse wrappers", def: 0, need: H, f: tvlESWraps(C, "short")}]},
@@ -17594,6 +17601,10 @@ hookOn("tab", "mapTrackCsv", t => { if (t === "plan" && S.snap) mlCsvBtn(); });
 const MSC = {d1: "2026-10-26", days: 20, FILL: 5, HOLD: 10, bar: 50};
 const MSC_G = [["A", "MAP Focus A"], ["B", "MAP Focus B"], ["S", "MAP On deck / Stalk"], ["q5", "Daily Plan · Ready first 5"], ["nd", "New Discoveries"], ["oth", "Other Ready names"]];
 const MSC_K = {win: "win", loss: "loss", open: "open", nofill: "not triggered", pending: "pending", nolv: "no levels", nodata: "no data"};
+// 7 Nov 2026 (in place, tracking only): rows added by later sections, drawn under the six rows with their own heading —
+// {k, l, sub, show() → bool, agg(win: "last" | "since") → {n, win, loss, open, nofill, pend, nodata, R: [], sw, sl, trig, res, rate,
+// avgR, sres, srate, days}, csv() → rows in the scorecard CSV's columns}. First user: MAP · FP / FS PAPER LINES.
+const MSC_X = [];
 
 /* ---------- pure maths ---------- */
 // B(t) → [open, high, low, close] of session t; n = sessions stored; tf = fill session; stop / tgt; hold = sessions after tf
@@ -17695,20 +17706,26 @@ function mscRateHTML(v, res){
   const c = v >= MSC.bar ? "ok" : "bad";
   return `<span class="msc-r ${c}">${Math.round(v)}%</span><span class="msc-bar" title="50% line marked"><i class="${c}" style="width:${Math.max(0, Math.min(100, v)).toFixed(1)}%"></i><b></b></span><span class="small dim"> of ${res}</span>`;
 }
-function mscTable(I, days, title){
+function mscTable(I, days, title, win){
   const G = mscAgg(I, days);
-  const row = ([k, l]) => { const a = G[k];
-    return `<tr data-msc="${k}"><td class="l"><b>${l}</b>${k === "nd" ? `<div class="small dim">exception, your call · counts toward the 15 entries a week</div>` : k === "oth" ? `<div class="small dim">baseline — Entry Check Ready, on none of the rows above</div>` : ""}</td>
-      <td>${a.n}</td><td>${a.trig}${a.nofill ? `<div class="small dim">${a.nofill} not triggered</div>` : ""}${a.pend ? `<div class="small dim">${a.pend} waiting for bars</div>` : ""}</td><td>${a.open}</td><td>${a.win}</td>
+  const row = ([k, l], a0, sub) => { const a = a0 || G[k];
+    return `<tr data-msc="${k}"><td class="l"><b>${l}</b>${k === "nd" ? `<div class="small dim">exception, your call · counts toward the 15 entries a week</div>` : k === "oth" ? `<div class="small dim">baseline — Entry Check Ready, on none of the rows above</div>` : sub ? `<div class="small dim">${sub}</div>` : ""}</td>
+      <td>${a.n}</td><td>${a.trig}${a.nofill ? `<div class="small dim">${a.nofill} not triggered</div>` : ""}${a.pend ? `<div class="small dim">${a.pend} waiting for bars</div>` : ""}${a.nodata ? `<div class="small dim">${a.nodata} no 30-min data</div>` : ""}</td><td>${a.open}</td><td>${a.win}</td>
       <td class="l msc-w">${mscRateHTML(a.rate, a.res)}${jnFew(a.res)}</td><td class="${jnCls(a.avgR)}">${jnFmtR(a.avgR)}<div class="small dim">${a.R.length} finished</div></td><td class="l msc-w">${mscRateHTML(a.srate, a.sres)}</td></tr>`; };
   return `<h4 style="margin:8px 0 2px">${title} <span class="small dim">${days.length ? `${days.length} plan day${days.length === 1 ? "" : "s"} · ${esc(jnDay(days[0]))} – ${esc(jnDay(days[days.length - 1]))}` : "no plan days logged yet"}</span></h4>
-    <div class="tscroll" style="max-height:none"><table class="mini msc-t"><thead><tr><th class="l">List</th><th>Names scored</th><th>Triggered</th><th>Open</th><th>Wins</th><th class="l">Win rate (target 50%)</th><th>Avg R (replay)</th><th class="l">Win rate, 1 ADR stop</th></tr></thead><tbody>${MSC_G.map(row).join("")}</tbody></table></div>`;
+    <div class="tscroll" style="max-height:none"><table class="mini msc-t"><thead><tr><th class="l">List</th><th>Names scored</th><th>Triggered</th><th>Open</th><th>Wins</th><th class="l">Win rate (target 50%)</th><th>Avg R (replay)</th><th class="l">Win rate, 1 ADR stop</th></tr></thead><tbody>${MSC_G.map(g => row(g)).join("")}${mscXRows(row, win)}</tbody></table></div>`;
+}
+// 7 Nov 2026: the MSC_X rows (each section's own aggregate for the window), under a heading row; none shown → nothing
+function mscXRows(row, win){
+  const X = MSC_X.filter(x => { try { return x.show(); } catch (e) { return false; } }); if (!X.length) return "";
+  return `<tr class="msc-xh"><td class="l small" colspan="8"><b>MAP's paper lists</b> <span class="dim">— not Focus A / B / On deck; scored on their own rules, kept apart</span></td></tr>`
+    + X.map(x => { let a = null; try { a = x.agg(win); } catch (e) { console.warn("MAP scorecard row", x.k, e); } return a ? row([x.k, x.l], a, x.sub + (a.days ? ` · ${a.days} day${a.days === 1 ? "" : "s"}` : "")) : ""; }).join("");
 }
 function mscCardHTML(){
   const I = mscIndex(), D = mscDays(I), hist = !!HIST.nD;
   return `<div class="card g1" id="mscCard"><div class="hd"><h2>Does MAP surface winners? (target 50%)</h2><span class="sub">win = +1R before the stop · daily bars · tracking only</span><span class="spacer"></span><button class="btn sm" id="mscCsv" title="Every scored name per plan day, incl. New Discoveries found in Live mode">Download scorecard CSV</button></div><div class="bd">
     ${hist ? "" : `<div class="jn-warn">Scoring needs the stored price history (Massive). <button class="btn sm" data-hist="full">Load price history</button></div>`}
-    ${mscTable(I, D.last, `Last ${MSC.days} plan days`)}${mscTable(I, D.since, "Since 26 Oct (test day 1)")}
+    ${mscTable(I, D.last, `Last ${MSC.days} plan days`, "last")}${mscTable(I, D.since, "Since 26 Oct (test day 1)", "since")}
     <div class="small dim" style="margin-top:6px"><b>Triggered</b> = within 5 sessions after the plan's data, a daily bar trades through the planned entry (the Board log's own fill). <b>Win</b> = price then reaches entry + 1R before the stop (stop and 1R as the Board log scores them: planned entry − 0.6 ADR). On the fill day a win needs the high at +1R with the low above the stop; a day that touches both = a loss. Nothing in 10 sessions after the fill = <b>open</b>: counted, but left out of the win rate (wins ÷ wins + losses). <b>1 ADR stop</b> = the same fills with the stop 1 ADR under the fill and +1R = 1 ADR — if this row clears 50% and the other doesn't, the stop is the problem, not the picking. New Discoveries found in Live mode are scored from the facts frozen when they were found. Under 30 resolved names a row is a hint, not a result. Nothing here changes a list, a rank or the plan.</div></div></div>`;
 }
 // its own box right above the Board log body (#jnBody), so renderJournal's redraws never remove it — no page watcher
@@ -17737,6 +17754,7 @@ function mscCsv(){
       n4(lv.entry), n4(lv.stop), n4(r1), r1 != null ? n4(lv.entry + r1) : "", n4(lv.adrD), n4(s.fill), dt(s.tf), MSC_K[s.k] || s.k, dt(s.xt), n4(s.sStop), n4(s.sTgt), MSC_K[s.sh] || s.sh, dt(s.sxt),
       JN_OUT[x.sim.k] || x.sim.k, jnFinished(x.sim) ? n4(x.sim.R) : ""].map(q).join(","));
   }
+  for (const x of MSC_X) { if (!x.csv) continue; try { for (const r of x.csv()) L.push(r.map(q).join(",")); } catch (e) { console.warn("MAP scorecard CSV", x.k, e); } }   // 7 Nov 2026: the MSC_X rows' names
   if (L.length < 2) { toast("Nothing scored yet"); return; }
   download(`deep-space-map-scorecard-${fmtDate(new Date())}.csv`, L.join("\n"), "text/csv");
 }
@@ -17923,6 +17941,9 @@ document.head.insertAdjacentHTML("beforeend", `<style>
    Storage NEW: adrb.fpLog, adrb.fpTrackShow ("all" | "R" | "D"), adrb.pbRes ({open, k: "r1" | "ob"} — the Research card).
    adrb.pb gains the value "fp"; adrb.pbGF the key "fp". No function overrides (hooks "tab" / "panel", registries, guarded
    in-place calls). Test: tools/board-first-pullback-test.js.
+   7 Nov 2026 (later, display / tracking only): script "MAP · FP / FS PAPER LINES" adds guarded in-place calls here —
+   mppFpTag (card rows), mppFpMissHTML (after On deck), mppFpTrTag (tracker rows), mppTvlFP (TradingView item) — all empty
+   without MAP FP lines; lists, ranks, tracker log and feed columns unchanged.
    ===================================================================== */
 const FPC = {minBars: 100, brk: 40, brkLB: 50, s50N: 50, s50LB: 10, s50Flat: 0.995, wkLen: 10, legN: 63, legMin: 25, legAgoMin: 3, legAgoMax: 15,
   depthMax: 50, near: 0.5, volN: 50, rngN: 3, rngMax: 0.75, adrN: 20, rsMin: 70, liqTier: 500e6, risk: 0.6, wide: 1.0, tight: 0.25,
@@ -18116,7 +18137,7 @@ function fpCardHTML(){
   const to = (A.R[0] || A.D[0] || A.O[0] || {x: {}}).x.to || HIST.dates[HIST.nD - 1] || "—";
   const er = f => `<td class="${f.ck[12].ok ? "" : "neg"}">${f.er.n == null ? "?" : f.er.n}</td>`;
   const row = f => { const x = f.x, r = f.r;
-    return `<tr data-sym="${esc(r.sym)}"><td class="l sym">${esc(r.sym)}${typeof fpPivTag === "function" ? fpPivTag(f) : ""}${typeof lpBadge === "function" ? " " + lpBadge(r.sym) : ""}</td><td>${rsBadge(r.rs)}</td><td class="l small">${esc(r.group || "")}<br><span class="dim">${esc(r.gState || "")}</span></td>
+    return `<tr data-sym="${esc(r.sym)}"><td class="l sym">${esc(r.sym)}${typeof fpPivTag === "function" ? fpPivTag(f) : ""}${typeof mppFpTag === "function" ? mppFpTag(r.sym) : ""}${typeof lpBadge === "function" ? " " + lpBadge(r.sym) : ""}</td><td>${rsBadge(r.rs)}</td><td class="l small">${esc(r.group || "")}<br><span class="dim">${esc(r.gState || "")}</span></td>
       <td class="l">${fpLocPill(f)}</td><td>${sg(x.d9, 2)}</td><td>${sg(x.d21, 2)}</td><td title="Leg: ${esc(f.ck[5].v)}">${fin(x.leg.pct) ? "+" + x.leg.pct.toFixed(0) + "%" : "—"}<br><span class="dim small">${x.leg.ago}d ago</span></td>
       <td title="Share of the leg given back">${fin(x.depth) ? x.depth.toFixed(0) + "%" : "—"}</td><td class="${f.ck[8].ok ? "pos" : "neg"}">${fin(x.volRatio) ? x.volRatio.toFixed(2) + "×" : "—"}</td><td class="${f.ck[9].ok ? "pos" : "neg"}">${fin(x.rngRatio) ? x.rngRatio.toFixed(2) : "—"}</td>
       <td class="l small">${f.stage ? esc(f.stage.lab) : "—"}</td>${er(f)}<td>${p2(x.leg.hi)}<br><span class="dim small">${fin(x.room) ? x.room.toFixed(1) + "R est." : ""}</span></td><td class="l small">${esc(fpNext(f))}</td></tr>`; };
@@ -18131,7 +18152,7 @@ function fpCardHTML(){
       <div class="kpi card"><div class="k">Not yet</div><div class="v">${n("N")}</div><div class="n">more than 0.5 ADR above both lines</div></div>
       <div class="kpi card"><div class="k">Out</div><div class="v">${n("O")}</div><div class="n" title="The first check that fails">${Object.entries(ffc).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => `${FP_CK[k]}: ${v}`).join(" · ")}</div></div></div>
     <h4 style="margin:8px 0 2px">Ready${fl}</h4>${tbl(L.R, "No name passes every First Pullback check today.")}
-    <h4 style="margin:12px 0 2px">On deck</h4>${tbl(L.D, "Nothing on deck.")}
+    <h4 style="margin:12px 0 2px">On deck</h4>${tbl(L.D, "Nothing on deck.")}${typeof mppFpMissHTML === "function" ? mppFpMissHTML() : ""}
     <details class="tp-fold" style="margin-top:8px"><summary>Not yet (${L.N.length})</summary><div style="padding:6px 0">${L.N.slice(0, 80).map(f => tkChip(f.r, sg(f.x.d9, 1))).join("") || `<span class="dim small">none</span>`}</div></details>
     <details class="tp-fold"><summary>Out but close — a leg or the location is there (${ro.length})</summary><div class="small" style="padding:6px 0">${ro.slice(0, 60).map(f => `<span class="tk" data-sym="${esc(f.r.sym)}">${esc(f.r.sym)}</span> <span class="dim">${esc(f.ffTxt)}</span>`).join(" · ") || "none"}</div></details>
     <details class="tp-fold"><summary>How the lists work (Notion v1.0)</summary><div class="small" style="padding:6px 0"><b>Ready</b> = checks 1–12 pass · <b>On deck</b> = exactly one of 4 Stage 1, 8 drying volume, 9 contraction or 12 earnings missing · <b>Not yet</b> = more than 0.5 ADR above both lines, everything else passes · <b>Out</b> = anything else. Checks: 1 liquidity as Playbook 1 (incl. 1b) · 2 ≥ 100 sessions, no move over 40% · 3 close over a rising or flat 50 SMA, weekly close over the 10-week · 4 Stage 2 (2A = fresh from Stage 1) · 5 a leg of 25%+ in 63 sessions, its high 3–15 sessions ago · 6 no more than half the leg given back · 7 within ±0.5 ADR of the daily 9 or 21 EMA · 8 pullback volume under the 50-day average · 9 last 3 ranges ≤ 0.75 ADR · 10 RS ≥ 70 · 11 group not Lagging · 12 no earnings in 5 sessions · 13 room to the leg high (information) · 14 the live trigger. Ready order: at the 9 → stage age EARLY / MID / LATE → $500M+ a day → RS. Paper only: never on the Daily Plan, the Entry Check lists or the Board log.</div></details>
@@ -18217,6 +18238,7 @@ function fpWatchPaint(box, pbw){
 function fpTvlSecs(C, H){
   const items = (k, n, def) => () => { if (!pbHH()) return null; const L = fpLists(true); return L[k].map(f => tvlE(f.r.sym, `First Pullback · ${n} · ${FP_LOC[f.x.loc] || ""}`, n)); };
   return [{k: "fp", h: "FIRST PULLBACK", n: "First Pullback · stocks", perm: "Playbook 2 · paper / watch only", items: [
+      ...(typeof mppTvlFP === "function" ? mppTvlFP() : []),   // 7 Nov 2026: MAP's FP paper list (MAP · FP / FS PAPER LINES) — off DS Daily
       {k: "fpR", n: "Ready", def: 0, pre: 1, need: H, f: items("R", "Ready")},
       {k: "fpD", n: "On deck", def: 0, pre: 1, need: H, f: items("D", "On deck")},
       {k: "fpT", n: "First Pullback tracker (every name tracked)", def: 0, f: () => fpTrackRows("all").map(o => tvlE(o.s, `First Pullback tracker · ${FP_L[o.k].n} ${o.d}`))},
@@ -18327,7 +18349,7 @@ function fpTrackHTML(){
   return hd + `<div class="bd">
     <div class="small" style="margin-bottom:6px"><b>Paper tally</b> (rows shown): ${T.sig} signal${T.sig === 1 ? "" : "s"} with first-candle data · ${T.trig} triggered · <b class="pos">${T.win} win${T.win === 1 ? "" : "s"}</b> · <b class="neg">${T.loss} loss${T.loss === 1 ? "" : "es"}</b> · ${T.open} open · ${T.nofill} not triggered${T.nodata ? ` · ${T.nodata} with no 30-min data` : ""}${T.pend ? ` · ${T.pend} pending` : ""} · win rate ${wr == null ? "—" : `<b class="${wr >= 40 ? "pos" : "neg"}">${wr.toFixed(0)}%</b>`} <span class="dim">(win = +1R before the stop; kill rule: after 30 paper signals, drop it under a 40% win rate or if it isn't +0.15R a trade better than Leader Pullback)</span></div>${typeof fpPivTally === "function" ? fpPivTally(rows) : ""}
     <div class="tscroll" style="max-height:440px"><table class="mini fptr"><thead><tr><th class="l">First seen</th><th class="l">List</th><th class="l">Ticker</th><th class="l">Location</th><th>Then</th><th>ADR</th><th>Leg high</th><th>PB low</th><th>Now</th><th>Move</th><th>Move ADR</th><th>Best</th><th>Worst</th><th>Sessions</th><th class="l">List now</th><th class="l">First 30-min candle (${"next session"})</th><th class="l">Result</th></tr></thead><tbody>
-    ${rows.map(o => `<tr ${o.r ? `data-sym="${esc(o.s)}"` : ""}><td class="l">${esc(o.d)}${o.last !== o.d ? `<div class="small dim">to ${esc(o.last)}</div>` : ""}</td><td class="l"><span class="pill ${FP_L[o.k].c}">${FP_L[o.k].n}</span></td><td class="l sym">${esc(o.s)}${typeof fpPivTrTag === "function" ? fpPivTrTag(o) : ""}</td>
+    ${rows.map(o => `<tr ${o.r ? `data-sym="${esc(o.s)}"` : ""}><td class="l">${esc(o.d)}${o.last !== o.d ? `<div class="small dim">to ${esc(o.last)}</div>` : ""}</td><td class="l"><span class="pill ${FP_L[o.k].c}">${FP_L[o.k].n}</span></td><td class="l sym">${esc(o.s)}${typeof fpPivTrTag === "function" ? fpPivTrTag(o) : ""}${typeof mppFpTrTag === "function" ? mppFpTrTag(o) : ""}</td>
       <td class="l small">${esc(FP_LOC[o.loc] || "—")}</td><td>${p2(o.px)}</td><td>${fin(o.adr) ? o.adr.toFixed(1) + "%" : "—"}</td><td>${p2(o.legHi)}</td><td>${p2(o.pbLow)}</td><td>${o.now == null ? "—" : p2(o.now)}</td>
       <td class="${o.pct == null ? "" : o.pct >= 0 ? "pos" : "neg"}">${o.pct == null ? "—" : sg(o.pct, 1) + "%"}</td><td class="${o.u == null ? "" : o.u >= 0 ? "pos" : "neg"}"><b>${fu(o.u)}</b></td><td>${fu(o.best)}</td><td>${fu(o.worst)}</td><td>${o.sess || "—"}</td>
       <td class="l">${o.f ? fpPill(o.f) : `<span class="dim small">${o.r ? "—" : "not in the file"}</span>`}</td>
@@ -18485,11 +18507,81 @@ document.head.insertAdjacentHTML("beforeend", `<style>
    bounce-high / swing-support / stop / room loops for every passing and near-miss name and a sample of Out names, and the
    top 3 re-sorted. Storage: none new (reads adrb.mapLog and adrb.mapRegime only). No function overrides, no page watcher.
    Test: tools/board-former-leader-short-test.js.
+
+   REBUILD FOR PAPER TESTING (7 Nov 2026, later the same day) — TRADING LOGIC, paper / watch only, never sized. Changed in
+   place in this section (no new section, no override, no page watcher). Eugene (chat, 7 Nov 2026), pasting the handover
+   docs/former-leader-short-rebuild-handover-2026-11-07.md (kept verbatim; it is the build spec): "i want a revised
+   pinescript for Former leaders short based on above. If any changes are required for the board, please proceed". Where it
+   changes the Notion v1.0 page (the hard SPY gate, the single daily route) Eugene's chat ruling decides until the page is
+   updated with his yes (proposed edit: docs/notion-edit-draft-former-leader-short-2026-11-07.md). TradingView twin: the same
+   Pine script, rebuilt the same day.
+   - TWO ROUTES. "Daily failed rally" = v1 above, unchanged (checks 2–10, flsCalc). NEW "Early failed retest" (handover §1):
+       daily parts, fixed before the session (flsEarlyDaily): resistance R = the highest high of the previous 5 completed
+       sessions (FLSE.look); ADR$ = the same failed-rally ADR as v1 (20-day mean(high ÷ low − 1) × close) of the previous
+       completed session; test band = R ± 0.25 ADR$ (FLSE.tol); former leader = v1's check 2 (Pine proxy or MAP's lists)
+       on those bars; support = v1's confirmed swing lows (lower than the 3 sessions each side, last 60) of those bars — the
+       nearest one under the trigger price — else their 20-session low (flsSupAt). "Previous completed" = before Live mode's
+       session date; else before today's bar when the file is from inside the session (file clock before 16:00 ET); else
+       the last stored bar (then the watch is for the next session).
+       board checks kept visible (handover §2 "Keep the board's rank, group and liquidity checks visible"): weakest-3 group
+       (stocks; ETFs have none — tracked separately), tradeable liquidity not OUT, earnings — stocks: a known report inside
+       the next 5 sessions = Out, unknown = "earnings unknown — verify" (flag, not a block); ETFs (the board's ETF file /
+       ETF classification, never inferred from a missing date) = "Earnings N/A". NOT used (handover §1.4): v1's broken /
+       bounce-stage / test-day low / bounce-high checks. Ranked like v1: weakest RS first, the first 3 stocks listed.
+       intraday (flsIntraday — PURE: daily inputs, 30-min bars, tick → per-bar reads + the session's one entry): only on
+       COMPLETED regular-session 30-min bars of the session (Live mode's Massive bars, LV.today, 15 min delayed — the same
+       bars First Pullback's live candle reads). Amber = a bar whose high is inside the band (never a signal). Green = a
+       later bar (the candidate) where the max high of the 1–3 completed bars before it in the session (FLSE.win, candidate
+       excluded) is inside the band, the candidate's high is strictly lower than that max, its close is under R and at
+       least one tick under the prior bar's low (raw prices, a millionth-of-a-tick float allowance), closing at/after 10:00
+       ET. Risk at that close: stop = the first tick strictly above the session high so far; support = flsSupAt(close);
+       positive risk, stop ≤ 1.5 ADR, room ≥ 2R, else "Skipped: <value>" (does not use the session's entry). Paper fill =
+       the next 30-min bar's open in the same session, rechecked against the frozen stop and support → "Filled at <open>"
+       or "Skipped at open: <reason>"; the green is never erased. Then +2R / stop from the later bars (same bar both =
+       stop). Without 30-min bars: Watch + the next action. Tick = $0.01 ($0.0001 under $1).
+       Daily route on the same bars (stocks passing v1, when Live mode's 30-min EMA history exists): v1's trigger — a
+       30-min close under the 30-min 21 EMA after a close at or above it, from the 10:00 ET close; stop = max(bounce high,
+       session high) and room to v1's support at that close (the Pine twin's v1 maths); first daily cross of the session
+       used (sold or skipped), as v1. ONE paper entry per ticker per session across both routes: the first passing green
+       wins; both on one bar = one entry carrying both route flags (stop / support from the early route).
+   - MARKET GATE MODES (setting adrb.flsGate, new key): "Context only" (default) — MAP's call and SPY's state are shown
+       beside each name ("MAP: Defensive (imported)" / "MAP: not set"; SPY under / over its 50 SMA, 9 vs 21 EMA, or
+       "unknown") and never block a list, a green or the CSV. "Legacy hard gate" — v1's flsGateCalc exactly ("Short side
+       closed today — …", would-have-passed folds) for both routes. Routes shown: adrb.flsRoutes (new key: both / early /
+       daily; display only). Legacy + daily route only = the v1 card body exactly (the test compares it with the old board).
+   - EXPORTS: Download CSV keeps its 48 columns (same meanings; ETF rows appended after the stocks with the v1 columns
+       blank) and appends FLS_CSV_H2. Copy for TradingView = the names the card shows (unchanged meaning). TradingView lists:
+       "Short · Former leader" unchanged; new "Short · Former leader, early retest" (shFLe, off by default). No feed columns.
+   - SELF-CHECK (flsSelf): adds the early route's 5-day resistance / ADR$ / band / pass recomputed with its own loops for
+       the listed and a sample of other names, and the gate mode's list behaviour.
+   Test: tools/board-fls-early-test.js (pure function + card); v1 checks in tools/board-former-leader-short-test.js run in
+   Legacy + daily route only.
+   7 Nov 2026 (later, display / tracking only): script "MAP · FP / FS PAPER LINES" adds seven FS feed columns at the end of
+   the Deep Space feed (from flsRun, nothing here changes) and guarded in-place calls in this script — mppFsTag in the three
+   row builders, mppFsMissHTML in flsBody / flsV1Body (both empty without MAP FS lines, so the v1 body is unchanged).
+   7 Nov 2026 (later, TRADING LOGIC — Eugene's chat ruling: "weak group as context."): in "Context only" the weakest-3 group
+       check (v1 check 4; the early route's "Weak group") is shown as context and never blocks either route — f.grpCtx marks
+       the check ctx: true and it is left out of fails, so a short in a strong group can list and go green with its group
+       rank beside it (flsGrpTag). Liquidity, earnings, former leader and the chart checks still block. "Legacy hard gate"
+       keeps v1's rule exactly (the v1 body and its test are unchanged). CSV: one appended column, group_role
+       (context / blocks / n/a (ETF)); ck4_weak_group keeps its meaning (is the group in the weakest 3). Self-check follows
+       the mode. Notion v1.0 still lists check 4 as a block until Eugene okays the page edit.
    ===================================================================== */
 const FLS = {mapN: 63, leadN: 63, leadPct: 30, s50N: 50, s50Slope: 5, weakN: 3, stopMax: 1.5, roomMin: 2.0, top: 3};
 const FLS_CK = {1: "Market gate", 2: "Former leader", 3: "Broken", 4: "Weak group", 5: "Bounce into resistance", 6: "Not extended", 7: "Stop", 8: "Room", 9: "Earnings", 10: "Liquidity"};
 const FLS_NEXT = "On TradingView: 30-min close below the 30-min 21 EMA after a close at or above it, from 10:00 ET; stop above the bounce high";
 const FLSX = {key: null, run: null};
+// 7 Nov 2026 rebuild — early failed retest (handover §1 defaults: 5-session lookback, ±0.25 ADR band, 1–3 bar window)
+const FLSE = {look: 5, tol: 0.25, win: 3, firstClose: 600, barMin: 30, stopMax: 1.5, roomMin: 2.0, top: 3};
+const FLS_ECK = {lead: "Former leader", group: "Weak group", earn: "Earnings", liq: "Liquidity", data: "Daily data"};
+const FLS_GATE_K = "adrb.flsGate", FLS_ROUTE_K = "adrb.flsRoutes";
+const flsGateMode = () => { let v = null; try { v = store.get(FLS_GATE_K, null); } catch (e) { v = null; } return v === "legacy" ? "legacy" : "ctx"; };
+const flsRoutes = () => { let v = null; try { v = store.get(FLS_ROUTE_K, null); } catch (e) { v = null; } return v === "early" || v === "daily" ? v : "both"; };
+function flsSet(k, v){ try { store.set(k, v); } catch (e) { console.warn("former leader short setting", e); } FLSX.key = null; }
+const flsTick = px => fin(px) && px < 1 ? 0.0001 : 0.01;
+// the first valid tick strictly above x (on the tick grid: x + 1 tick)
+const flsTickAbove = (x, tk) => { const dp = Math.max(0, Math.round(-Math.log10(tk))); return +((Math.floor(x / tk + 1e-6) + 1) * tk).toFixed(dp); };
+const flsHM = ms => hhmm(etMin(ms) + FLSE.barMin);   // a 30-min bar's CLOSE time, ET (bars carry their open time)
 
 /* ---------------- pure maths ---------------- */
 // the market gate: MAP's call + SPY's own daily bars (b = dssBars("SPY") or null)
@@ -18528,6 +18620,7 @@ function flsCalc(b, f){
   add(2, leadOk || !!f.mapSeen, `${fin(lead.pct) ? `63-session high ${p2(lead.hi)} (${lead.hiDate}) is ${lead.pct.toFixed(1)}% over the prior 63-session low ${p2(lead.lo)}` : "not enough bars for the 63 + 63-session run"}${leadOk ? " ✓" : ""} · ${f.mapSeen ? `on MAP's lists ${f.mapSeen} ✓` : "not on MAP's lists in the last 63 sessions"}`);
   add(3, fin(s50) && close < s50 && fin(s50b) && s50 < s50b, `close ${p2(close)} vs 50 SMA ${p2(s50)} · 50 SMA vs 5 sessions ago ${p2(s50b)}`);
   add(4, f.weak > 0, f.gRank ? `${f.group} is #${f.gRank} weakest of ${f.gN} groups` : `${f.group || "no group"} has no group RS`);
+  if (f.grpCtx) { ck[4].ctx = true; ck[4].v += ck[4].ok ? " (context)" : " (context — not one of the weakest 3, doesn't block)"; }   // Eugene, 7 Nov: "weak group as context."
   const st = fr ? fr.st : null;
   add(5, st === "test" || st === "rej", fr ? `${FR_ST[st].n}${fr.kind ? ` · ${fr.kind} ${p2(fr.lv)}` : ""}${fr.testDate ? ` · test ${fr.testDate}` : ""}` : "not under its 50 SMA (no failed-rally stage)");
   add(6, st !== "ext", st === "ext" ? `too late — don't chase: ${fin(below) ? (-below).toFixed(2) : "?"} ADR under the test-day low ${p2(testLow)}` : fin(below) ? `${below >= 0 ? below.toFixed(2) + " ADR above" : (-below).toFixed(2) + " ADR under"} the test-day low ${p2(testLow)}` : "no test yet");
@@ -18537,12 +18630,121 @@ function flsCalc(b, f){
   const er = f.er || {n: null};
   add(9, er.n != null && er.n >= S61.erMin, er.n == null ? "earnings date unknown" : `earnings in ${er.n} session${er.n === 1 ? "" : "s"}`);
   add(10, f.liq !== "OUT", f.liq ? `tradeable liquidity ${f.liq}` : "tradeable liquidity not checked (no trade counts stored)");
-  const fails = [2, 3, 4, 5, 6, 7, 8, 9, 10].filter(n => !ck[n].ok);
+  const fails = [2, 3, 4, 5, 6, 7, 8, 9, 10].filter(n => !ck[n].ok && !ck[n].ctx);
   return {ck, fails, ff: fails.length ? fails[0] : null, pass: !fails.length, fr, lead, leadOk, s50, s50b, close, testLow, below, to: b.dates[t], n: b.n, mapSeen: f.mapSeen || null, gRank: f.gRank || 0, erN: er.n, liq: f.liq || null};
 }
 const flsFfTxt = x => { if (!x) return "no stored bars"; if (x.ff == null) return ""; const k = x.ff;
   if (k === 5 && x.fr && x.fr.st === "ext") return "5 Extended — too late, don't chase";
   return `${k} ${FLS_CK[k]}${k === 5 ? " · " + (x.fr ? FR_ST[x.fr.st].n : "not under the 50 SMA") : k === 7 && x.fr && fin(x.fr.stopA) ? ` ${x.fr.stopA.toFixed(2)} ADR` : k === 8 && x.fr && fin(x.fr.room) ? ` ${x.fr.room.toFixed(2)}R` : ""}`; };
+
+/* ---------------- 7 Nov 2026 rebuild: the early failed retest route (pure maths) ---------------- */
+// daily parts, fixed before the session: bars 0 … upto (upto = the last COMPLETED session) only
+function flsEarlyDaily(b, upto){
+  const C = FLSE; if (!b || !(upto >= C.look - 1) || !(upto < b.n)) return null;
+  const n = upto + 1, cut = a => a.subarray ? a.subarray(0, n) : a.slice(0, n), c = cut(b.c), h = cut(b.h), l = cut(b.l);
+  let R = -Infinity; for (let k = upto - C.look + 1; k <= upto; k++) R = Math.max(R, h[k]);
+  const adrA = PZ.sma(PZ.map(n, k => h[k] / l[k]), 20)[upto], adrD = fin(adrA) ? (adrA - 1) * c[upto] : NaN;
+  // v1's confirmed swing lows (frCalc's window and rule) on these bars; sorted high → low
+  const sw = []; for (let k = Math.max(FRC.swingW, n - FRC.swingN); k <= upto - FRC.swingW; k++) { let ok = true; for (let u = 1; u <= FRC.swingW; u++) if (!(l[k] < l[k - u] && l[k] < l[k + u])) { ok = false; break; } if (ok) sw.push(l[k]); }
+  sw.sort((a, z) => z - a);
+  let lo20 = Infinity; for (let k = Math.max(0, upto - 19); k <= upto; k++) lo20 = Math.min(lo20, l[k]);
+  return {R, adrD, lo: R - C.tol * adrD, hi: R + C.tol * adrD, swings: sw, lo20, lead: flsLead({h, l, n, dates: b.dates}), ref: b.dates ? b.dates[upto] : null, close: c[upto], s50: PZ.sma(c, 50)[upto], upto};
+}
+// the nearest qualifying support under a price: the highest swing low below it, else the 20-session low
+function flsSupAt(d, px){ const s = d.swings.find(v => v < px); return s != null ? {v: s, kind: "swing low"} : {v: d.lo20, kind: "20-session low"}; }
+// risk at a price against a stop and a support (short): positive risk, stop ≤ 1.5 ADR, room ≥ 2R — else the failing value
+function flsRisk(stop, px, sup, D){
+  const risk = stop - px, rA = D > 0 ? risk / D : NaN, room = risk > 0 ? (px - sup) / risk : NaN;
+  const why = !(risk > 0) ? `no risk — ${flsPx(px)} is at or above the stop ${flsPx(stop)}` : [!(rA <= FLSE.stopMax) ? `stop ${fin(rA) ? rA.toFixed(2) : "—"} ADR (max ${FLSE.stopMax})` : "", !(room >= FLSE.roomMin) ? `room ${fin(room) ? room.toFixed(2) : "—"}R (needs ${FLSE.roomMin})` : ""].filter(Boolean).join("; ");
+  return {stop, px, sup, risk, rA, room, ok: !why, why};
+}
+const flsPx = v => !fin(v) ? "—" : Math.abs(v * 100 - Math.round(v * 100)) > 1e-6 ? String(+v.toFixed(4)) : v.toFixed(2);
+// PURE — the session's 30-min state machine. d = flsEarlyDaily(…) (or null: early route not run); bars = [{t: bar OPEN time
+// ms, o, h, l, c}]; tick = minimum tick; o = {date: the session's ET date (other days' bars are ignored — nothing carries over
+// a night), asOf: data time ms (a bar is complete when t + 30 min ≤ asOf; default: every bar), early: false to skip the early
+// route, daily: v1's trigger inputs {ready, e21, lastC (the 30-min 21 EMA and close before the session), frHi, support,
+// adrD} or null}. Returns per-bar reads (rows), skipped rejections (skips), the session's one entry (sig: routes, stop,
+// support, risk, fill at the next bar's open + recheck, +2R / stop outcome) and a state: watch / testing / green / filled /
+// skipopen. Only completed regular-session bars are read; the fill uses the next bar's open (that bar may still be forming).
+function flsIntraday(d, bars, tick, o){
+  o = o || {}; const C = FLSE, ms = C.barMin * 6e4, asOf = fin(o.asOf) ? o.asOf : Infinity, dl = o.daily || null;
+  const B = (bars || []).filter(x => x && fin(x.t) && fin(x.o) && fin(x.h) && fin(x.l) && fin(x.c) && isRTH(x.t) && (!o.date || dET(x.t) === o.date)).sort((a, z) => a.t - z.t);
+  const done = B.filter(x => x.t + ms <= asOf), early = !!d && o.early !== false && fin(d.R) && fin(d.adrD) && d.adrD > 0;
+  const inB = v => early && v >= d.lo && v <= d.hi, eps = tick * 1e-6, k21 = 2 / 22;
+  const out = {rows: [], sig: null, skips: [], lastTest: null, n: done.length, early, daily: !!dl, state: "watch", expired: false, sessHi: NaN};
+  let sHi = -Infinity, e21 = dl && fin(dl.e21) ? dl.e21 : NaN, prevC = dl && fin(dl.lastC) ? dl.lastC : NaN, dUsed = false;
+  done.forEach((x, i) => {
+    const cm = etMin(x.t) + C.barMin; sHi = Math.max(sHi, x.h);
+    const row = {t: x.t, cm, o: x.o, h: x.h, l: x.l, c: x.c, test: inB(x.h), mx: NaN, chk: null, early: null, daily: null, e21: NaN};
+    if (row.test) out.lastTest = x.t;
+    // early route: the candidate vs the max high of the 1–3 completed bars before it in this session (candidate excluded)
+    if (early && i >= 1) {
+      let mx = -Infinity; for (let j = Math.max(0, i - C.win); j < i; j++) mx = Math.max(mx, done[j].h);
+      const chk = {band: inB(mx), lower: x.h < mx, belowR: x.c < d.R, belowLow: x.c <= done[i - 1].l - tick + eps, time: cm >= C.firstClose};
+      row.mx = mx; row.chk = chk;
+      if (chk.band && chk.lower && chk.belowR && chk.belowLow && chk.time) { const sp = flsSupAt(d, x.c); row.early = {...flsRisk(flsTickAbove(sHi, tick), x.c, sp.v, d.adrD), supKind: sp.kind, adrD: d.adrD}; }
+    }
+    // daily route (v1's trigger): a 30-min close under the 30-min 21 EMA after a close at or above it, from the 10:00 ET close
+    if (dl) { const pe = e21; e21 = fin(pe) ? pe + k21 * (x.c - pe) : NaN; row.e21 = e21;
+      if (dl.ready && !dUsed && fin(pe) && fin(prevC) && x.c < e21 && prevC >= pe && cm >= C.firstClose && fin(dl.adrD) && dl.adrD > 0) {
+        dUsed = true; row.daily = {...flsRisk(fin(dl.frHi) ? Math.max(dl.frHi, sHi) : sHi, x.c, dl.support, dl.adrD), supKind: "first support (v1)", adrD: dl.adrD}; }
+      prevC = x.c; }
+    // one paper entry per session across both routes: the first passing green; both on one bar = one entry, both flags
+    if (!out.sig) {
+      const eOk = !!(row.early && row.early.ok), dOk = !!(row.daily && row.daily.ok);
+      if (eOk || dOk) { const b0 = eOk ? row.early : row.daily;
+        out.sig = {i, t: x.t, cm, routes: [eOk ? "early" : null, dOk ? "daily" : null].filter(Boolean), stop: b0.stop, sup: b0.sup, supKind: b0.supKind, px: x.c, risk: b0.risk, rA: b0.rA, room: b0.room, adrD: b0.adrD, early: row.early, daily: row.daily}; }
+      else { if (row.early) out.skips.push({t: x.t, cm, route: "early", ...row.early}); if (row.daily) out.skips.push({t: x.t, cm, route: "daily", ...row.daily}); }
+    }
+    out.rows.push(row);
+  });
+  const g = out.sig;
+  if (g) {
+    const j = B.indexOf(done[g.i]), nb = j >= 0 ? B[j + 1] : null;
+    if (nb && nb.t <= asOf) { const r = flsRisk(g.stop, nb.o, g.sup, g.adrD); g.fill = {t: nb.t, o: nb.o, ok: r.ok, why: r.why, rA: r.rA, room: r.room}; }
+    else if (g.cm >= 960) g.fill = g.routes.includes("early") ? {none: true, why: "no next 30-min bar in this session"} : {pend: true, why: "fills at the next session's open"};
+    else g.fill = {wait: true};
+    if (g.fill.ok) { g.target = g.fill.o - 2 * (g.stop - g.fill.o);
+      for (const x of done) { if (x.t < g.fill.t) continue; if (x.h >= g.stop - eps) { g.out = {k: "stop", t: x.t}; break; } if (x.l <= g.target + eps) { g.out = {k: "2R", t: x.t}; break; } } }
+  }
+  const inWin = early && done.slice(Math.max(0, done.length - C.win)).some(x => inB(x.h));
+  out.state = g ? (g.fill.ok ? "filled" : g.fill.wait || g.fill.pend ? "green" : "skipopen") : inWin ? "testing" : "watch";
+  out.expired = !g && !inWin && out.lastTest != null; out.sessHi = done.length ? sHi : NaN;
+  return out;
+}
+// which bars are "the previous completed sessions": before Live mode's session; before today's bar when the file is from
+// inside the session (file clock before 16:00 ET); else every stored bar (the watch is then for the next session)
+function flsSessOf(b){
+  const t = b.n - 1, L = typeof LV !== "undefined" && LV.cfg && LV.cfg.on && LV.frame && LV.frame.phase === "rth" && LV.frame.dataMs ? LV.frame : null;
+  if (L) { let u = t; while (u >= 0 && !(b.dates[u] < L.date)) u--; return {sess: L.date, upto: u, live: true}; }
+  if (b.today) { const ck = typeof fileClock === "function" ? fileClock() : null; if (ck && ck.m < 960) return {sess: b.dates[t], upto: t - 1, live: false}; }
+  return {sess: nextSess(b.dates[t]), upto: t, live: false};
+}
+// the early route's checks for one name (stocks and ETFs). f = {etf, seenAt(date) → Map, weak, gRank, gN, group, erAt(date) → {n}, liq}
+function flsEarlyCalc(b, f){
+  if (!b || !(b.n >= FLSE.look)) return null;
+  const s = flsSessOf(b), d = flsEarlyDaily(b, s.upto); if (!d) return null;
+  const ck = {}, add = (k, ok, v) => { ck[k] = {k, l: FLS_ECK[k], ok: !!ok, v}; };
+  const lp = d.lead.pct, leadOk = fin(lp) && lp >= FLS.leadPct, seen = f.seenAt ? f.seenAt(d.ref) : null;
+  add("lead", leadOk || !!seen, `${fin(lp) ? `63-session high ${p2(d.lead.hi)} (${d.lead.hiDate}) is ${lp.toFixed(1)}% over the prior 63-session low ${p2(d.lead.lo)}` : "not enough bars for the 63 + 63-session run"}${leadOk ? " ✓" : ""} · ${seen ? `on MAP's lists ${seen} ✓` : "not on MAP's lists in the last 63 sessions"}`);
+  add("group", f.etf || f.weak > 0, f.etf ? "ETF — no group rank (tracked separately)" : f.gRank ? `${f.group} is #${f.gRank} weakest of ${f.gN} groups` : `${f.group || "no group"} has no group RS`);
+  if (f.grpCtx && !f.etf) { ck.group.ctx = true; ck.group.v += ck.group.ok ? " (context)" : " (context — not one of the weakest 3, doesn't block)"; }   // Eugene, 7 Nov: "weak group as context."
+  const er = f.etf ? {n: null} : (f.erAt ? f.erAt(d.ref) : null) || {n: null}, unk = !f.etf && er.n == null;
+  add("earn", f.etf || er.n == null || er.n >= S61.erMin, f.etf ? "Earnings N/A" : er.n == null ? "earnings unknown — verify" : `earnings in ${er.n} session${er.n === 1 ? "" : "s"}`);
+  add("liq", f.liq !== "OUT", f.liq ? `tradeable liquidity ${f.liq}` : "tradeable liquidity not checked (no trade counts stored)");
+  add("data", fin(d.R) && fin(d.adrD) && d.adrD > 0, fin(d.adrD) ? `ADR $${d.adrD.toFixed(2)}` : "not enough bars for the 20-day ADR");
+  const fails = ["lead", "group", "earn", "liq", "data"].filter(k => !ck[k].ok && !ck[k].ctx);
+  return {d, s, ck, fails, ff: fails[0] || null, pass: !fails.length, etf: !!f.etf, earnUnk: unk, leadOk, mapSeen: seen || null, erN: er.n};
+}
+// market context, shown beside each name (never a block in Context only)
+function flsSpyState(g){
+  const s = g && g.spy; if (!s || !fin(s.c) || !fin(s.s50) || !fin(s.e9) || !fin(s.e21)) return {k: "unknown", t: "SPY: unknown (no stored SPY bars)", short: "SPY: unknown", csv: "unknown"};
+  const a = s.c < s.s50, z = s.e9 < s.e21;
+  return {k: a && z ? "down" : !a && !z ? "up" : "mixed", t: `SPY ${a ? "under" : "over"} its 50 SMA (${p2(s.c)} vs ${p2(s.s50)}) · daily 9 EMA ${z ? "under" : "over"} the 21 EMA (${p2(s.e9)} vs ${p2(s.e21)}) · ${s.to}`,
+    short: `SPY ${a ? "under" : "over"} 50 SMA, 9 EMA ${z ? "under" : "over"} 21`, csv: `${a ? "under" : "over"} 50 SMA; 9 EMA ${z ? "under" : "over"} 21 EMA`};
+}
+const flsMapTxt = v => v ? `MAP: ${v} (imported)` : "MAP: not set";
+const flsRouteName = k => k === "early" ? "Early failed retest" : "Daily failed rally";
 
 /* ---------------- the board's inputs ---------------- */
 // the 3 weakest groups — the Weakest groups card's ranking (composite group RS, lowest first)
@@ -18554,55 +18756,163 @@ function flsMapSeen(to){
     for (const k of ["A", "B", "S"]) for (const x of e[k] || []) if (x && x[0]) out.set(x[0], d); }
   return out;
 }
-function flsKey(){ return [typeof pbKey === "function" ? pbKey() : dssKey(), JSON.stringify(mapRegime()), store._g, flsWeak().list.map(g => g.name).join(","), typeof liqKey === "function" ? liqKey() : "", S.stocks.length].join("|"); }
+// 7 Nov 2026 rebuild: the key also carries the gate mode, Live mode's 30-min bars, the ETF file and the file clock
+function flsLvKey(){
+  if (typeof LV === "undefined" || !LV.frame) return "";
+  const t = LV.today ? [...LV.today.values()].reduce((a, T) => a + (T && T.bars ? T.bars.length : 0) + (T && fin(T.asOf) ? T.asOf % 1e7 : 0), 0) : 0;
+  const h = LV.hist ? [...LV.hist.values()].reduce((a, H) => a + (H && fin(H.e21) ? H.e21 : 0), 0) : 0;
+  return [LV.cfg && LV.cfg.on ? 1 : 0, LV.frame.date, LV.frame.dataMs, LV.frame.phase, LV.today ? LV.today.size : 0, t, LV.hist ? LV.hist.size : 0, h].join(",");
+}
+function flsKey(){ const ck = typeof fileClock === "function" ? fileClock() : null; return [typeof pbKey === "function" ? pbKey() : dssKey(), JSON.stringify(mapRegime()), store._g, flsWeak().list.map(g => g.name).join(","), typeof liqKey === "function" ? liqKey() : "", S.stocks.length, flsGateMode(), flsLvKey(), S.etfs.length, ck ? ck.m : ""].join("|"); }
 const flsByRS = (a, b) => ((a.r.rs ?? 1e9) - (b.r.rs ?? 1e9)) || (a.r.sym < b.r.sym ? -1 : a.r.sym > b.r.sym ? 1 : 0);
 function flsRun(){
   if (!S.snap || !pbHH()) return null;
   const key = flsKey(); if (FLSX.key === key && FLSX.run) return FLSX.run;
   const W = flsWeak(), weakSet = new Map(W.list.map((g, i) => [g.name, i + 1])), seenBy = new Map(), bmo = s61Bmo();
   let gate; try { gate = flsGateCalc(mapRegime().v || "", HIST.idx && HIST.idx.has("SPY") ? dssBars("SPY") : null); } catch (e) { gate = flsGateCalc(mapRegime().v || "", null); }
-  const rows = [];
+  const mode = flsGateMode(), open = mode === "ctx" || gate.open;   // Context only: MAP / SPY never close the lists
+  const seenAt = to => { if (!seenBy.has(to)) seenBy.set(to, flsMapSeen(to)); return seenBy.get(to); };
+  const liqSt = s => { const q = typeof liqOf === "function" ? liqOf(s) : null; return q && q.state ? q.state : null; };
+  const rows = [], erows = [];
   for (const r of S.stocks) {
-    let x = null;
-    try { const b = dssBars(r.sym);
-      if (b && b.n >= 2) { const to = b.dates[b.n - 1]; if (!seenBy.has(to)) seenBy.set(to, flsMapSeen(to));
+    let x = null, e = null, b = null;
+    try { b = dssBars(r.sym);
+      if (b && b.n >= 2) { const to = b.dates[b.n - 1];
         const q = typeof liqOf === "function" ? liqOf(r.sym) : null, er = (() => { try { return s61Earn(r.eru, to, bmo.has(r.sym)); } catch (e) { return {n: null}; } })();
-        x = flsCalc(b, {mapSeen: seenBy.get(to).get(r.sym) || null, weak: weakSet.get(r.group) || 0, gRank: W.rank.get(r.group) || 0, gN: W.n, group: r.group, er, liq: q && q.state ? q.state : null}); } } catch (e) { console.warn("former leader short", r.sym, e); x = null; }
-    rows.push({r, x});
+        x = flsCalc(b, {mapSeen: seenAt(to).get(r.sym) || null, weak: weakSet.get(r.group) || 0, gRank: W.rank.get(r.group) || 0, gN: W.n, group: r.group, er, liq: q && q.state ? q.state : null, grpCtx: mode === "ctx"}); } } catch (e) { console.warn("former leader short", r.sym, e); x = null; }
+    try { if (b) e = flsEarlyCalc(b, {etf: false, seenAt: d => seenAt(d).get(r.sym) || null, weak: weakSet.get(r.group) || 0, gRank: W.rank.get(r.group) || 0, gN: W.n, group: r.group, grpCtx: mode === "ctx", erAt: d => { try { return s61Earn(r.eru, d, bmo.has(r.sym)); } catch (e2) { return {n: null}; } }, liq: liqSt(r.sym)}); } catch (e2) { console.warn("former leader short (early)", r.sym, e2); e = null; }
+    rows.push({r, x, e, iv: null});
+  }
+  // ETFs (the board's ETF file): early route only, tracked separately; earnings N/A
+  for (const r of S.etfs) {
+    let e = null; try { const b = dssBars(r.sym); if (b) e = flsEarlyCalc(b, {etf: true, seenAt: d => seenAt(d).get(r.sym) || null, liq: liqSt(r.sym)}); } catch (e2) { console.warn("former leader short (ETF)", r.sym, e2); e = null; }
+    erows.push({r, x: null, e, iv: null});
   }
   const pass = rows.filter(o => o.x && o.x.pass).sort(flsByRS), near = rows.filter(o => o.x && o.x.fails.length === 1).sort(flsByRS);
-  const top = gate.open ? pass.slice(0, FLS.top) : [], also = gate.open ? pass.slice(FLS.top) : [];
+  const top = open ? pass.slice(0, FLS.top) : [], also = open ? pass.slice(FLS.top) : [];
   const verdict = new Map();
-  rows.forEach(o => verdict.set(o.r.sym, !o.x ? "Out" : o.x.pass ? (gate.open ? (top.includes(o) ? `Top ${FLS.top} #${top.indexOf(o) + 1}` : "Also passing") : "Would pass — side closed") : o.x.fails.length === 1 ? "Near miss" : "Out"));
-  const run = {gate, rows, pass, top, also, near, verdict, weak: W, by: new Map(rows.map(o => [o.r.sym, o]))};
+  rows.forEach(o => verdict.set(o.r.sym, !o.x ? "Out" : o.x.pass ? (open ? (top.includes(o) ? `Top ${FLS.top} #${top.indexOf(o) + 1}` : "Also passing") : "Would pass — side closed") : o.x.fails.length === 1 ? "Near miss" : "Out"));
+  const ePass = rows.filter(o => o.e && o.e.pass).sort(flsByRS), eTop = open ? ePass.slice(0, FLSE.top) : [], eAlso = open ? ePass.slice(FLSE.top) : [];
+  const etf = erows.filter(o => o.e && o.e.pass).sort(flsByRS);
+  // intraday: Live mode's completed 30-min bars for this session (Massive, 15 min delayed) — only while the lists are open
+  const lvOn = !!(typeof LV !== "undefined" && LV.cfg && LV.cfg.on && LV.frame && LV.frame.phase === "rth" && LV.frame.dataMs);
+  if (open && lvOn) for (const o of [...rows, ...erows]) {
+    const ePs = !!(o.e && o.e.pass), dPs = !!(o.x && o.x.pass); if (!ePs && !dPs) continue;
+    try { const T = LV.today && LV.today.get(o.r.sym); if (!T || T.d !== LV.frame.date || !T.bars) { o.iv = {none: true}; continue; }
+      const H = LV.hist && LV.hist.get(o.r.sym), fr = o.x && o.x.fr;
+      const daily = dPs && fr && H && H.d === LV.frame.date && fin(H.e21) && fin(H.lastC) ? {ready: true, e21: H.e21, lastC: H.lastC, frHi: fr.frHi, support: fr.support, adrD: fr.adrD} : null;
+      const px = o.e && o.e.d ? o.e.d.close : o.x ? o.x.close : NaN;
+      o.iv = flsIntraday(ePs ? o.e.d : null, T.bars, flsTick(px), {date: LV.frame.date, asOf: LV.frame.dataMs, daily}); } catch (e2) { console.warn("former leader short (30-min)", o.r.sym, e2); o.iv = null; }
+  }
+  const eVerdict = new Map();
+  [...rows, ...erows].forEach(o => eVerdict.set(o.r.sym, !o.e ? "Out — no stored bars" : !o.e.pass ? `Out — ${FLS_ECK[o.e.ff]}` : !open ? "Would watch — side closed" : o.e.etf ? "ETF watch" : eTop.includes(o) ? `Early top ${FLSE.top} #${eTop.indexOf(o) + 1}` : "Early watch"));
+  const run = {mode, open, gate, spy: flsSpyState(gate), mapTxt: flsMapTxt(gate.mapV), lvOn, rows, erows, pass, top, also, near, verdict, weak: W, by: new Map([...rows, ...erows].map(o => [o.r.sym, o])),
+    early: {pass: ePass, top: eTop, also: eAlso, etf, verdict: eVerdict}};
   FLSX.key = key; FLSX.run = run; return run;
 }
 const flsOf = sym => { const R = flsRun(); return R ? R.by.get(sym) || null : null; };
 
 /* ---------------- the card (top of the Shorts page) ---------------- */
-function flsRowsHTML(L, next){
+// R (7 Nov 2026 rebuild, every mode except Legacy + daily route only): adds the 30-min read and the market context to the
+// Next line; without R the rows are v1's exactly
+function flsRowsHTML(L, next, R){
   return `<div class="tscroll" style="max-height:${next ? "none" : "360px"}"><table class="mini flst"><thead><tr><th>#</th><th class="l">Ticker</th><th>RS</th><th class="l">Group</th><th class="l">State</th><th class="l">Resistance</th><th title="Highest high since the test — the stop goes above it">Bounce high (stop)</th><th title="(bounce high − close) ÷ ADR (the failed-rally ADR)">Stop, ADR</th><th title="Nearest swing low under the close, else the 20-session low">First support</th><th title="(close − support) ÷ (bounce high − close)">Room, R</th><th class="l">Earnings</th><th class="l">Shortable</th></tr></thead><tbody>
-    ${L.map((o, i) => { const x = o.x, fr = x.fr; return `<tr data-sym="${esc(o.r.sym)}"><td>${i + 1}</td><td class="l sym">${esc(o.r.sym)}</td><td>${rsBadge(o.r.rs)}</td><td class="l small">${esc(o.r.group || "—")} <span class="dim">#${x.gRank || "—"}</span></td>
+    ${L.map((o, i) => { const x = o.x, fr = x.fr; return `<tr data-sym="${esc(o.r.sym)}"><td>${i + 1}</td><td class="l sym">${esc(o.r.sym)}${typeof mppFsTag === "function" ? mppFsTag(o.r.sym) : ""}</td><td>${rsBadge(o.r.rs)}</td><td class="l small">${esc(o.r.group || "—")} <span class="dim">#${x.gRank || "—"}</span>${flsGrpTag(o, R)}</td>
       <td class="l"><span class="pill ${FR_ST[fr.st].c}">${fr.st === "test" ? "Testing" : "Rejected"}</span>${fr.testDate ? ` <span class="small dim">test ${esc(fr.testDate)}</span>` : ""}</td><td class="l small">${esc(fr.kind || "—")} <b>${p2(fr.lv)}</b></td><td><b>${p2(fr.frHi)}</b></td><td>${fr.stopA.toFixed(2)}</td><td>${p2(fr.support)}</td><td class="pos">${fr.room.toFixed(1)}</td>
-      <td class="l small">${esc(x.ck[9].v.replace(/^earnings /, ""))}</td><td class="l small dim">check at IBKR</td></tr>${next ? `<tr class="flsnxr"><td></td><td colspan="11" class="l small"><b>Next:</b> ${esc(FLS_NEXT)} <b>${p2(fr.frHi)}</b></td></tr>` : ""}`; }).join("")}</tbody></table></div>`;
+      <td class="l small">${esc(x.ck[9].v.replace(/^earnings /, ""))}</td><td class="l small dim">check at IBKR</td></tr>${next ? `<tr class="flsnxr"><td></td><td colspan="11" class="l small"><b>Next:</b> ${esc(FLS_NEXT)} <b>${p2(fr.frHi)}</b>${R ? flsDailyExtra(o, R) : ""}</td></tr>` : ""}`; }).join("")}</tbody></table></div>`;
 }
+// 7 Nov 2026 rebuild — the 30-min read of a row (both routes) and the early route's rows
+// 7 Nov 2026 (Eugene: "weak group as context."): in Context only the group is shown, never a block
+function flsGrpTag(o, R){ if (!R || R.mode !== "ctx" || !o.r.group) return ""; const w = (R.weak.rank.get(o.r.group) || 99) <= FLS.weakN;
+  return ` <span class="small ${w ? "neg" : "dim"}" title="Context only: the group is shown beside the name and never blocks (Eugene, 7 Nov: 'weak group as context.'). Legacy hard gate keeps the weakest-3 rule.">${w ? "weak group" : "group not weak · context"}</span>`; }
+function flsSigTxt(g){
+  const f = g.fill, fx = f.ok ? `Filled at ${flsPx(f.o)}` : f.wait ? "fill at the next 30-min open" : f.pend ? f.why : `Skipped at open: ${f.why}`;
+  const oc = g.out ? (g.out.k === "2R" ? ` · +2R ${flsHM(g.out.t)} ET` : ` · stopped ${flsHM(g.out.t)} ET`) : f.ok ? " · open" : "";
+  return `${g.routes.map(flsRouteName).join(" + ")} · ${fx}${oc}`;
+}
+function flsStateHTML(o, R){
+  const iv = o.iv;
+  if (!R.open) return `<span class="pill">Closed</span>`;
+  if (!iv) return `<span class="pill wait">Watch</span>${R.lvOn ? "" : ` <span class="small dim">daily view</span>`}`;
+  if (iv.none) return `<span class="pill wait">Watch</span> <span class="small dim">no 30-min bars for this name in Live mode</span>`;
+  const g = iv.sig, sk = !g && iv.skips.length ? iv.skips[iv.skips.length - 1] : null, skT = sk ? ` <span class="small dim">rejected ${flsHM(sk.t)} ET (${esc(flsRouteName(sk.route).toLowerCase())}) — skipped: ${esc(sk.why)}</span>` : "";
+  if (!g) return iv.state === "testing" ? `<span class="pill flsam">Testing</span> <span class="small">test ${flsHM(iv.lastTest)} ET</span>${skT}` : `<span class="pill wait">Watch</span>${iv.expired ? ` <span class="small dim">test ${flsHM(iv.lastTest)} ET expired</span>` : ""}${skT}`;
+  return `<span class="pill go">Green ${flsHM(g.t)} ET</span> <span class="small">${esc(flsSigTxt(g))}</span>`;
+}
+function flsDailyExtra(o, R){
+  const iv = o.iv, g = iv && iv.sig, ctx = R.mode === "ctx" ? ` · <span class="dim">${esc(R.mapTxt)} · ${esc(R.spy.short)}</span>` : "";
+  if (g && g.routes.includes("daily")) return ` · <b>Green ${flsHM(g.t)} ET</b> ${esc(flsSigTxt(g))}${ctx}`;
+  if (g) return ` · today's paper entry was taken by the early route at ${flsHM(g.t)} ET${ctx}`;
+  const sk = iv && iv.skips ? iv.skips.filter(s => s.route === "daily").pop() : null;
+  if (sk) return ` · 30-min cross ${flsHM(sk.t)} ET skipped: ${esc(sk.why)}${ctx}`;
+  if (iv && !iv.none && !iv.daily) return ` · <span class="dim">the board needs Live mode's 30-min EMA history for this trigger — watch it on TradingView</span>${ctx}`;
+  return ctx;
+}
+function flsEarlyNext(o){
+  const d = o.e.d, g = o.iv && o.iv.sig;
+  if (g) { const f = g.fill; return `Paper short (${g.routes.map(flsRouteName).join(" + ")}): trigger close ${flsPx(g.px)} at ${flsHM(g.t)} ET · stop ${flsPx(g.stop)} (${g.rA.toFixed(2)} ADR) · ${g.supKind} ${flsPx(g.sup)} (${g.room.toFixed(1)}R)${f.ok ? ` · filled at ${flsPx(f.o)} · 2R target ${flsPx(g.target)}` : f.wait ? " · fill at the next 30-min open after rechecking the stop and room" : ` · ${f.pend ? f.why : "skipped at open: " + f.why}`}`; }
+  return `Watch for a 30-min test of ${flsPx(d.R)} then a lower-high close below the prior bar's low from 10:00 ET · test band ${flsPx(d.lo)}–${flsPx(d.hi)} · stop = the session high + 1 tick, at most 1.5 ADR ($${(FLSE.stopMax * d.adrD).toFixed(2)}) · room ≥ 2R to the nearest support under the trigger`;
+}
+function flsEarlyRowsHTML(L, R, next){
+  return `<div class="tscroll" style="max-height:${next ? "none" : "360px"}"><table class="mini flst flse"><thead><tr><th>#</th><th class="l">Ticker</th><th>RS</th><th class="l">Group</th><th class="l">Route</th><th class="l">State</th><th title="Highest high of the previous ${FLSE.look} completed sessions (date = the last of them)">${FLSE.look}-day resistance</th><th title="Resistance ± ${FLSE.tol} ADR — a 30-min high inside it is a test (amber)">Test band</th><th title="The failed-rally ADR of the previous completed session: 20-day mean of (high ÷ low − 1) × close">ADR $</th><th class="l">Earnings</th><th class="l">Market context</th></tr></thead><tbody>
+    ${L.map((o, i) => { const e = o.e, d = e.d; return `<tr data-sym="${esc(o.r.sym)}"><td>${i + 1}</td><td class="l sym">${esc(o.r.sym)}${typeof mppFsTag === "function" ? mppFsTag(o.r.sym) : ""}</td><td>${rsBadge(o.r.rs)}</td><td class="l small">${e.etf ? `ETF${o.r.lev ? " · leveraged" : ""}` : `${esc(o.r.group || "—")} <span class="dim">#${R.weak.rank.get(o.r.group) || "—"}</span>${flsGrpTag(o, R)}`}</td>
+      <td class="l small">${flsRouteName("early")}${o.x && o.x.pass ? " · daily route passes too" : ""}</td><td class="l">${flsStateHTML(o, R)}</td><td><b>${flsPx(d.R)}</b> <span class="small dim">to ${esc(d.ref || "")}</span></td><td class="small">${flsPx(d.lo)} – ${flsPx(d.hi)}</td><td>${d.adrD.toFixed(2)}</td>
+      <td class="l small${e.earnUnk ? " neg" : ""}">${esc(e.ck.earn.v)}</td><td class="l small">${esc(R.mapTxt)} · ${esc(R.spy.short)}</td></tr>${next ? `<tr class="flsnxr"><td></td><td colspan="10" class="l small"><b>Next:</b> ${esc(flsEarlyNext(o))}</td></tr>` : ""}`; }).join("")}</tbody></table></div>`;
+}
+const flsGreenN = L => L.filter(o => o.iv && o.iv.sig).length;
 function flsNearHTML(L){
   return `<div class="tscroll" style="max-height:360px"><table class="mini flst"><thead><tr><th class="l">Ticker</th><th>RS</th><th class="l">Group</th><th class="l">State</th><th class="l">The one check short</th></tr></thead><tbody>
-    ${L.map(o => { const x = o.x, k = x.ff; return `<tr data-sym="${esc(o.r.sym)}"><td class="l sym">${esc(o.r.sym)}</td><td>${rsBadge(o.r.rs)}</td><td class="l small">${esc(o.r.group || "—")}</td><td class="l small">${x.fr ? esc(FR_ST[x.fr.st].n) : "—"}</td><td class="l small"><b>${k}. ${esc(FLS_CK[k])}</b> — ${esc(x.ck[k].v)}</td></tr>`; }).join("")}</tbody></table></div>`;
+    ${L.map(o => { const x = o.x, k = x.ff; return `<tr data-sym="${esc(o.r.sym)}"><td class="l sym">${esc(o.r.sym)}${typeof mppFsTag === "function" ? mppFsTag(o.r.sym) : ""}</td><td>${rsBadge(o.r.rs)}</td><td class="l small">${esc(o.r.group || "—")}</td><td class="l small">${x.fr ? esc(FR_ST[x.fr.st].n) : "—"}</td><td class="l small"><b>${k}. ${esc(FLS_CK[k])}</b> — ${esc(x.ck[k].v)}</td></tr>`; }).join("")}</tbody></table></div>`;
 }
 function flsCardHTML(){
-  const R0 = pbHH() ? flsRun() : null, tv = !!(R0 && R0.gate.open && R0.top.length);   // the header copy only when the card shows names (tvcopy contract: a card's button copies what it shows)
-  const hd = `<div class="hd"><h2>Former leader, lower high — up to 3</h2><span class="sub">short · paper / watch only · never sized · Notion v1.0 (7 Nov) · the 3 weakest by RS that pass every check</span><span class="spacer"></span>
+  const mode = flsGateMode(), rt = flsRoutes(), v1 = mode === "legacy" && rt === "daily";   // Legacy + daily route only = the v1 card body
+  const R0 = pbHH() ? flsRun() : null;
+  const shows = !!(R0 && R0.open && ((rt !== "early" && R0.top.length) || (rt !== "daily" && (R0.early.top.length || R0.early.etf.length))));
+  const tv = v1 ? !!(R0 && R0.gate.open && R0.top.length) : shows;   // the header copy only when the card shows names (tvcopy contract: a card's button copies what it shows)
+  const opt = (v, cur, t) => `<option value="${v}"${v === cur ? " selected" : ""}>${t}</option>`;
+  const ctl = `<label class="small flsctl" title="Context only: MAP's call, SPY's state and the group's rank are shown beside each name and never block (liquidity, earnings and the chart checks still do). Legacy hard gate: the v1 rule — MAP Defensive and SPY under its 50 SMA with the 9 EMA under the 21, or the short side is closed today.">Market gate <select id="flsGateSel">${opt("ctx", mode, "Context only")}${opt("legacy", mode, "Legacy hard gate")}</select></label><label class="small flsctl" title="Which routes the card shows (the CSV always carries both)">Routes <select id="flsRouteSel">${opt("both", rt, "Both routes")}${opt("early", rt, "Early failed retest only")}${opt("daily", rt, "Daily failed rally only")}</select></label>`;
+  const sub = v1 ? "short · paper / watch only · never sized · Notion v1.0 (7 Nov) · the 3 weakest by RS that pass every check" : `short · paper short list — not MAP's focus list (MAP stays the authority) · never sized · early failed retest (30-min) + daily failed rally · market gate: ${mode === "ctx" ? "context only" : "legacy hard gate"}`;
+  const hd = `<div class="hd"><h2>Former leader, lower high — up to 3</h2><span class="sub">${sub}</span><span class="spacer"></span>${ctl}
     ${tv ? `<button class="btn sm" id="flsTv" data-tvc title="Copies the names this card shows (the up-to-3, plus any fold you opened) as one line for TradingView's Add symbol box">Copy for TradingView</button>` : ""}<button class="btn sm" id="flsCsv" title="Every stock evaluated, raw numbers, with its first failing check">Download CSV</button></div>`;
   if (!pbHH()) return hd + `<div class="bd"><div class="empty">Needs the stored price history. <button class="btn sm" data-hist="full">Load price history</button></div></div>`;
   const R = R0; if (!R) return hd + `<div class="bd"><div class="empty">Load the files first.</div></div>`;
+  return hd + (v1 ? flsV1Body(R) : flsBody(R, rt));
+}
+// 7 Nov 2026 rebuild: both routes, either gate mode
+function flsBody(R, rt){
+  const g = R.gate, sp = g.spy, ctx = R.mode === "ctx", E = R.early;
+  const lvT = R.lvOn ? ` · Live 30-min bars to ${hhmm(etMin(LV.frame.dataMs - 1) + 1)} ET (Massive, 15 min delayed)` : " · daily view (a green needs Live mode's 30-min bars)";
+  const gl = ctx ? `<div class="small" style="margin-bottom:6px">Market context — shown, never blocks (context only): <b>${esc(R.mapTxt)}</b> · ${esc(R.spy.t)} · ${R.rows.filter(o => o.x).length} stocks + ${R.erows.filter(o => o.e).length} ETFs checked${lvT}</div>`
+    : `<div class="small" style="margin-bottom:6px">Market gate (legacy): MAP <b>${esc(g.mapV || "not set")}</b> · ${sp ? `SPY ${p2(sp.c)} vs 50 SMA ${p2(sp.s50)} · 9 EMA ${p2(sp.e9)} vs 21 EMA ${p2(sp.e21)} (${esc(sp.to)})` : "SPY: no stored bars"} · ${R.rows.filter(o => o.x).length} stocks + ${R.erows.filter(o => o.e).length} ETFs checked${lvT}</div>`;
+  const closed = R.open ? "" : `<div class="flsclosed"><b>Short side closed today — ${esc(g.why.join("; "))}</b></div>`;
+  const emp = t => `<div class="empty" style="padding:4px 0">${t}</div>`;
+  let early = "", daily = "";
+  if (rt !== "daily") {
+    early = `<div class="flssec"><b>Early failed retest</b> <span class="small dim">30-min · ${FLSE.look}-day resistance · ±${FLSE.tol} ADR test band · up to ${FLSE.top} stocks, weakest RS first · ETFs tracked separately</span></div>`;
+    if (R.open) early += (E.top.length ? flsEarlyRowsHTML(E.top, R, true) : emp("<b>No early-retest watch today</b> — no stock passes the early route's checks."))
+      + `<details class="flsf" style="margin-top:6px"><summary>Also on the early watch (${E.also.length}${flsGreenN(E.also) ? ` · ${flsGreenN(E.also)} green` : ""})</summary>${E.also.length ? flsEarlyRowsHTML(E.also, R, false) : emp("None.")}</details>`
+      + `<details class="flsf"><summary>ETFs — early route, tracked separately (${E.etf.length}${flsGreenN(E.etf) ? ` · ${flsGreenN(E.etf)} green` : ""})</summary>${E.etf.length ? flsEarlyRowsHTML(E.etf, R, true) : emp("None (needs the ETF file and its stored bars).")}</details>`;
+    else { const W = [...E.pass, ...E.etf]; early += `<details class="flsf" style="margin-top:6px"><summary>What would have passed — early route (${W.length}) — learning only, not tradeable today</summary>${W.length ? `<div class="small neg" style="margin:4px 0">Not tradeable: the short side is closed (legacy hard gate). <button class="btn sm" id="flsTvWE" data-tvc title="Copies these would-have-passed names for TradingView (chart review only)">Copy for TradingView</button></div>${flsEarlyRowsHTML(W, R, false)}` : emp("Nothing would have passed either.")}</details>`; }
+  }
+  if (rt !== "early") {
+    daily = `<div class="flssec"><b>Daily failed rally</b> <span class="small dim">v1 checks 2–10${ctx ? " (4 · group = context, never blocks)" : ""} · up to ${FLS.top}, weakest RS first</span></div>`;
+    if (R.open) daily += (R.top.length ? flsRowsHTML(R.top, true, R) : emp("<b>No short today</b> — no stock passes every check."))
+      + `<details class="flsf" style="margin-top:6px"><summary>Also passing (beyond ${FLS.top}) (${R.also.length})</summary>${R.also.length ? flsRowsHTML(R.also, false) : emp("None.")}</details>`
+      + `<details class="flsf"><summary>Near misses (one check short) (${R.near.length})</summary>${R.near.length ? flsNearHTML(R.near) : emp("None.")}</details>`;
+    else daily += `<details class="flsf" style="margin-top:6px"><summary>What would have passed (${R.pass.length}) — learning only, not tradeable today</summary>${R.pass.length ? `<div class="small neg" style="margin:4px 0">Not tradeable: the short side is closed. <button class="btn sm" id="flsTvW" data-tvc title="Copies these would-have-passed names for TradingView (chart review only)">Copy for TradingView</button></div>${flsRowsHTML(R.pass, false)}` : emp("Nothing would have passed either.")}</details>`;
+  }
+  const foot = `<div class="small dim" style="margin-top:6px"><b>Early failed retest</b> (paper test, 7 Nov 2026): former leader (on MAP's lists in the last 63 sessions, or a 63-session high ≥ 30% over the prior 63-session low) · group in the weakest 3 (stocks; ${ctx ? "context only — shown, never blocks" : "blocks in Legacy hard gate"}) · tradeable liquidity not OUT · stocks: no earnings in the next 5 sessions (unknown = verify) · ETFs: earnings N/A. Resistance = the highest high of the previous ${FLSE.look} completed sessions; a completed 30-min bar whose high is within ±${FLSE.tol} ADR of it is a test (amber, never a signal); green = a later bar whose high is under the highest high of the 1–${FLSE.win} bars before it (that high inside the band), closing under the resistance and at least one tick under the prior bar's low, from the 10:00 ET close. Stop = the session high + 1 tick, at most ${FLSE.stopMax} ADR; room ≥ ${FLSE.roomMin}R to the nearest support under the trigger. Paper fill at the next 30-min open (same session) after rechecking the stop and room. It may fire above the daily 50 SMA and the 30-min 21 EMA. <b>Daily failed rally</b> = v1: close under a falling 50 SMA · testing or rejected at resistance · not more than 2 ADR under the test-day low · stop above the bounce high ≤ 1.5 ADR · room ≥ 2R · earnings known and 6+ sessions away; trigger = a 30-min close under the 30-min 21 EMA after a close at or above it, from 10:00 ET. One paper entry per ticker per session across both routes. <b>Market gate</b>: ${ctx ? "context only — MAP and SPY are shown and never block; " : ""}legacy hard gate = MAP Defensive and SPY under its 50 SMA with the 9 EMA under the 21. Shortable at IBKR by hand. ADR = the failed-rally ADR (20-day mean of high ÷ low − 1). Paper, or puts / an inverse ETF at grade C. Log paper signals by route, stock / ETF and MAP's call; after 20 paper signals, park it if they average 0R or less.</div>`;
+  return `<div class="bd">${gl}${closed}${early}${daily}${typeof mppFsMissHTML === "function" ? mppFsMissHTML(R) : ""}${foot}</div>`;   // 7 Nov 2026: + MAP's FS names the board doesn't list (MAP · FP / FS PAPER LINES)
+}
+// the v1 card body (Legacy hard gate + daily route only) — v1's code, unchanged
+function flsV1Body(R){
   const g = R.gate, sp = g.spy, gl = `<div class="small" style="margin-bottom:6px">Market gate: MAP <b>${esc(g.mapV || "not set")}</b> · ${sp ? `SPY ${p2(sp.c)} vs 50 SMA ${p2(sp.s50)} · 9 EMA ${p2(sp.e9)} vs 21 EMA ${p2(sp.e21)} (${esc(sp.to)})` : "SPY: no stored bars"} · ${R.rows.filter(o => o.x).length} stocks checked</div>`;
   const foot = `<div class="small dim" style="margin-top:6px">Checks: market gate · former leader (on MAP's lists in the last 63 sessions, or a 63-session high ≥ 30% over the prior 63-session low) · close under a falling 50 SMA · group in the weakest 3 · testing or rejected at resistance (failed-rally stage) · not more than 2 ADR under the test-day low · stop above the bounce high ≤ 1.5 ADR · room ≥ 2R to first support · no earnings in the next 5 sessions · tradeable liquidity not OUT · shortable at IBKR (by hand). ADR = the failed-rally ADR (20-day mean of high ÷ low − 1). Paper, or puts / an inverse ETF at grade C, until tested on more bear years. Kill rule: after 20 paper signals, park it if they average 0R or less.</div>`;
-  if (!g.open) return hd + `<div class="bd">${gl}<div class="flsclosed"><b>Short side closed today — ${esc(g.why.join("; "))}</b></div>
-    <details class="flsf" style="margin-top:6px"><summary>What would have passed (${R.pass.length}) — learning only, not tradeable today</summary>${R.pass.length ? `<div class="small neg" style="margin:4px 0">Not tradeable: the short side is closed. <button class="btn sm" id="flsTvW" data-tvc title="Copies these would-have-passed names for TradingView (chart review only)">Copy for TradingView</button></div>${flsRowsHTML(R.pass, false)}` : `<div class="empty" style="padding:4px 0">Nothing would have passed either.</div>`}</details>${foot}</div>`;
-  return hd + `<div class="bd">${gl}${R.top.length ? flsRowsHTML(R.top, true) : `<div class="empty" style="padding:4px 0"><b>No short today</b> — no stock passes every check.</div>`}
+  if (!g.open) return `<div class="bd">${gl}<div class="flsclosed"><b>Short side closed today — ${esc(g.why.join("; "))}</b></div>
+    <details class="flsf" style="margin-top:6px"><summary>What would have passed (${R.pass.length}) — learning only, not tradeable today</summary>${R.pass.length ? `<div class="small neg" style="margin:4px 0">Not tradeable: the short side is closed. <button class="btn sm" id="flsTvW" data-tvc title="Copies these would-have-passed names for TradingView (chart review only)">Copy for TradingView</button></div>${flsRowsHTML(R.pass, false)}` : `<div class="empty" style="padding:4px 0">Nothing would have passed either.</div>`}</details>${typeof mppFsMissHTML === "function" ? mppFsMissHTML(R) : ""}${foot}</div>`;
+  return `<div class="bd">${gl}${R.top.length ? flsRowsHTML(R.top, true) : `<div class="empty" style="padding:4px 0"><b>No short today</b> — no stock passes every check.</div>`}
     <details class="flsf" style="margin-top:6px"><summary>Also passing (beyond ${FLS.top}) (${R.also.length})</summary>${R.also.length ? flsRowsHTML(R.also, false) : `<div class="empty" style="padding:4px 0">None.</div>`}</details>
-    <details class="flsf"><summary>Near misses (one check short) (${R.near.length})</summary>${R.near.length ? flsNearHTML(R.near) : `<div class="empty" style="padding:4px 0">None.</div>`}</details>${foot}</div>`;
+    <details class="flsf"><summary>Near misses (one check short) (${R.near.length})</summary>${R.near.length ? flsNearHTML(R.near) : `<div class="empty" style="padding:4px 0">None.</div>`}</details>${typeof mppFsMissHTML === "function" ? mppFsMissHTML(R) : ""}${foot}</div>`;
 }
 function flsPaint(){
   const tab = $("tab-shorts"); if (!tab || !S.snap) return;
@@ -18618,19 +18928,42 @@ hookOn("tab", "formerLeaderShort", t => { if (t === "shorts") flsPaint(); });
 const FLS_CSV_H = ["ticker", "verdict", "first_failing_check", "checks_failed", "gate_open", "gate_reason", "map_says", "spy_close", "spy_sma50", "spy_ema9", "spy_ema21", "data_to", "rs", "group", "group_weak_rank", "groups_ranked",
   "former_leader_pct", "leader_high", "leader_high_date", "prior_low", "prior_low_date", "on_map_lists_date", "close", "sma50", "sma50_5_ago", "fr_state", "resistance", "resistance_kind", "test_date", "test_day_low", "adr_under_test_low",
   "bounce_high", "stop_adr", "first_support", "room_r", "adr_usd", "earnings_sessions", "liquidity", "shortable", "ck2_former_leader", "ck3_broken", "ck4_weak_group", "ck5_bounce", "ck6_not_extended", "ck7_stop", "ck8_room", "ck9_earnings", "ck10_liquidity"];
+// 7 Nov 2026 rebuild: columns appended (the 48 above keep their meanings; ETF rows follow the stocks with those blank)
+const FLS_CSV_H2 = ["route", "early_state", "resistance_5d", "band_lo", "band_hi", "gate_mode", "spy_state", "map_call", "symbol_type", "green_time", "fill_or_skip",
+  "early_verdict", "early_ref_date", "early_session", "early_adr_usd", "early_first_fail", "earnings_note", "entry_routes", "entry_trigger_close", "entry_stop", "entry_support", "entry_stop_adr", "entry_room_r", "entry_fill", "entry_target_2r", "entry_outcome", "group_role"];
 const flsQ = v => { const x = v == null ? "" : String(v); return /[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x; };
+function flsCsv2(o, R, n4){
+  const e = o.e, d = e && e.d, iv = o.iv, g = iv && iv.sig, f = g && g.fill, sk = !g && iv && iv.skips && iv.skips.length ? iv.skips[iv.skips.length - 1] : null;
+  const route = [e && e.pass ? "early" : null, o.x && o.x.pass ? "daily" : null].filter(Boolean).join("+");
+  const est = !e || !e.pass ? "" : !R.open ? "closed" : !iv ? "watch (daily view)" : iv.none ? "watch (no 30-min bars)" : iv.state === "skipopen" ? "skipped at open" : iv.state + (iv.expired ? " (test expired)" : "");
+  const fos = g ? (f.ok ? `Filled at ${f.o}` : f.wait ? "waiting for the next open" : f.pend ? f.why : `Skipped at open: ${f.why}`) : sk ? `Skipped at ${flsHM(sk.t)} ET (${sk.route}): ${sk.why}` : "";
+  return [route, est, d ? n4(d.R) : "", d ? n4(d.lo) : "", d ? n4(d.hi) : "", R.mode === "ctx" ? "context only" : "legacy hard gate", R.spy.csv, R.gate.mapV || "not set", e && e.etf || o.r.etf ? "ETF" : "stock", g ? flsHM(g.t) : "", fos,
+    R.early.verdict.get(o.r.sym) || "", d ? d.ref || "" : "", e ? e.s.sess || "" : "", d ? n4(d.adrD) : "", e && e.ff ? FLS_ECK[e.ff] : "", e ? e.ck.earn.v : "",
+    g ? g.routes.join("+") : "", g ? n4(g.px) : "", g ? n4(g.stop) : "", g ? n4(g.sup) : "", g ? n4(g.rA) : "", g ? n4(g.room) : "", g && f.ok ? n4(f.o) : "", g && fin(g.target) ? n4(g.target) : "", g ? (g.out ? `${g.out.k === "2R" ? "+2R" : "stop"} ${flsHM(g.out.t)} ET` : f.ok ? "open" : "") : "",
+    e && e.etf || o.r.etf ? "n/a (ETF)" : R.mode === "ctx" ? "context" : "blocks"];
+}
 function flsCsvText(R){
-  const n4 = v => v == null || !fin(v) ? "" : +v.toFixed(4), g = R.gate, sp = g.spy || {}, L = [FLS_CSV_H.join(",")];
+  const n4 = v => v == null || !fin(v) ? "" : +v.toFixed(4), g = R.gate, sp = g.spy || {}, L = [[...FLS_CSV_H, ...FLS_CSV_H2].join(",")];
   const order = [...R.rows].sort((a, b) => { const va = R.verdict.get(a.r.sym), vb = R.verdict.get(b.r.sym), rk = v => /^Top/.test(v) ? 0 : v === "Also passing" || /^Would/.test(v) ? 1 : v === "Near miss" ? 2 : 3; return rk(va) - rk(vb) || flsByRS(a, b); });
   for (const o of order) { const x = o.x, fr = x && x.fr, yn = n => x ? (x.ck[n].ok ? "pass" : "fail") : "";
     L.push([o.r.sym, R.verdict.get(o.r.sym), flsFfTxt(x), x ? x.fails.length : "", g.open ? "yes" : "no", g.open ? "" : g.why.join("; "), g.mapV, n4(sp.c), n4(sp.s50), n4(sp.e9), n4(sp.e21), x ? x.to : "", o.r.rs ?? "", o.r.group || "", R.weak.rank.get(o.r.group) || "", R.weak.n,
       x ? n4(x.lead.pct) : "", x ? n4(x.lead.hi) : "", x ? x.lead.hiDate || "" : "", x ? n4(x.lead.lo) : "", x ? x.lead.loDate || "" : "", x ? x.mapSeen || "" : "",
       x ? n4(x.close) : "", x ? n4(x.s50) : "", x ? n4(x.s50b) : "", fr ? FR_ST[fr.st].n : "", fr ? n4(fr.lv) : "", fr ? fr.kind : "", fr ? fr.testDate || "" : "", x ? n4(x.testLow) : "", x && fin(x.below) ? n4(-x.below) : "",
       fr ? n4(fr.frHi) : "", fr ? n4(fr.stopA) : "", fr ? n4(fr.support) : "", fr ? n4(fr.room) : "", fr ? n4(fr.adrD) : "", x && x.erN != null ? x.erN : "", x ? x.liq || "not checked" : "", "check at IBKR",
-      yn(2), yn(3), yn(4), yn(5), yn(6), yn(7), yn(8), yn(9), yn(10)].map(flsQ).join(","));
+      yn(2), yn(3), yn(4), yn(5), yn(6), yn(7), yn(8), yn(9), yn(10), ...flsCsv2(o, R, n4)].map(flsQ).join(","));
+  }
+  // ETF rows (early route only): the v1 columns that describe the ETF or the gate are filled, the stock checks left blank
+  const ix = h => FLS_CSV_H.indexOf(h), erk = v => v === "ETF watch" ? 0 : /^Would/.test(v) ? 1 : 2;
+  for (const o of [...R.erows].sort((a, b) => erk(R.early.verdict.get(a.r.sym)) - erk(R.early.verdict.get(b.r.sym)) || flsByRS(a, b))) {
+    const v = new Array(FLS_CSV_H.length).fill(""), e = o.e;
+    v[ix("ticker")] = o.r.sym; v[ix("verdict")] = "ETF (early route only)"; v[ix("gate_open")] = g.open ? "yes" : "no"; v[ix("gate_reason")] = g.open ? "" : g.why.join("; "); v[ix("map_says")] = g.mapV;
+    v[ix("spy_close")] = n4(sp.c); v[ix("spy_sma50")] = n4(sp.s50); v[ix("spy_ema9")] = n4(sp.e9); v[ix("spy_ema21")] = n4(sp.e21); v[ix("rs")] = o.r.rs ?? ""; v[ix("groups_ranked")] = R.weak.n; v[ix("shortable")] = "check at IBKR";
+    if (e) { v[ix("data_to")] = e.d.ref || ""; v[ix("former_leader_pct")] = n4(e.d.lead.pct); v[ix("leader_high")] = n4(e.d.lead.hi); v[ix("leader_high_date")] = e.d.lead.hiDate || ""; v[ix("prior_low")] = n4(e.d.lead.lo); v[ix("prior_low_date")] = e.d.lead.loDate || ""; v[ix("on_map_lists_date")] = e.mapSeen || ""; v[ix("close")] = n4(e.d.close); v[ix("sma50")] = n4(e.d.s50); v[ix("liquidity")] = (o.r && liqOfSafe(o.r.sym)) || "not checked"; }
+    L.push([...v, ...flsCsv2(o, R, n4)].map(flsQ).join(","));
   }
   return L.join("\n");
 }
+const liqOfSafe = s => { try { const q = typeof liqOf === "function" ? liqOf(s) : null; return q && q.state ? q.state : ""; } catch (e) { return ""; } };
 function flsCsv(){
   const R = flsRun(); if (!R) { toast(S.snap ? "Load the price history first" : "Load the files first"); return; }
   download(`deep-space-former-leader-short-${fmtDate(new Date())}.csv`, flsCsvText(R), "text/csv");
@@ -18640,11 +18973,20 @@ document.addEventListener("click", e => {
   if (t.closest("#flsCsv")) { e.preventDefault(); flsCsv(); return; }
   const tr = t.closest("tr[data-sym]"); if (tr && S.rowBySym && S.rowBySym.has(tr.dataset.sym)) openDrawer(tr.dataset.sym);
 });   // the Copy for TradingView buttons carry data-tvc: the board's own card copy handles them (the names the card shows)
+// 7 Nov 2026 rebuild: the card's two settings (adrb.flsGate, adrb.flsRoutes) — a redraw of this card only
+document.addEventListener("change", e => {
+  const t = e.target; if (!t || !t.closest || !t.closest("#flsBox")) return;
+  if (t.id === "flsGateSel") { flsSet(FLS_GATE_K, t.value === "legacy" ? "legacy" : "ctx"); flsPaint(); }
+  else if (t.id === "flsRouteSel") { flsSet(FLS_ROUTE_K, ["early", "daily"].includes(t.value) ? t.value : "both"); flsPaint(); }
+});
 
 /* ---------------- TradingView lists item (spread in place into the SHORT RESEARCH section) ---------------- */
 function flsTvlItems(H){
   return [{k: "shFL", n: "Short · Former leader", def: 0, need: H, f: () => { const R = flsRun(); if (!R) return null;
-    return R.top.map((o, i) => tvlE(o.r.sym, `Short · Former leader, lower high #${i + 1} · ${FR_ST[o.x.fr.st].n} · ${o.x.fr.kind} ${frP(o.x.fr.lv)} · stop above ${frP(o.x.fr.frHi)}`, o.x.fr.st === "test" ? "Testing" : "Rejected")); }}];
+    return R.top.map((o, i) => tvlE(o.r.sym, `Short · Former leader, lower high #${i + 1} · ${FR_ST[o.x.fr.st].n} · ${o.x.fr.kind} ${frP(o.x.fr.lv)} · stop above ${frP(o.x.fr.frHi)}`, o.x.fr.st === "test" ? "Testing" : "Rejected")); }},
+    // 7 Nov 2026 rebuild: the early failed retest watch (the card's up-to-3 stocks)
+    {k: "shFLe", n: "Short · Former leader, early retest", def: 0, need: H, f: () => { const R = flsRun(); if (!R) return null;
+      return R.early.top.map((o, i) => tvlE(o.r.sym, `Short · Former leader, early retest #${i + 1} · ${FLSE.look}-day resistance ${frP(o.e.d.R)} · test band ${frP(o.e.d.lo)}–${frP(o.e.d.hi)}`, o.iv && o.iv.sig ? "Green" : o.iv && o.iv.state === "testing" ? "Testing" : "Watch")); }}];
 }
 
 /* ---------------- ticker panel: one line in the History · short score pane ---------------- */
@@ -18652,7 +18994,14 @@ function flsPanelHTML(sym){
   const R = flsRun(), o = R ? R.by.get(sym) : null; if (!o) return "";
   const v = R.verdict.get(sym), x = o.x, fr = x && x.fr;
   const det = !x ? "no stored bars" : x.pass ? `${FR_ST[fr.st].n} at the ${fr.kind} ${p2(fr.lv)} · stop above ${p2(fr.frHi)} (${fr.stopA.toFixed(2)} ADR) · support ${p2(fr.support)} (${fr.room.toFixed(1)}R)` : `first failing check ${esc(flsFfTxt(x))}${x.fails.length > 1 ? ` (${x.fails.length} checks fail)` : ""}`;
-  return `<div class="flspl small"><b>Former leader, lower high</b> <span class="dim">(short, paper)</span>: <span class="pill ${/^Top/.test(v) ? "go" : v === "Near miss" || /^Would|^Also/.test(v) ? "zone" : ""}">${esc(v)}</span> — ${det}${R.gate.open ? "" : ` · <span class="neg">short side closed today</span>`}</div>`;
+  // 7 Nov 2026 rebuild: Legacy + daily route only = v1's line; otherwise the early route's read follows, and "short side
+  // closed today" shows only under the legacy hard gate (context only: MAP / SPY as context)
+  const rt = flsRoutes(), v1 = R.mode === "legacy" && rt === "daily";
+  const v1l = `<b>Former leader, lower high</b> <span class="dim">(short, paper)</span>: <span class="pill ${/^Top/.test(v) ? "go" : v === "Near miss" || /^Would|^Also/.test(v) ? "zone" : ""}">${esc(v)}</span> — ${det}`;
+  if (v1) return `<div class="flspl small">${v1l}${R.gate.open ? "" : ` · <span class="neg">short side closed today</span>`}</div>`;
+  const e = o.e, ev = R.early.verdict.get(sym) || "", d = e && e.d;
+  const el = rt === "daily" ? "" : ` · <b>Early retest</b>: <span class="pill ${/^Early top/.test(ev) ? "go" : /^Early watch|^Would/.test(ev) ? "zone" : ""}">${esc(ev)}</span>${e && e.pass && R.open ? " " + flsStateHTML(o, R) : ""}${d ? ` — ${FLSE.look}-day resistance ${flsPx(d.R)} (band ${flsPx(d.lo)}–${flsPx(d.hi)})` : ""}`;
+  return `<div class="flspl small">${v1l}${el}${R.mode === "legacy" ? (R.gate.open ? "" : ` · <span class="neg">short side closed today</span>`) : ` · <span class="dim">${esc(R.mapTxt)} · ${esc(R.spy.short)}</span>`}</div>`;
 }
 hookOn("panel", "formerLeaderShort", (r, dr) => {
   if (!r || r.etf || !dr || dr.querySelector(".flspl")) return;
@@ -18680,7 +19029,7 @@ function flsSelf(){
     let iH = t - 62; for (let k = t - 62; k <= t; k++) if (h[k] >= h[iH]) iH = k;
     let lo = Infinity; if (iH >= 63) for (let k = iH - 63; k < iH; k++) lo = Math.min(lo, l[k]);
     const lead = iH >= 63 && (h[iH] / lo - 1) * 100 >= 30;
-    const ok = {2: lead || !!x.mapSeen, 3: c[t] < m50(t) && m50(t) < m50(t - 5), 4: weak.has(o.r.group), 5: !!x.fr && (x.fr.st === "test" || x.fr.st === "rej"), 6: !x.fr || x.fr.st !== "ext", 9: x.ck[9].ok, 10: x.ck[10].ok};
+    const ok = {2: lead || !!x.mapSeen, 3: c[t] < m50(t) && m50(t) < m50(t - 5), 4: flsGateMode() === "ctx" || weak.has(o.r.group), 5: !!x.fr && (x.fr.st === "test" || x.fr.st === "rej"), 6: !x.fr || x.fr.st !== "ext", 9: x.ck[9].ok, 10: x.ck[10].ok};
     // stop / room: own bounce high (highest high from the test session) and own swing-low support
     let stopA = NaN, room = NaN;
     if (x.fr && x.fr.testDate) { const j0 = b.dates.lastIndexOf(x.fr.testDate); let hi = -Infinity; for (let k = j0; k <= t; k++) hi = Math.max(hi, h[k]);
@@ -18695,6 +19044,23 @@ function flsSelf(){
   }
   if (R.gate.open && R.pass.length <= 40) { const T = mine.sort((a, b) => ((a.r.rs ?? 1e9) - (b.r.rs ?? 1e9)) || (a.r.sym < b.r.sym ? -1 : 1)).slice(0, 3).map(o => o.r.sym).join(","), B = R.top.map(o => o.r.sym).join(",");
     out.push({sym: "—", what: "Former leader short top 3", ok: T === B, board: B || "none", mine: T || "none"}); }
+  // 7 Nov 2026 rebuild: the gate mode's list behaviour (context only never closes a list; legacy closes both when the gate is shut)
+  { const ctx = flsGateMode() === "ctx", op = ctx || R.gate.open, want = op ? R.pass.slice(0, 3).map(o => o.r.sym).join(",") : "", wantE = op ? R.early.pass.slice(0, 3).map(o => o.r.sym).join(",") : "";
+    const B = R.top.map(o => o.r.sym).join(","), BE = R.early.top.map(o => o.r.sym).join(",");
+    out.push({sym: "—", what: "Former leader short gate mode", ok: B === want && BE === wantE && R.open === op, board: `${ctx ? "context only" : "legacy"} · ${B || "none"} · ${BE || "none"}`, mine: `${op ? "open" : "closed"} · ${want || "none"} · ${wantE || "none"}`}); }
+  // the early route's daily fields: own 5-session high, own 20-day ADR loop, the band; own former-leader run for the pass
+  const ePick = [...R.early.pass.slice(0, 30), ...R.early.etf.slice(0, 10), ...[...R.rows, ...R.erows].filter(o => o.e && !o.e.pass).slice(0, 20)];
+  for (const o of ePick) {
+    const b = dssBars(o.r.sym), e = o.e, u = e.d.upto; if (!b || u < 19) continue;
+    const h = [...b.h], l = [...b.l], c = [...b.c]; if (![h, l, c].every(a => a.slice(0, u + 1).every(isFinite))) continue;
+    let Rr = -Infinity; for (let k = u - 4; k <= u; k++) Rr = Math.max(Rr, h[k]);
+    let a = 0; for (let k = u - 19; k <= u; k++) a += h[k] / l[k]; const D = (a / 20 - 1) * c[u], tl = v => 1e-6 * Math.max(1, Math.abs(v));
+    const ok = Math.abs(Rr - e.d.R) <= tl(Rr) && Math.abs(D - e.d.adrD) <= tl(D) && Math.abs(Rr - 0.25 * D - e.d.lo) <= tl(Rr) && Math.abs(Rr + 0.25 * D - e.d.hi) <= tl(Rr);
+    out.push({sym: o.r.sym, what: "Former leader short early: 5-day resistance, ADR $, test band", ok, board: `${p2(e.d.R)} · ${p2(e.d.adrD)} · ${p2(e.d.lo)}–${p2(e.d.hi)}`, mine: `${p2(Rr)} · ${p2(D)} · ${p2(Rr - 0.25 * D)}–${p2(Rr + 0.25 * D)}`});
+    let lead = false; if (u >= 62) { let iH = u - 62; for (let k = u - 62; k <= u; k++) if (h[k] >= h[iH]) iH = k; if (iH >= 63) { let lo = Infinity; for (let k = iH - 63; k < iH; k++) lo = Math.min(lo, l[k]); lead = (h[iH] / lo - 1) * 100 >= 30; } }
+    const pass = (lead || !!e.mapSeen) && (e.etf || flsGateMode() === "ctx" || weak.has(o.r.group)) && e.ck.earn.ok && e.ck.liq.ok && D > 0;
+    out.push({sym: o.r.sym, what: "Former leader short early passes", ok: pass === e.pass, board: e.pass ? "passes" : "fails " + e.fails.join("/"), mine: pass ? "passes" : "fails"});
+  }
   return out;
 }
 if (typeof SC_X !== "undefined") SC_X.push(flsSelf);
@@ -18702,6 +19068,8 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 #flsBox tr[data-sym]{cursor:pointer} .flst td{vertical-align:top} #flsBox details.flsf>summary{cursor:pointer;font-size:12px;margin:4px 0}
 #flsBox .flsclosed{padding:6px 8px;border-left:3px solid var(--down, #c62828);background:var(--chip)} .flspl{margin-top:8px;line-height:1.5}
 #flsBox tr.flsnxr td{white-space:normal;border-top:0;padding-top:0;color:var(--ink-2)}
+.pill.flsam{background:var(--warn-soft);color:var(--ink);border:1px solid var(--warn)} #flsBox .flssec{margin:10px 0 4px;padding-top:6px;border-top:1px solid var(--line)}
+#flsBox .flsctl{display:inline-flex;align-items:center;gap:4px;margin-right:6px;white-space:nowrap} #flsBox .flsctl select{font-size:12px;max-width:170px}
 </style>`);
 </script>
 <script>
@@ -18853,5 +19221,337 @@ function fpPivSelf(){
 if (typeof SC_X !== "undefined") SC_X.push(fpPivSelf);
 document.head.insertAdjacentHTML("beforeend", `<style>
 .fpstar{color:#f5b800;cursor:help;font-weight:700} .fppiv{padding:3px 6px;border-left:3px solid #f5b800;background:var(--chip)} .fppivt{color:var(--ink-2)}
+</style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   MAP · FP / FS PAPER LINES (7 Nov 2026) — display / tracking + feed columns only. Changes no trading rule, list, rank,
+   check, plan, size, state or existing number; MAP stays the authority on its lists.
+   Eugene (chat, 7 Nov 2026), after asking "can the board import read former leader short import and first pullback import
+   from map?": "yes add both, FP and FS lines".
+   MAP page (Notion, title v4.10) https://app.notion.com/p/384ff58fe7ad818982c8d48a7ca1d801 — paragraphs "[updated 7 Nov
+   2026, Eugene]" after the paste-block example, and the "3b. Deep Space Board feed CSV" note:
+     FP<n> <TICKER> | why: … | now: at the 9 / at the 21 | trigger: 09:30–10:00 high — Playbook 2 · First Pullback (paper),
+       up to 5; "FP none — reason" when there are none.
+     FS<n> <TICKER> | why: … | route: early / daily | level: <resistance> | now: watch / testing — Short · Former leader,
+       lower high (paper), up to 3, "taken from the feed's FS columns (added by the board when it imports these lines)";
+       "FS none — reason".
+     "FP and FS lines are paper lists: they are not Focus A / B / On deck, don't use those caps, and the board keeps them
+     visibly separate from MAP's live lists."
+   NOT RULED (older 7 Nov callouts on the same page say FP prints Ready names only and FS only on Defensive days): the board
+   enforces neither — it takes whatever FP / FS lines are pasted, any count, any regime, and WARNS (never errors) over 5 FP
+   or 3 FS lines (all kept).
+   IMPORT — hook point "map" (HOOK registry in block 1; hookRun calls in place in the base mapParse / mapApply / mapImpHTML;
+   no override):
+     "parse": FP / FS lines (number optional; ticker; an optional loose text before the first "|"; "| key: value" fields
+       why, now, trigger, route, level (also lvl / resistance), catalyst (also cat), note → why; any other field or loose
+       text is kept in `more`) and "FP none — reason" / "FS none — reason" are taken out of the text before the base parser
+       (and so before the A / B / D / H / OVER-B reading) sees it. The E / O / OUT / WATCH sections never match them. JSON:
+       "FP": [...] / "FS": [...] (tickers, or {t | ticker, k, why, now, trigger, route, level, catalyst, …}), "FP": "none —
+       reason", or "FPnone" / "FSnone". P gains FP, FS, fpNone, fsNone ONLY when such lines are there; every other field of
+       P is the old parser's, byte for byte (tools/board-map-fpfs-test.js). A paste of FP / FS lines alone still gets the
+       base error "No ticker lines found" (nothing imports — A / B / On deck are never wiped by a paper-only paste).
+       Duplicates in one list: warned, first kept. Over the caps: warned, all kept.
+     "apply": adrb.mapImp gains FP, FS, fpNone, fsNone, n.FP, n.FS (added, none renamed; only when the paste had them; it
+       rides in the snapshot with the rest of adrb.mapImp). NEW key adrb.mapPaper = {v: 1, d: {planDay: {FP, FS, fpNone,
+       fsNone, at, fc: {sym: [first 30-min high, low, seen ISO, triggered ISO | null]}, fs: {sym: {seen, end, g, k, xt}}}}}
+       (last 90 plan days): the paper lists per plan day for the scorecard, plus what the board saw in Live mode. An import
+       without FP (FS) lines keeps that day's FP (FS) list (a MAP UPDATE block need not repeat them).
+     "html": the import summary gets its own row "First Pullback (paper): n · Short (paper): n" (names + none reasons on a
+       second line) under the A / B / On deck line; the format fold gets the two line formats.
+   ON SCREEN (current = the import for the board's plan day or the session before it, as MAP's notes):
+     First Pullback card (Setups, switch on 2): "MAP picked" badge after the ticker on Ready / On deck rows (tooltip: why ·
+       now · trigger); under On deck a line "MAP picked, not on the board's lists: SYM First Pullback <list> — <first fail>"
+       (whole-file lists, filter bar ignored). Tracker rows: the badge when MAP picked the name for that row's trade session.
+     Former leader short card (Shorts): the badge "MAP picked · <route> @ <level>" (MAP's own words beside the board's
+       resistance) on every table row; a "MAP picked, not on the board's lists" line (names passing neither route) with the
+       board's verdicts and 5-day resistance.
+     Watchlist: groups "MAP · First Pullback (paper)" and "MAP · Short (paper)" right after MAP's live groups, only when
+       imported, dashed "paper" cards; each row's next action carries MAP's line and the board's verdict.
+     TradingView lists: "MAP · First Pullback (paper)" (fpM, FIRST PULLBACK section), "MAP · Short (paper)" (shMP, SHORT
+       RESEARCH, stocks) and "MAP · Short (paper) · ETFs" (sheMP) — def 0, off DS Daily.
+   MAP SCORECARD (Board log): two rows under their own heading through MSC_X (registry added in place in MAP SCORECARD) —
+     "MAP · First Pullback (paper)": the First Pullback tracker's scorer fpResult(bars, plan day, first 30-min candle):
+       trigger = over the 09:30–10:00 high, stop = its low, win = +1R before the stop; candle = the one this section stored
+       in Live mode for MAP's FP names (else the tracker's own, same session) — none = "no 30-min data".
+     "MAP · Short (paper)": the early route's paper entry as the board saw it in Live mode (flsIntraday — the card's own
+       read when the name passes, else the same state machine on the name's early daily inputs): green → next-30-min-open
+       fill → win = fill − 1R (1R = stop − fill) before the stop, on the completed 30-min bars (same bar both = loss);
+       not settled in the session → the daily bars (the plan day's own bar only when the board didn't see the close: high
+       ≥ stop = loss; then up to 10 sessions: open ≥ stop loss, open ≤ target win, high ≥ stop loss, low ≤ target win).
+       No 30-min bars seen = "no 30-min data"; bars seen, no green (or skipped at open) = not triggered.
+     Windows: the last 20 paper days / since 26 Oct, plan days up to today (New York). Shown once adrb.mapPaper has a day.
+     Scorecard CSV: one row per name per day (groups "MAP · First Pullback (paper)" / "MAP · Short (paper)").
+   DEEP SPACE FEED (MAP's input — the MAP page's 3b note): seven columns at the very END (FEED_EXT), every row: FS Verdict
+     (Watch / Testing / Green when a route passes — Closed under a shut legacy gate — else "Out — early: <first fail>;
+     daily: <first fail>"), FS Route (early / daily / early+daily; blank = neither), FS 5d Resistance, FS Band Lo, FS Band
+     Hi (the early route's daily parts, 4 dp), FS Stop ADR, FS Room R (2 dp: the paper entry's when green, else the daily
+     route's v1 stop / room when it passes, else blank). Docs: docs/map-feed-fs-columns-2026-11-07.md.
+   SELF-CHECK: mppSelf in SC_X — the FS feed columns for MAP's FS names + both routes' listed names: own 5-day high, own
+     failed-rally ADR loop, band; Out exactly when neither route passes; the daily route's stop ADR / room from its own
+     bounce-high / swing-support loops.
+   Reads: mapImp, curPlanDay / prevSess, fpLists / fpOf / fpLive / fpResult / fpLogGet, flsRun / flsOf / flsIntraday,
+   LV (Live mode), dssBars, HIST. Storage NEW: adrb.mapPaper. No function overrides (override count unchanged), no page
+   watcher. On trial to 21 Nov 2026 (docs/trials.md): the badges, the "not on the board's lists" lines, the Watchlist groups,
+   the TradingView items, the scorecard rows. Test: tools/board-map-fpfs-test.js.
+   ===================================================================== */
+const MPP_K = "adrb.mapPaper", MPP = {fpCap: 5, fsCap: 3, days: 90, hold: 10}, MPPX = {js: ""};
+const MPP_NONE = /^(FP|FS)\s*\d*\s*[.):\-–—|]?\s*none\b\s*[.:\-–—|]*\s*(.*)$/i;
+const MPP_LINE = /^(FP|FS)\s*(\d+)?[.):]?\s+([A-Za-z0-9.:\-]+)(?:\s+([^|]*?))?\s*(?:\|(.*))?$/i;
+const MPP_KEY = {why: "why", note: "why", now: "now", trigger: "trigger", trig: "trigger", route: "route", level: "level", lvl: "level", resistance: "level", catalyst: "catalyst", cat: "catalyst"};
+const MPP_N = {FP: "First Pullback (paper)", FS: "Short (paper)"};
+
+/* ---------------- parse (hook "map", phase "parse") ---------------- */
+function mppItem(k, t, f, more){
+  const lv = parseFloat(String(f.level ?? "").replace(/[$,]/g, ""));
+  return {k, t, why: f.why || "", now: f.now || "", trigger: f.trigger || "", route: f.route || "", level: f.level || "", lv: fin(lv) ? lv : null, catalyst: f.catalyst || "", more: more.filter(Boolean).join(" · ")};
+}
+function mppFields(s){
+  const f = {}, more = [];
+  String(s || "").split("|").forEach(kv => { const v = kv.trim(), x = kv.match(/^\s*([a-z][a-z ]*?)\s*:\s*(.*)$/i); if (!v) return;
+    const key = x ? MPP_KEY[x[1].toLowerCase().trim()] : null; if (key && !(key in f)) f[key] = x[2].trim(); else more.push(v); });
+  return {f, more};
+}
+function mppParse(hx){
+  const raw = hx.text, t = raw.trim(), FP = [], FS = [], warn = [], none = {FP: null, FS: null}; let found = false;
+  const add = (kind, k, sym, f, more) => { sym = esSym(sym); if (!sym) return; found = true; const L = kind === "FP" ? FP : FS;
+    if (L.some(x => x.t === sym)) { warn.push(`${sym} is on two ${kind} lines — kept the first`); return; } L.push(mppItem(k || L.length + 1, sym, f, more)); };
+  const noneOf = (kind, why) => { found = true; none[kind] = String(why ?? "").replace(/^\s*none\b\s*[.:\-–—|]*\s*/i, "").trim() || "no reason given"; };
+  if (t[0] === "{") {
+    let j = null; try { j = JSON.parse(t); } catch (e) { j = null; }
+    if (j && typeof j === "object") for (const kind of ["FP", "FS"]) {
+      const v = j[kind], nk = j[kind + "none"] ?? j[kind + "None"] ?? j[kind.toLowerCase() + "None"];
+      if (typeof v === "string") { if (/^\s*none\b/i.test(v)) noneOf(kind, v); }
+      else if (Array.isArray(v)) v.forEach((x, i) => {
+        if (typeof x === "string") { add(kind, i + 1, x, {}, []); return; } if (!x || typeof x !== "object") return;
+        const f = {}, more = []; for (const [kk, vv] of Object.entries(x)) { if (kk === "t" || kk === "ticker" || kk === "k") continue; const key = MPP_KEY[kk.toLowerCase()];
+          if (key && !(key in f)) f[key] = String(vv ?? "").trim(); else if (vv != null && vv !== "") more.push(`${kk}: ${typeof vv === "object" ? JSON.stringify(vv) : vv}`); }
+        add(kind, +x.k || i + 1, x.t || x.ticker, f, more); });
+      if (nk != null && nk !== "" && nk !== false) noneOf(kind, typeof nk === "string" ? nk : "");
+    }
+  } else {
+    const keep = [];
+    for (const r of raw.split(/\r?\n/)) { const line = r.trim(); let m;
+      if ((m = line.match(MPP_NONE))) { noneOf(m[1].toUpperCase(), m[2]); continue; }
+      if ((m = line.match(MPP_LINE))) { const {f, more} = mppFields(m[5]); add(m[1].toUpperCase(), m[2] ? +m[2] : 0, m[3], f, [(m[4] || "").trim(), ...more]); continue; }
+      keep.push(r); }
+    if (found) hx.text = keep.join("\n").trim() ? keep.join("\n") : "#";   // FP / FS lines alone: the base parser still says "No ticker lines found"
+  }
+  if (!found) return;
+  if (FP.length > MPP.fpCap) warn.push(`${FP.length} FP lines — MAP's format has up to ${MPP.fpCap} (all kept; paper list)`);
+  if (FS.length > MPP.fsCap) warn.push(`${FS.length} FS lines — MAP's format has up to ${MPP.fsCap} (all kept; paper list)`);
+  if (none.FP && FP.length) warn.push(`"FP none" and ${FP.length} FP line${FP.length > 1 ? "s" : ""} — both kept`);
+  if (none.FS && FS.length) warn.push(`"FS none" and ${FS.length} FS line${FS.length > 1 ? "s" : ""} — both kept`);
+  const o = hx.out; o.FP = FP; o.FS = FS; o.fpNone = none.FP; o.fsNone = none.FS; o.warn.push(...warn);
+}
+
+/* ---------------- storage: the paper lists per plan day ---------------- */
+function mppLog(){ let o = null; try { o = store.get(MPP_K, null); } catch (e) { o = null; } if (!o || typeof o !== "object" || !o.d || typeof o.d !== "object") o = {v: 1, d: {}}; return o; }
+function mppLogSet(o){
+  const keep = Object.keys(o.d).sort().slice(-MPP.days), v = {v: 1, d: Object.fromEntries(keep.map(k => [k, o.d[k]]))}, js = JSON.stringify(v);
+  if (js === MPPX.js) return; MPPX.js = js; try { store.set(MPP_K, v); } catch (e) { console.warn("MAP paper lines", e); }
+}
+// hook "map", phase "apply": the import record + the day's paper lists
+function mppApply(hx){
+  const P = hx.P, rec = hx.rec; if (!P || !Array.isArray(P.FP)) return;
+  rec.FP = P.FP; rec.FS = P.FS; rec.fpNone = P.fpNone; rec.fsNone = P.fsNone; rec.n = {...rec.n, FP: P.FP.length, FS: P.FS.length};
+  const log = mppLog(), p = rec.session, d = log.d[p] || {FP: [], FS: [], fpNone: null, fsNone: null, fc: {}, fs: {}};
+  if (P.FP.length || P.fpNone) { d.FP = P.FP; d.fpNone = P.fpNone; }
+  if (P.FS.length || P.fsNone) { d.FS = P.FS; d.fsNone = P.fsNone; }
+  d.at = Date.now(); log.d[p] = d; mppLogSet(log);
+}
+// the paper lists for the board's plan day (or the session before it, like MAP's notes); else an import record carrying them
+function mppCur(){
+  const p = curPlanDay(), log = mppLog(), q = prevSess(p), day = log.d[p] ? p : log.d[q] ? q : null;
+  if (day) { const d = log.d[day]; return {p: day, FP: d.FP || [], FS: d.FS || [], fpNone: d.fpNone || null, fsNone: d.fsNone || null}; }
+  const m = mapImp(); if (m && Array.isArray(m.FP) && (m.session === p || m.session === q)) return {p: m.session, FP: m.FP, FS: m.FS || [], fpNone: m.fpNone || null, fsNone: m.fsNone || null};
+  return null;
+}
+const mppIn = (L, s) => (L || []).find(x => x.t === s) || null;
+
+/* ---------------- import summary (hook "map", phase "html") ---------------- */
+function mppHtml(hx){
+  hx.fmt += ` <b>Paper lists</b> (MAP v4.10, kept apart from A / B / On deck — no caps from those lists): <code>FP1 XYZ | why: … | now: Ready · at the 9 | trigger: 09:30–10:00 high</code> = Playbook 2 · First Pullback (up to 5), <code>FS1 ABC | why: … | route: early | level: 123.45 | now: watch</code> = Short · Former leader, lower high (up to 3); <code>FP none — reason</code> / <code>FS none — reason</code> when there are none. JSON: <code>"FP": [{"t":"NVDA","why":"…","now":"at the 9"}]</code>, <code>"FS": […]</code>, <code>"FP": "none — reason"</code>. More lines than that are kept, with a note.`;
+  const m = hx.m; if (!m || !Array.isArray(m.FP)) return;
+  const FP = m.FP, FS = m.FS || [], nm = L => L.map(x => `<b>${esc(x.t)}</b>`).join(", ");
+  const det = [FP.length ? `FP: ${nm(FP)}` : m.fpNone ? `FP none — ${esc(m.fpNone)}` : "", FS.length ? `FS: ${nm(FS)}` : m.fsNone ? `FS none — ${esc(m.fsNone)}` : ""].filter(Boolean).join(" · ");
+  hx.row = `<div class="mppimp"><div><b>${MPP_N.FP}: ${FP.length} · ${MPP_N.FS}: ${FS.length}</b> <span class="dim">— MAP's paper lists, not A / B / On deck</span></div>${det ? `<div class="dim">${det}</div>` : ""}</div>`;
+}
+hookOn("map", "paperLines", (ph, hx) => { if (ph === "parse") mppParse(hx); else if (ph === "apply") mppApply(hx); else if (ph === "html") mppHtml(hx); });
+// the live check line under the paste box: + the paper counts (a second listener, after the board's own)
+document.addEventListener("input", e => {
+  if (!e.target || e.target.id !== "mapPaste") return; const el = $("mapChk"); if (!el) return;
+  let P = null; try { P = mapParse(e.target.value); } catch (er) { return; } if (!P || P.errs.length || !Array.isArray(P.FP)) return;
+  el.insertAdjacentHTML("beforeend", ` · <span class="mppchk">paper: ${P.FP.length} FP${P.fpNone ? " (none)" : ""} · ${P.FS.length} FS${P.fsNone ? " (none)" : ""}</span>`);
+});
+
+/* ---------------- badges + the "not on the board's lists" lines ---------------- */
+const mppTip = (kind, x) => [`MAP picked (paper) · ${kind === "FP" ? "First Pullback" : "Short · Former leader"}`, x.route && "route: " + x.route, x.level && "level: " + x.level, x.now && "now: " + x.now, x.trigger && "trigger: " + x.trigger, x.why && "why: " + x.why, x.catalyst && "catalyst: " + x.catalyst, x.more].filter(Boolean).join("\n");
+function mppFpTag(sym){ const c = mppCur(), x = c && mppIn(c.FP, sym); return x ? ` <span class="mpptag" title="${esc(mppTip("FP", x))}">MAP picked</span>` : ""; }
+function mppFpTrTag(o){ const d = o && o.s1 ? mppLog().d[o.s1] : null, x = d && mppIn(d.FP, o.s); return x ? ` <span class="mpptag" title="${esc(mppTip("FP", x) + "\nfor " + o.s1)}">MAP picked</span>` : ""; }
+function mppFsTag(sym){ const c = mppCur(), x = c && mppIn(c.FS, sym); if (!x) return ""; const rl = [x.route, x.level].filter(Boolean).join(" @ ");
+  return ` <span class="mpptag" title="${esc(mppTip("FS", x))}">MAP picked${rl ? ` · ${esc(rl)}` : ""}</span>`; }
+const mppTk = s => `<span class="tk" data-sym="${esc(s)}">${esc(s)}</span>`;
+// First Pullback: MAP's FP names that aren't Ready / On deck on the board's whole-file lists, with the board's verdict
+function mppFpMissHTML(){
+  const c = mppCur(); if (!c || !c.FP.length || !pbHH()) return "";
+  const A = fpLists(true), on = new Set([...A.R, ...A.D].map(f => f.r.sym)), by = S.rowBySym || new Map(), M = c.FP.filter(x => !on.has(x.t)); if (!M.length) return "";
+  return `<div class="small mppmiss"><b>MAP picked, not on the board's lists:</b> ${M.map(x => { const r = by.get(x.t); let f = null; try { f = r ? fpOf(r) : null; } catch (e) { f = null; }
+    return `${mppTk(x.t)} <span class="dim">${f ? `First Pullback ${FP_L[f.list].n}${f.ffTxt ? " — " + esc(f.ffTxt) : ""}` : !r ? "not in the files" : r.etf ? "ETF — First Pullback runs on stocks only" : "not enough stored bars"}${x.now ? ` · MAP: ${esc(x.now)}` : ""}</span>`; }).join(" · ")}</div>`;
+}
+// Former leader short: MAP's FS names that pass neither route, with the board's verdicts
+function mppFsMissHTML(R){
+  const c = mppCur(); if (!c || !c.FS.length || !R) return "";
+  const on = new Set([...R.pass, ...R.early.pass, ...R.early.etf].map(o => o.r.sym)), M = c.FS.filter(x => !on.has(x.t)); if (!M.length) return "";
+  return `<div class="small mppmiss"><b>MAP picked, not on the board's lists:</b> ${M.map(x => { const o = R.by.get(x.t), d = o && o.e && o.e.d, rl = [x.route, x.level].filter(Boolean).join(" @ ");
+    return `${mppTk(x.t)} <span class="dim">${o ? `daily: ${esc(R.verdict.get(x.t) || "—")} · early: ${esc(R.early.verdict.get(x.t) || "—")}${d ? ` · board's ${FLSE.look}-day resistance ${flsPx(d.R)}` : ""}` : "not in the files"}${rl ? ` · MAP: ${esc(rl)}` : ""}</span>`; }).join(" · ")}</div>`;
+}
+
+/* ---------------- Watchlist groups (called in place in wlGroups) + TradingView items ---------------- */
+WL_SRC.mfp = "MAP First Pullback (paper)"; WL_SRC.mfs = "MAP Short (paper)";
+function mppWlGroups(mk){
+  const c = mppCur(); if (!c) return []; const out = [], by = S.rowBySym || new Map();
+  const mline = (kind, x) => `MAP (paper): ${[kind === "FS" && x.route ? "route " + x.route : "", kind === "FS" && x.level ? "level " + x.level : "", x.now, kind === "FP" && x.trigger ? "trigger " + x.trigger : "", x.why].filter(Boolean).join(" · ") || "no notes"}`;
+  if (c.FP.length) out.push(["MAP · First Pullback (paper)", c.FP.map(x => { const e = mk(x.t, "mfp"), r = by.get(x.t); let f = null; try { f = r && pbHH() ? fpOf(r) : null; } catch (er) { f = null; }
+    return {...e, note: `${mline("FP", x)} — board: ${f ? `First Pullback ${FP_L[f.list].n}${f.list === "O" && f.ffTxt ? " (" + f.ffTxt + ")" : ""}` : pbHH() ? "no First Pullback read" : "needs the price history"}`}; })]);
+  if (c.FS.length) { let R = null; try { R = pbHH() ? flsRun() : null; } catch (er) { R = null; }
+    out.push(["MAP · Short (paper)", c.FS.map(x => { const e = mk(x.t, "mfs"), o = R ? R.by.get(x.t) : null, cl = R && o ? mppFsCells(R, x.t) : null;
+      return {...e, note: `${mline("FS", x)} — board: ${cl ? `${cl[0]}${cl[1] ? " · " + cl[1] : ""}${cl[2] !== "" ? ` · ${FLSE.look}-day resistance ${cl[2]}` : ""}` : R ? "no former-leader read" : "needs the price history"}`}; })]); }
+  return out;
+}
+function mppTvlFP(){ return [{k: "fpM", n: "MAP · First Pullback (paper)", def: 0, f: () => { const c = mppCur(); return c ? c.FP.map(x => tvlE(x.t, `MAP · First Pullback (paper)${x.now ? " · " + x.now : ""}`, "MAP picked")) : []; }}]; }
+function mppTvlFS(etf){ return [{k: etf ? "sheMP" : "shMP", n: etf ? "MAP · Short (paper) · ETFs" : "MAP · Short (paper)", def: 0,
+  f: () => { const c = mppCur(); return c ? c.FS.filter(x => tvlEtf(x.t) === etf).map(x => tvlE(x.t, `MAP · Short (paper)${x.route ? " · " + x.route : ""}${x.level ? " @ " + x.level : ""}`, "MAP picked")) : []; }}]; }
+
+/* ---------------- Live mode: what the board saw for MAP's paper names (hook "tab") ---------------- */
+// FS: the early route's 30-min read for one name this session — the card's own when the name passes, else the same state
+// machine on the name's early daily parts. null = no 30-min bars for it (nothing is recorded → "no 30-min data").
+function mppFsLive(sym){
+  const F = LV.frame, T = LV.today && LV.today.get(sym); if (!T || T.d !== F.date || !Array.isArray(T.bars)) return null;
+  const o = typeof flsOf === "function" ? flsOf(sym) : null; if (!o || !o.e || !o.e.d) return null;
+  const ms = FLSE.barMin * 6e4, done = T.bars.filter(x => x && fin(x.t) && isRTH(x.t) && dET(x.t) === F.date && x.t + ms <= F.dataMs).sort((a, z) => a.t - z.t); if (!done.length) return null;
+  const iv = o.iv && !o.iv.none && Array.isArray(o.iv.rows) ? o.iv : flsIntraday(o.e.d, T.bars, flsTick(o.e.d.close), {date: F.date, asOf: F.dataMs});
+  const last = done[done.length - 1], rec = {seen: last.t + ms, end: etMin(last.t) + FLSE.barMin >= 960, g: null, k: null, xt: null}, g = iv && iv.sig;
+  if (g) { const f = g.fill || {};
+    rec.g = {t: g.t, routes: g.routes, px: g.px, stop: g.stop, sup: g.sup, fill: f.ok ? f.o : null, fillT: f.ok ? f.t : null, wait: !!(f.wait || f.pend), why: f.ok ? "" : f.why || ""};
+    if (f.ok) { const T1 = f.o - (g.stop - f.o), eps = flsTick(f.o) * 1e-6;
+      for (const x of done) { if (x.t < f.t) continue; if (x.h >= g.stop - eps) { rec.k = "loss"; rec.xt = x.t; break; } if (x.l <= T1 + eps) { rec.k = "win"; rec.xt = x.t; break; } } } }
+  return rec;
+}
+function mppRecord(){
+  if (typeof LV === "undefined" || !LV.cfg || !LV.cfg.on || !LV.frame || LV.frame.phase !== "rth" || !LV.frame.dataMs) return false;
+  const F = LV.frame, log = mppLog(), d = log.d[F.date]; if (!d) return false;
+  let ch = false; d.fc = d.fc || {}; d.fs = d.fs || {};
+  for (const x of d.FP || []) { const q = typeof fpLive === "function" ? fpLive(x.t) : null; if (!q || !fin(q.hi)) continue; const o = d.fc[x.t];
+    if (!o) { d.fc[x.t] = [+q.hi.toFixed(4), +q.lo.toFixed(4), new Date(F.dataMs).toISOString(), q.trig ? new Date(q.trigAt).toISOString() : null]; ch = true; }
+    else if (!o[3] && q.trig && Math.abs(q.hi - o[0]) < 1e-3) { o[3] = new Date(q.trigAt).toISOString(); ch = true; } }
+  if (pbHH()) for (const x of d.FS || []) { let v = null; try { v = mppFsLive(x.t); } catch (e) { console.warn("MAP paper FS", x.t, e); } if (!v) continue;
+    const old = d.fs[x.t], nv = {...v};
+    if (old) { if (old.g && !v.g) nv.g = old.g; if (old.k && !v.k) { nv.k = old.k; nv.xt = old.xt; } nv.seen = Math.max(old.seen || 0, v.seen); nv.end = !!(old.end || v.end); }   // never erase what was seen
+    if (JSON.stringify(nv) !== JSON.stringify(old)) { d.fs[x.t] = nv; ch = true; } }
+  if (ch) mppLogSet(log);
+  return ch;
+}
+hookOn("tab", "mapPaperLines", () => { if (!S.snap) return; try { mppRecord(); } catch (e) { console.warn("MAP paper lines (live)", e); } });
+
+/* ---------------- MAP scorecard rows (MSC_X) ---------------- */
+// PURE — one FS name on plan day p. r = the stored Live read; b = {o, h, l, dates, n}; now = {d, m} New York
+function mppFsResult(r, b, p, now, hold = MPP.hold){
+  const i = b && b.n ? b.dates.indexOf(p) : -1, over = now.d > p || (now.d === p && now.m >= 960);
+  if (!r || !r.seen) return {k: over ? "nodata" : "pending"};
+  const g = r.g; if (!g) return {k: r.end || over ? "nofill" : "pending"};
+  if (g.fill == null) return {k: g.wait ? (over ? "nodata" : "pending") : "nofill", why: g.why};
+  const E = g.fill, SP = g.stop, T = E - (SP - E), base = {E, SP, T, R: SP - E, fillT: g.fillT};
+  if (r.k) return {...base, k: r.k, xt: r.xt, on: "30-min"};
+  if (i < 0) return {...base, k: "open"};
+  const ok = v => typeof v === "number" && isFinite(v);
+  if (!r.end && ok(b.h[i]) && b.h[i] >= SP) return {...base, k: "loss", xt: p, on: "daily"};
+  for (let j = 1; j <= hold; j++) { const t = i + j; if (t >= b.n) return {...base, k: "open"}; const o = b.o[t], h = b.h[t], l = b.l[t]; if (!ok(h) || !ok(l)) continue;
+    if (ok(o) && o >= SP) return {...base, k: "loss", xt: b.dates[t], on: "daily"}; if (ok(o) && o <= T) return {...base, k: "win", xt: b.dates[t], on: "daily"};
+    if (h >= SP) return {...base, k: "loss", xt: b.dates[t], on: "daily"}; if (l <= T) return {...base, k: "win", xt: b.dates[t], on: "daily"}; }
+  return {...base, k: "open"};
+}
+const mppBars = s => { try { return HIST.nD && HIST.idx && HIST.idx.has(s) ? dssBars(s) : null; } catch (e) { return null; } };
+function mppScore(kind, p, d){
+  const now = jnET(), tr = kind === "FP" ? ((typeof fpLogGet === "function" ? fpLogGet().tr : null) || {}) : null;
+  return (kind === "FP" ? d.FP : d.FS || []).map(x => { const b = mppBars(x.t);
+    if (kind === "FP") { const fc = (d.fc && d.fc[x.t]) || tr[p + "|" + x.t] || null; let res = typeof fpResult === "function" ? fpResult(b, p, fc) : {k: "nodata"};
+      if (res.k === "pending" && !b && (now.d > p || (now.d === p && now.m >= 960))) res = {k: "nodata"}; return {x, fc, res}; }
+    return {x, fs: d.fs ? d.fs[x.t] || null : null, res: mppFsResult(d.fs ? d.fs[x.t] : null, b, p, now)}; });
+}
+function mppDays(win){ const today = jnET().d, all = Object.keys(mppLog().d).filter(p => p <= today).sort(); return win === "since" ? all.filter(p => p >= MSC.d1) : all.slice(-MSC.days); }
+function mppAgg(kind, win){
+  const a = {n: 0, win: 0, loss: 0, open: 0, nofill: 0, pend: 0, nodata: 0, nolv: 0, R: [], sw: 0, sl: 0}, log = mppLog(), days = mppDays(win); let dn = 0;
+  for (const p of days) { const d = log.d[p]; if (!d) continue; const L = mppScore(kind, p, d); if (L.length) dn++;
+    for (const o of L) { a.n++; const k = o.res.k; if (k === "win") a.win++; else if (k === "loss") a.loss++; else if (k === "open") a.open++; else if (k === "nofill") a.nofill++; else if (k === "pending") a.pend++; else a.nodata++; } }
+  a.trig = a.win + a.loss + a.open; a.res = a.win + a.loss; a.rate = a.res ? a.win / a.res * 100 : null; a.avgR = null; a.sres = 0; a.srate = null; a.days = dn;
+  return a;
+}
+const mppShow = () => Object.keys(mppLog().d).length > 0;
+function mppCsvRows(kind){
+  const out = [], log = mppLog(), n4 = v => v == null || !fin(v) ? "" : +v.toFixed(4), GL = kind === "FP" ? "MAP · First Pullback (paper)" : "MAP · Short (paper)";
+  for (const p of Object.keys(log.d).sort()) for (const o of mppScore(kind, p, log.d[p])) { const r = o.res;
+    const E = kind === "FP" ? (o.fc ? o.fc[0] : null) : r.E ?? null, SP = kind === "FP" ? (o.fc ? o.fc[1] : null) : r.SP ?? null, R1 = E != null && SP != null ? Math.abs(E - SP) : null;
+    const xt = r.xt == null ? "" : typeof r.xt === "number" ? new Date(r.xt).toISOString() : r.xt;
+    out.push([p, prevSess(p), o.x.t, GL, "", "", "", "", "", "no", kind === "FP" ? "MAP FP line · first 30-min candle (Live)" : "MAP FS line · early route paper entry (Live)",
+      kind === "FP" ? n4(E) : "", n4(SP), n4(R1), R1 != null ? n4(kind === "FP" ? E + R1 : E - R1) : "", "", kind === "FP" ? n4(E) : n4(E), kind === "FP" ? (r.trig ? p : "") : (r.fillT ? new Date(r.fillT).toISOString() : ""),
+      FP_RES[r.k] || MSC_K[r.k] || r.k, xt, "", "", "", "", "", ""]); }
+  return out;
+}
+if (typeof MSC_X !== "undefined") MSC_X.push(
+  {k: "mfp", l: "MAP · First Pullback (paper)", sub: "MAP's FP lines · over the 09:30–10:00 high, stop = its low (the First Pullback tracker's rule) · +1R before the stop", show: mppShow, agg: w => mppAgg("FP", w), csv: () => mppCsvRows("FP")},
+  {k: "mfs", l: "MAP · Short (paper)", sub: "MAP's FS lines · the early route's paper entry (green → next-open fill) · fill − 1R before the stop", show: mppShow, agg: w => mppAgg("FS", w), csv: () => mppCsvRows("FS")});
+
+/* ---------------- Deep Space feed: seven FS columns at the very end ---------------- */
+const MPP_FS_H = ["FS Verdict", "FS Route", "FS 5d Resistance", "FS Band Lo", "FS Band Hi", "FS Stop ADR", "FS Room R"];
+function mppFsCells(R, sym){
+  const o = R ? R.by.get(sym) : null; if (!o || (!o.e && !o.x)) return null;
+  const e = o.e, x = o.x, eP = !!(e && e.pass), dP = !!(x && x.pass), d = e && e.d, iv = o.iv, g = iv && iv.sig, fr = x && x.fr, n = (v, dp) => fin(v) ? +v.toFixed(dp) : "";
+  const route = [eP ? "early" : null, dP ? "daily" : null].filter(Boolean).join("+");
+  const v = !eP && !dP ? "Out — " + [e ? `early: ${e.ff ? FLS_ECK[e.ff] : "—"}` : "", x ? `daily: ${flsFfTxt(x) || "—"}` : ""].filter(Boolean).join("; ")
+    : !R.open ? "Closed" : g ? "Green" : iv && iv.state === "testing" ? "Testing" : "Watch";
+  const stopA = g ? g.rA : dP && fr ? fr.stopA : NaN, room = g ? g.room : dP && fr ? fr.room : NaN;
+  return [v, route, d ? n(d.R, 4) : "", d ? n(d.lo, 4) : "", d ? n(d.hi, 4) : "", n(stopA, 2), n(room, 2)];
+}
+FEED_EXT.push({h: MPP_FS_H, prep: () => { try { return pbHH() ? flsRun() : null; } catch (e) { console.warn("FS feed columns", e); return null; } }, cells: (o, R) => o && o.sym && R ? mppFsCells(R, o.sym) : null});
+
+/* ---------------- self-check: a separate recompute of the FS feed columns ---------------- */
+function mppSelf(){
+  const out = []; if (!S.snap || !pbHH() || !HIST.nD) return out; const R = flsRun(); if (!R) return out;
+  const c = mppCur(), L = typeof LV !== "undefined" && LV.cfg && LV.cfg.on && LV.frame && LV.frame.phase === "rth" && LV.frame.dataMs ? LV.frame : null, ck = typeof fileClock === "function" ? fileClock() : null;
+  const names = [...new Set([...(c ? c.FS.map(x => x.t) : []), ...R.early.top.map(o => o.r.sym), ...R.top.map(o => o.r.sym), ...R.early.etf.slice(0, 5).map(o => o.r.sym), ...R.near.slice(0, 5).map(o => o.r.sym)])].slice(0, 40);
+  const tl = (a, b, t) => a !== "" && Math.abs(a - b) <= t * Math.max(1, Math.abs(b));
+  for (const s of names) {
+    const cells = mppFsCells(R, s), b = mppBars(s); if (!cells || !b || b.n < 25) continue;
+    const h = [...b.h], l = [...b.l], cl = [...b.c], t = b.n - 1;
+    let u = t; if (L) { while (u >= 0 && !(b.dates[u] < L.date)) u--; } else if (b.today && ck && ck.m < 960) u = t - 1;
+    if (u >= 19 && [h, l, cl].every(a => a.slice(u - 19, u + 1).every(isFinite))) {
+      let Rr = -Infinity; for (let k = u - 4; k <= u; k++) Rr = Math.max(Rr, h[k]);
+      let a = 0; for (let k = u - 19; k <= u; k++) a += h[k] / l[k]; const D = (a / 20 - 1) * cl[u], want = [Rr, Rr - 0.25 * D, Rr + 0.25 * D];
+      out.push({sym: s, what: "FS feed: 5-day resistance and test band", ok: cells.slice(2, 5).every((g, i) => tl(g, want[i], 1e-4)), board: cells.slice(2, 5).join(" / "), mine: want.map(v => +v.toFixed(4)).join(" / ")});
+    }
+    const o = R.by.get(s), pass = !!(o.e && o.e.pass) || !!(o.x && o.x.pass);
+    out.push({sym: s, what: "FS feed: Out exactly when neither route passes", ok: pass ? !/^Out/.test(cells[0]) && cells[1] !== "" : /^Out — /.test(cells[0]) && cells[1] === "", board: `${cells[0]} · ${cells[1] || "no route"}`, mine: pass ? "a route passes" : "Out"});
+    // the daily route's stop ADR / room (no green yet): own bounce high from the test session, own failed-rally ADR, own swing support
+    const x = o.x, g = o.iv && o.iv.sig;
+    if (!g && x && x.pass && x.fr && x.fr.testDate && [h, l, cl].every(q => q.slice(Math.max(0, t - 60)).every(isFinite))) {
+      const j0 = b.dates.lastIndexOf(x.fr.testDate); let hi = -Infinity; for (let k = j0; k <= t; k++) hi = Math.max(hi, h[k]);
+      let a = 0; for (let k = t - 19; k <= t; k++) a += h[k] / l[k]; const D = (a / 20 - 1) * cl[t];
+      let sup = -Infinity; for (let k = Math.max(3, b.n - 60); k <= t - 3; k++) { let sw = true; for (let q = 1; q <= 3; q++) if (!(l[k] < l[k - q] && l[k] < l[k + q])) { sw = false; break; } if (sw && l[k] < cl[t]) sup = Math.max(sup, l[k]); }
+      if (!isFinite(sup)) { sup = Infinity; for (let k = t - 19; k <= t; k++) sup = Math.min(sup, l[k]); }
+      const sA = (hi - cl[t]) / D, rm = (cl[t] - sup) / (hi - cl[t]);
+      out.push({sym: s, what: "FS feed: daily route stop ADR and room", ok: j0 >= 0 && tl(cells[5], sA, 0.006) && tl(cells[6], rm, 0.006), board: `${cells[5]} / ${cells[6]}`, mine: `${sA.toFixed(2)} / ${rm.toFixed(2)}`});
+    }
+  }
+  return out;
+}
+if (typeof SC_X !== "undefined") SC_X.push(mppSelf);
+document.head.insertAdjacentHTML("beforeend", `<style>
+.mpptag{display:inline-block;margin-left:4px;padding:0 5px;border-radius:8px;font-size:10.5px;font-weight:600;letter-spacing:.02em;border:1px dashed var(--accent);color:var(--accent);background:var(--surface);cursor:help;white-space:nowrap}
+.mppmiss{margin:6px 0 2px;padding:4px 8px;border-left:3px dashed var(--accent);background:var(--chip)} .mppmiss .tk{cursor:pointer}
+.mppimp{margin-top:4px;padding:3px 8px;border:1px dashed var(--line-strong);border-radius:6px}
+.wlg.wlpaper{border:1px dashed var(--line-strong);box-shadow:none} .wlg.wlpaper .hd h2::after{content:" · paper — not a live MAP list";font-size:11px;font-weight:400;color:var(--ink-3)}
+.mppwhy{color:var(--ink-2)} .msc-xh td{background:var(--chip);border-top:1px dashed var(--line-strong)}
 </style>`);
 </script>
