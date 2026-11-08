@@ -854,6 +854,8 @@ html.mob .itc{height:400px}
 html.mob .itg{grid-template-columns:repeat(2,minmax(0,1fr))}
 html.mob .itnow .big{font-size:24px}
 html.mob .itbx .v{font-size:16px}
+/* 8 Nov 2026: three playbooks on the switch (S · Former Leader Short) — the buttons wrap instead of running off the edge */
+html.mob .pbseg{display:flex;flex-wrap:wrap;max-width:100%} html.mob .pbseg button{flex:1 1 auto;white-space:nowrap}
 </style>
 <script>
 // Phone edition, runs before anything else: always the workspace layout plus html.mob (the desktop's adrb.layout is left alone).
@@ -5912,7 +5914,8 @@ function tpBuild0(r){
   WSI.cur = r.sym;
   const planEls = r.zLo != null && !r.etf ? [htmlEl(tpTicket(r)), ...B.plan.filter(el => !/^Plan:/.test(el.textContent.trim())), ...B.checks, ...foldEls(B.plan.filter(el => /^Plan:/.test(el.textContent.trim())), "Full plan note")] : [...B.plan, ...B.checks];
   const histEls = B.hist.length && r.hx ? [htmlEl(tpHist(r)), ...foldEls(B.hist, "Full notes")] : B.hist;
-  const panes = [["plan", "Plan & checks", planEls], ["hist", "History · short score", histEls], ["news", "News", B.news], ["peers", "Group", B.peers]].filter(p => p[2].length);
+  const panes = [["plan", "Plan & checks", planEls], ["hist", "History", histEls],   // 8 Nov 2026: label only (short score → the Former Leader Short tab)
+                  ["news", "News", B.news], ["peers", "Group", B.peers]].filter(p => p[2].length);
   if (!panes.some(p => p[0] === WSI.tpTab)) WSI.tpTab = panes.length ? panes[0][0] : "plan";
   const head = document.createElement("div"); head.className = "tp-head";
   const body = document.createElement("div"); body.className = "tp-body";
@@ -8883,6 +8886,7 @@ function popWire(w){
   d.getElementById("pInt").onclick = e => { const b = e.target.closest("button"); if (!b || !POP.sym) return; POP.iv = b.dataset.i; popChart(POP.sym, true); };
   const o = d.getElementById("pOnly"); o.checked = popOnly(); o.onchange = () => { store.set("adrb.popOnly", o.checked); if (o.checked && $("drawer").classList.contains("open")) closeDrawer(); };
   d.getElementById("pPrev").onclick = () => popStep(-1); d.getElementById("pNext").onclick = () => popStep(1);
+  if (typeof tv1Wire === "function") tv1Wire(d);   // 8 Nov 2026 (TRADINGVIEW IN ONE TAB, display only): its button reuses the one tab
 }
 function popOpen(sym){
   const feats = "popup=yes,width=1280,height=960", reach = x => { try { void x.document.body; return true; } catch (e) { return false; } };
@@ -12615,16 +12619,17 @@ svg text.sclab{paint-order:stroke;stroke:var(--surface);stroke-width:3px;stroke-
    computed; every reader below (cards, panel tabs, screens, criteria, Today line, Watchlist card, MAP O lines, feeds,
    TradingView lists, campaigns, self-check) keeps working. adrb.pbGF gains the key "fp"; its 1 / 2 / 3 sets are kept.
    ===================================================================== */
-const PB_N = {1: "Leader Pullback", 2: "Shakeout Reclaim", 3: "Floor Bounce", fp: "First Pullback"};
+const PB_N = {1: "Leader Pullback", 2: "Shakeout Reclaim", 3: "Floor Bounce", fp: "First Pullback", fls: "Former Leader Short"};   // 8 Nov 2026: fls = script "FORMER LEADER SHORT PLAYBOOK"
 const PB_D = {1: "Playbook 1 · Leader Pullback — buy strong leaders when they dip back to their rising averages; the Entry Check (rules v6.1) is its checklist; canonical, in test since 26 Oct",
   2: "Playbook 2 · Shakeout Reclaim (R1) — a former leader is shaken out under its averages, then takes the level back; experimental live, 0.10% NLV, outside the Entry Check test",
   3: "Playbook 3 · Floor Bounce (OB) — a fast drop lands on a price floor set earlier and bounces (Monis); paper / watch only, never sized",
-  fp: "Playbook 2 · First Pullback — a stock fresh off a strong leg (early Stage 2) pulls back quietly to its daily 9 or 21 EMA on drying volume and tight ranges; buy over the 09:30–10:00 ET candle's high, stop = its low; paper / watch only (Notion v1.0, 7 Nov 2026)"};
+  fp: "Playbook 2 · First Pullback — a stock fresh off a strong leg (early Stage 2) pulls back quietly to its daily 9 or 21 EMA on drying volume and tight ranges; buy over the 09:30–10:00 ET candle's high, stop = its low; paper / watch only (Notion v1.0, 7 Nov 2026)",
+  fls: "Short · Former Leader — in a market that has rolled over, a former leader that broke down bounces into resistance and fails with a lower high; short the failure, never a name already far down; paper / watch only (Notion v1.0, 7 Nov 2026)"};
 // 7 Nov 2026: the buttons on the switch (value, number shown) — First Pullback is shown as 2 but stored as "fp"
-const PB_SW = [[1, 1], ["fp", 2]];
-const pbNo = k => k === "fp" ? 2 : k;
+const PB_SW = [[1, 1], ["fp", 2], ["fls", "S"]];   // 8 Nov 2026: "S" = Short · Former Leader (no number — 3 was Floor Bounce, still on old trade-log tags)
+const pbNo = k => k === "fp" ? 2 : k === "fls" ? "S" : k;
 // 7 Nov 2026: "fp" = First Pullback; an old stored 2 / 3 (Shakeout Reclaim / Floor Bounce, now off the switch) reads as 1 — never as "fp"
-const pbCur = () => { let v = 1; try { v = store.get("adrb.pb", 1); } catch (e) {} return v === "fp" ? "fp" : 1; };
+const pbCur = () => { let v = 1; try { v = store.get("adrb.pb", 1); } catch (e) {} return v === "fp" ? "fp" : v === "fls" ? "fls" : 1; };
 const p2 = x => fin(x) ? x.toFixed(2) : "—";
 const pbHH = () => !!(S.has && S.has.hist && HIST.nD);
 // the per-symbol caches follow the price bars only (the SPEED script's key): a settings change that rebuilds the rows but
@@ -12801,15 +12806,15 @@ function pbDefaultGF(k){
   return {...structuredClone(GF_DEF), on: true, gates: {...GF_DEF.gates, ...((p && p.gates) || {})}, crit: structuredClone((p && p.crit) || {})};
 }
 function pbSet(k){
-  k = k === "fp" ? "fp" : +k;
+  k = k === "fp" || k === "fls" ? k : +k;
   // 7 Nov 2026: Shakeout Reclaim / Floor Bounce are off the switch — 2 / 3 open the Research card on Setups instead
   if (k === 2 || k === 3) { if (typeof pbResOpen === "function") pbResOpen(k === 2 ? "r1" : "ob"); return; }
-  const was = pbCur(); if (k === was || ![1, "fp"].includes(k)) return;
+  const was = pbCur(); if (k === was || ![1, "fp", "fls"].includes(k)) return;
   const all = store.get("adrb.pbGF", {}) || {};
   all[was] = structuredClone(GF);
   GF = all[k] ? {...structuredClone(GF_DEF), ...structuredClone(all[k]), gates: {...GF_DEF.gates, ...(all[k].gates || {})}, crit: structuredClone(all[k].crit || {})} : pbDefaultGF(k);
   store.set("adrb.pbGF", all); store.set("adrb.pb", k);
-  WSI.tpTab = k === "fp" ? "fp" : "plan"; store.set("adrb.tpTab", WSI.tpTab);
+  WSI.tpTab = k === "fp" || k === "fls" ? k : "plan"; store.set("adrb.tpTab", WSI.tpTab);
   toast(`Playbook ${pbNo(k)} · ${PB_N[k]} — its own filters are loaded`);
   gfApply(); if (!S.snap) renderAll();
   const dr = $("drawer"); if (dr && dr.classList.contains("open") && typeof WSI !== "undefined" && WSI.cur && S.rowBySym && S.rowBySym.has(WSI.cur)) openDrawer(WSI.cur);
@@ -12930,10 +12935,10 @@ function pbPlanPaint(){
   const k = pbCur();
   let seg = $("pbTop"); if (!seg) { const lede = $("planLede"); (lede || tab.firstElementChild).insertAdjacentHTML(lede ? "afterend" : "beforebegin", `<div class="pbtop" id="pbTop"></div>`); seg = $("pbTop"); }
   seg.innerHTML = `<span class="lbl">Playbook</span>${pbSegHTML("pbSeg")}<span class="small dim">${esc(PB_D[k])}</span>`;
-  tab.classList.toggle("pbOn", k !== 1);
+  tab.classList.toggle("pbOn", k !== 1 && k !== "fls"); tab.classList.toggle("pbFls", k === "fls");   // 8 Nov 2026: the short has its own page layout (FORMER LEADER SHORT PLAYBOOK)
   let box = $("pbBox"); if (!box) { seg.insertAdjacentHTML("afterend", `<div class="card g1" id="pbBox"></div>`); box = $("pbBox"); }
-  box.classList.toggle("hidden", k === 1);
-  if (k === 1) { box.innerHTML = ""; box.removeAttribute("data-pb"); return; }
+  box.classList.toggle("hidden", k === 1 || k === "fls");
+  if (k === 1 || k === "fls") { box.innerHTML = ""; box.removeAttribute("data-pb"); if (k === "fls" && typeof flsPbLede === "function") flsPbLede(); return; }
   box.dataset.pb = k;
   try { box.innerHTML = k === "fp" ? (typeof fpCardHTML === "function" ? fpCardHTML() : "") : k === 2 ? r1CardHTML() : obCardHTML(); } catch (e) { console.warn("playbook card", e); box.innerHTML = `<div class="bd"><div class="empty">Couldn't build this card: ${esc(e.message)}</div></div>`; }
   const lede = $("planLede"); if (lede) lede.innerHTML = k === "fp" ? `<b>Playbook 2 · First Pullback</b> (paper / watch only) — a stock fresh off a strong leg pulls back quietly to its daily 9 or 21 EMA on drying volume and tight ranges. Buy over the 09:30–10:00 ET candle's high, stop = its low. Click a name for its First Pullback tab, chart levels and Entry Check.`
@@ -12999,7 +13004,8 @@ BCL_CODE.push([/^R1 washout low/, "wash", "WASH"], [/^R1 U&R pivot/, "rpiv", "PI
 const PB_L61 = /^(buy zone lo|buy zone hi|planned entry|1st resistance|LOD stop|max entry)/;
 const _bcModelPB = bcModel;
 bcModel = async function(r, iv){
-  const M = await _bcModelPB(r, iv), k = pbCur();
+  // 8 Nov 2026 (FORMER LEADER SHORT · CHART LEVELS, display only): the short's levels also when its panel tab is the one open
+  const k0 = pbCur(), M = await _bcModelPB(r, iv), k = k0 === 1 && typeof flsChartOn === "function" && flsChartOn() ? "fls" : k0;
   if (!M || M.err || k === 1 || !bcShow().l61 || r._inv) return M;
   M.lines = M.lines.filter(l => !PB_L61.test(l.title));
   const L = (price, color, title, style = 2) => { if (fin(price)) M.lines.push({price, color, title, lineStyle: style}); };
@@ -13011,6 +13017,7 @@ bcModel = async function(r, iv){
     if (x && x.lost) for (const q of x.lost.slice(-2)) L(q.p, BC_STYLE.stop, "OB lost level", 2);
     if (x) M.pb = {k, st: x.st, iH: x.hDate}; }
   if (k === "fp" && !r.etf && typeof fpChartLines === "function") { try { fpChartLines(r, L, M); } catch (e) { console.warn("first pullback chart", e); } }   // 7 Nov 2026: FIRST PULLBACK script
+  if (k === "fls" && typeof flsChartLines === "function") { try { flsChartLines(r, L, M); } catch (e) { console.warn("former leader short chart", e); } }   // 8 Nov 2026: FORMER LEADER SHORT · CHART LEVELS
   try { M.lab = bcLabels(M.lines); M.band = bcBand(M); } catch (e) { console.warn("playbook chart labels", e); }
   return M;
 };
@@ -13984,7 +13991,7 @@ document.documentElement.classList.remove("sbmin");
   const hdr = document.querySelector("header.top");
   hdr.insertAdjacentHTML("afterbegin", `<div class="mrow1"><button class="mic" id="mMenu" title="Menu: every page, this page's sections, files and settings" aria-label="Menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button></div><div class="mchips" id="mChips"></div>`);
   $("mMenu").after(hdr.querySelector(".pg"), hdr.querySelector(".tksearch"));
-  ["modeChip", "benchChip", "prevChip", "tapeChip", "zoneChip"].forEach(id => { const el = $(id); if (el) $("mChips").appendChild(el); });
+  ["modeChip", "sessChip", "benchChip", "prevChip", "tapeChip", "zoneChip"].forEach(id => { const el = $(id); if (el) $("mChips").appendChild(el); });
   const lb = hdr.querySelector(".livebox"); if (lb) $("mChips").appendChild(lb);
   const q = $("tkQ");
   Object.assign(q, {placeholder: "Ticker"}); q.setAttribute("autocapitalize", "characters"); q.setAttribute("autocorrect", "off"); q.setAttribute("enterkeyhint", "go");
@@ -18997,15 +19004,17 @@ function flsV1Body(R){
     <details class="flsf" style="margin-top:6px"><summary>Also passing (beyond ${FLS.top}) (${R.also.length})</summary>${R.also.length ? flsRowsHTML(R.also, false) : `<div class="empty" style="padding:4px 0">None.</div>`}</details>
     <details class="flsf"><summary>Near misses (one check short) (${R.near.length})</summary>${R.near.length ? flsNearHTML(R.near) : `<div class="empty" style="padding:4px 0">None.</div>`}</details>${typeof mppFsMissHTML === "function" ? mppFsMissHTML(R) : ""}${foot}</div>`;
 }
+// 8 Nov 2026 (FORMER LEADER SHORT PLAYBOOK, display only): the card now lives on Setups → switch on "S · Former Leader
+// Short" (Eugene, 8 Nov: "it will also have its own standalone section under setups" → option a); same card, same content
 function flsPaint(){
-  const tab = $("tab-shorts"); if (!tab || !S.snap) return;
-  let box = $("flsBox"); if (!box) { const lede = tab.querySelector(".lede"); (lede || tab.firstElementChild || tab).insertAdjacentHTML(lede ? "afterend" : "beforebegin", `<div class="card g1" id="flsBox"></div>`); box = $("flsBox"); }
+  const tab = $("tab-plan"); if (!tab || !S.snap) return;
+  let box = $("flsBox"); if (!box) { tab.insertAdjacentHTML("beforeend", `<div class="card g1" id="flsBox"></div>`); box = $("flsBox"); }
   if (!box) return;
   const open = [...box.querySelectorAll("details.flsf")].map(d => d.open);
   try { box.innerHTML = flsCardHTML(); } catch (e) { console.error("former leader short", e); box.innerHTML = `<div class="hd"><h2>Former leader, lower high — up to 3</h2></div><div class="bd"><div class="empty">Couldn't be drawn (error logged).</div></div>`; }
   box.querySelectorAll("details.flsf").forEach((d, i) => { if (open[i]) d.open = true; });
 }
-hookOn("tab", "formerLeaderShort", t => { if (t === "shorts") flsPaint(); });
+hookOn("tab", "formerLeaderShort", t => { if (t === "plan" && pbCur() === "fls") flsPaint(); });   // 8 Nov 2026: was the Shorts page
 
 /* ---------------- Download CSV: every stock evaluated ---------------- */
 const FLS_CSV_H = ["ticker", "verdict", "first_failing_check", "checks_failed", "gate_open", "gate_reason", "map_says", "spy_close", "spy_sma50", "spy_ema9", "spy_ema21", "data_to", "rs", "group", "group_weak_rank", "groups_ranked",
@@ -19089,6 +19098,9 @@ function flsPanelHTML(sym){
 hookOn("panel", "formerLeaderShort", (r, dr) => {
   if (!r || r.etf || !dr || dr.querySelector(".flspl")) return;
   const html = flsPanelHTML(r.sym); if (!html) return;
+  // 8 Nov 2026 (FORMER LEADER SHORT · CHECKLIST TAB): the line opens the short's own tab when there is one
+  const own = dr.querySelector('.tp-pane[data-p="fls"] .flsph');
+  if (own) { own.insertAdjacentHTML("afterend", html); return; }
   const at = dr.querySelector('.tp-pane[data-p="hist"] .hx') || dr.querySelector(".hx") || dr.querySelector(".s61p");
   if (at) at.insertAdjacentHTML("beforeend", html);
 });
@@ -20025,5 +20037,288 @@ function sp3BarsGet(sym, build){
   if (e && sp3SigSame(e.sig[0], sig[0]) && sp3SigSame(e.sig[1], sig[1]) && e.sig[2] === sig[2]) { m = e.m; SP3.stats.barsHit++; }
   else { m = build(sym); B.map.set(sym, {m, sig}); SP3.stats.barsMiss++; }
   return m ? sp3BarsCopy(m) : m;
+}
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   TRADINGVIEW IN ONE TAB (8 Nov 2026). DISPLAY ONLY — no number, list, state, feed column or Board-log field changes.
+   Eugene, 8 Nov 2026: "each click of the open in tradingview, will only refresh a single window/tab in chrome so i dont get
+   multiple windows/new tabs per ticker i click" → "go".
+   What it touches: a plain left click on any TradingView chart link on the board (the ↗ in tables, "Open in TradingView"
+   in the ticker panel, the cards, the heatmap, the leveraged chips, the chart window's button) opens it in ONE named tab
+   ("dsbTradingView") — the first click opens the tab, later clicks load the new ticker into that same tab (a full page
+   load on TradingView's side; your layout link from Settings is kept). Ctrl / Shift / middle clicks behave as before.
+   The tab is only reused if the board opened it (a TradingView tab opened by hand can't be reached). Chromium only finds
+   a named tab again while it keeps its opener link to the board (tested: clearing window.opener makes every click open a
+   new tab), so the link is kept — cross-origin, TradingView's page can't read the board or its storage.
+   Settings → TradingView: "Open TradingView links in one reused tab" (on by default) — off = a new tab per click, as before.
+   Never changes: tvURL / the link addresses, any trading number. Storage NEW: adrb.tvOneTab (true | false; default true).
+   Hooks: "settings" (one row). In place: popWire calls tv1Wire(d) (typeof-guarded) so the chart window's button follows it.
+   ===================================================================== */
+const TV1 = {name: "dsbTradingView", key: "adrb.tvOneTab"};
+// the phone edition keeps the old behaviour (a tap hands the link to the phone, which may open the TradingView app)
+const tv1On = () => { if (document.documentElement.classList.contains("mob")) return false; let v = true; try { v = store.get(TV1.key, true); } catch (e) { v = true; } return v !== false; };
+const tv1Link = a => !!(a && a.href && /^https:\/\/(www\.)?tradingview\.com\/chart\b/i.test(a.href));
+function tv1Open(url, win){
+  const W = win || window; let w = null;
+  try { w = W.open(url, TV1.name); } catch (e) { w = null; }
+  if (!w) return false;
+  try { w.focus(); } catch (e) {}
+  return true;
+}
+function tv1Click(e){
+  if (e.defaultPrevented || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+  const a = e.target && e.target.closest ? e.target.closest("a[href]") : null;
+  if (!tv1Link(a) || !tv1On()) return;
+  const win = a.ownerDocument && a.ownerDocument.defaultView;
+  if (tv1Open(a.href, win)) { e.preventDefault(); e.stopPropagation(); }
+}
+// a reloaded board re-wires the chart window with its own handler (the old one belonged to the page before the reload)
+function tv1Wire(doc){
+  if (!doc || doc.__tv1 === tv1Click) return;
+  try { if (doc.__tv1) doc.removeEventListener("click", doc.__tv1, true); } catch (e) {}
+  doc.__tv1 = tv1Click; doc.addEventListener("click", tv1Click, true);
+}
+tv1Wire(document);
+hookOn("settings", "tvOneTab", () => {
+  const sel = document.querySelector('#settings select[data-s="tvInterval"]'), row = sel && sel.closest(".row"); if (!row) return;
+  row.insertAdjacentHTML("afterend", `<div class="row"><div>Open TradingView links in one reused tab<div class="d">On: every "Open in TradingView" click loads the ticker into the same browser tab (the first click opens it). Off: a new tab per click.</div></div><div><input type="checkbox" id="tv1Sw" ${tv1On() ? "checked" : ""}></div></div>`);
+  $("tv1Sw").onchange = e => { try { store.set(TV1.key, !!e.target.checked); } catch (x) {} };
+});
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   SESSION SWITCH IN THE TOP BAR (8 Nov 2026). DISPLAY ONLY — the controls are moved, not changed: same element ids, same
+   handlers, same options, same snapshot field (ui.session / basis); no number, list or state changes.
+   Eugene, 8 Nov 2026: "under discover stocks today, there's a session section. which is auto detect, rank today on premarket
+   move, yesterday etc. i think this should sit all the way on the top … otherwise i have difficulty switching and knowing
+   what the page is looking at." → "go".
+   What it touches: the "Session" select (#modeSel) and the "Rank today on" switch (#basisSeg) move out of the Stocks today
+   controls card into one chip (#sessChip) in the top bar, right after the Premarket / Regular session chip, so they show on
+   every page. Gapper ≥ and File time stay on Stocks today. The chip is hidden until a file is loaded (like the chip beside
+   it). The phone edition moves it into its chip row (mobile/mobile.js list).
+   Never changes: effMode, S.basis, the ids, the options. Storage: none. Hooks: "all" (after — show / hide the chip and
+   draw the "Rank today on" buttons, which only the Stocks today page drew before).
+   ===================================================================== */
+{
+  const sel = $("modeSel"), seg = $("basisSeg"), mc = $("modeChip");
+  const gS = sel && sel.closest(".grp"), gB = seg && seg.closest(".grp");
+  if (gS && gB && mc) {
+    mc.insertAdjacentHTML("afterend", `<span class="chip sesschip hidden" id="sessChip" title="Which session the whole board reads, and what 'today's move' is ranked on. Changes every page."></span>`);
+    const c = $("sessChip"); c.append(gS, gB);
+  }
+}
+// the "Rank today on" buttons were only drawn by the Stocks today page; drawn here too (same markup) so every page shows them
+hookOn("all", "sessChip", ph => {
+  if (ph !== "after") return; const c = $("sessChip"); if (!c) return;
+  c.classList.toggle("hidden", !S.snap);
+  const seg = $("basisSeg"), o = S.snap && S.basisOpts || [];
+  const h = o.map(([k, l]) => `<button data-k="${k}" class="${k === S.basis ? "on" : ""}">${l}</button>`).join("");
+  if (seg && seg.innerHTML !== h) seg.innerHTML = h;
+});
+document.head.insertAdjacentHTML("beforeend", `<style>
+#sessChip{display:inline-flex;align-items:center;gap:10px;padding:2px 8px} #sessChip.hidden{display:none}
+#sessChip .grp{display:inline-flex;align-items:center;gap:5px} #sessChip .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-3)}
+#sessChip select{font-size:12px} #sessChip .seg button{font-size:11.5px;padding:2px 7px}
+</style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   FORMER LEADER SHORT PLAYBOOK (8 Nov 2026). DISPLAY ONLY — where the short setup's cards sit; every check, value, list,
+   state, export and feed line is the same (Notion "🩳 Short · Former leader, lower high — v1.0 (paper, from 7 Nov 2026)",
+   rules unchanged; its §5 "On the board" placement line is out of date until Eugene approves the edit).
+   Eugene, 8 Nov 2026: "i want the playbook for the former leader short to have itself a standalone playbook, like leader
+   pullback and first pullback … it will also have its own standalone section under setups. so the inverse etfs and short
+   watch relative weakness would go under it." → asked what happens to the Shorts page → "go with a" (the former leader
+   card, the short-side gate, the short watch and the inverse funds move to Setups; the Shorts page keeps the weakest
+   groups, the weakness scans and the short research cards, plus a pointer).
+   What it touches:
+   - The playbook switch gets "S · Former Leader Short" (stored "fls" in adrb.pb; in place in PLAYBOOKS 2 + 3: PB_N, PB_D,
+     PB_SW, pbNo, pbCur, pbSet, pbPlanPaint). Its own filter set in adrb.pbGF["fls"] (default: no filters), like the others.
+   - Setups with the switch on S (#tab-plan.pbFls): the switch, then the former leader card (#flsBox — flsPaint now draws it
+     here, in place), the short-side gate (#shGate), the short watch (#shortBox — the Setups copy), the inverse ETF Entry
+     Check card (#invBox) and the inverse funds in your ETF file (#shEtf). Everything else on Setups is hidden by CSS,
+     never removed (as for First Pullback).
+   - Setups on Leader Pullback / First Pullback: the short watch and the inverse ETF card no longer show there (moved).
+   - Shorts page: #shGate and #shEtf move to Setups (same ids, renderShorts still fills them); its short watch copy
+     (#shortBox2) is hidden — it was the same list as Setups'; new lede + a pointer card (#shMoved) with a button that
+     opens Setups on S. Short research memory, Failed rally research, Weakest groups and Weakness scans stay.
+   - The ticker panel opens on the Former Leader Short tab when the switch is on S (WSI.tpTab = "fls"; the tab itself is
+     script "FORMER LEADER SHORT · CHECKLIST TAB").
+   Never changes: flsRun / flsCalc / any check, the card's HTML, its buttons, CSV, TradingView items, MAP's FS lines, the
+   feed, the Board log, the Entry Check lists. Storage: adrb.pb may now hold "fls"; adrb.pbGF gains "fls". Hooks: "tab".
+   ===================================================================== */
+// the cards that make up the short page on Setups, top to bottom
+const FLSPB_IDS = ["flsBox", "shGate", "shortBox", "invBox", "shEtf"];
+{
+  const plan = $("tab-plan"), sh = $("tab-shorts");
+  for (const id of ["shGate", "shEtf"]) { const el = $(id); if (el && plan) plan.appendChild(el); }
+  if (sh) {
+    const lede = sh.querySelector(".lede");
+    if (lede) lede.innerHTML = `Short-side research: the short research memory, failed rallies, the weakest groups and the weakness scans. The former leader short card, the short-side gate, the short watch and the inverse funds are on <b>Setups</b> with the playbook switch on <b>S · Former Leader Short</b>. Shorts are watch only.`;
+    (lede || sh.firstElementChild).insertAdjacentHTML(lede ? "afterend" : "beforebegin", `<div class="card g1" id="shMoved"><div class="bd" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span>The <b>former leader short</b> card, the <b>short-side gate</b>, the <b>short watch (relative weakness)</b> and the <b>inverse funds</b> now live on Setups → <b>S · Former Leader Short</b>.</span><button class="btn sm primary" id="shMovedGo">Open the short playbook</button></div></div>`);
+  }
+}
+function flsPbOpen(){ if (pbCur() !== "fls") pbSet("fls"); goTab("plan"); }
+document.addEventListener("click", e => { if (e.target.closest("#shMovedGo")) { e.preventDefault(); flsPbOpen(); } });
+function flsPbLede(){
+  const lede = $("planLede"); if (!lede) return;
+  lede.innerHTML = `<b>S · Former Leader Short</b> (paper / watch only) — in a market that has rolled over, a former leader that broke down bounces into old support or its falling 21 / 50 and fails with a lower high. Short the failure, never a name already far down. Below: the former leader card, the short-side gate, the short watch (relative weakness) and the inverse ETFs. Click a name for its Former Leader Short tab and the short levels on the chart.`;
+}
+// the cards the short page needs drawn: the card (flsPaint), the gate + the inverse funds (renderShorts fills them by id).
+// The short watch (#shortBox) and the inverse ETF card (#invBox) are drawn by the Setups page itself, as before.
+hookOn("tab", "formerLeaderShortPage", t => {
+  if (t !== "plan" || !S.snap || pbCur() !== "fls") return;
+  try { renderShorts(); } catch (e) { console.warn("short page", e); }
+  // page order = screen order, so the side jump list reads top to bottom (the Setups page puts #invBox back under the Entry
+  // Check card on its next Leader Pullback draw, as before)
+  const tab = $("tab-plan"), els = FLSPB_IDS.map(id => $(id)).filter(Boolean);
+  if (tab && els.some((el, i) => el.parentElement !== tab || (i && els[i - 1].nextElementSibling !== el))) els.forEach(el => tab.appendChild(el));
+});
+document.head.insertAdjacentHTML("beforeend", `<style>
+#tab-plan.pbFls.on{display:flex;flex-direction:column}
+#tab-plan.pbFls > :not(#planLede):not(#pbTop):not(#flsBox):not(#shGate):not(#shortBox):not(#invBox):not(#shEtf){display:none!important}
+#tab-plan.pbFls > #planLede{order:1} #tab-plan.pbFls > #pbTop{order:2} #tab-plan.pbFls > #flsBox{order:3} #tab-plan.pbFls > #shGate{order:4}
+#tab-plan.pbFls > #shortBox{order:5} #tab-plan.pbFls > #invBox{order:6} #tab-plan.pbFls > #shEtf{order:7}
+#tab-plan:not(.pbFls) > #flsBox, #tab-plan:not(.pbFls) > #shGate, #tab-plan:not(.pbFls) > #shEtf, #tab-plan:not(.pbFls) > #shortBox, #tab-plan:not(.pbFls) > #invBox{display:none!important}
+#tab-shorts > #shortBox2{display:none!important}
+</style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   FORMER LEADER SHORT · CHECKLIST TAB (8 Nov 2026). DISPLAY ONLY — shows the short setup's own checks as a checklist; no
+   check, value, list or state is computed differently (every row is read from flsRun(): flsGateCalc, flsCalc checks 2–10,
+   flsEarlyCalc, flsIntraday — Notion "🩳 Short · Former leader, lower high — v1.0 (paper, from 7 Nov 2026)").
+   Eugene, 8 Nov 2026: "history has a standalone tab. Former leader short has a standalone tab and it absorb the short score
+   into it. Former leader short will also have a checklist version similar to entry check and first pullback." → "go".
+   What it touches (ticker panel and the chart window's panel tabs):
+   - "History · short score" is now "History" (label only, in place in tpBuild0; the pane key stays "hist").
+   - New tab "Former Leader Short" (pane key "fls"), after First Pullback: the verdicts line (flsPanelHTML, moved here from
+     History by an in-place edit of its "panel" hook), the market gate (check 1) as context, the daily failed-rally
+     checklist 2–10 in the Entry Check layout (✓ / ✕, the rule under each name, the reading on the right; checks that are
+     context only show "!" and never block), the early failed-retest checks with its 5-day resistance, test band and state,
+     the levels (resistance, stop, support, room, 2R from the close), the next action, and the 7-point short score (moved
+     from History, the same markup tpHist draws; the History notes' written-out list follows in a fold). ETFs from the ETF
+     file: the early route only (the daily route is a stock
+     checklist). Opens on this tab when the switch is on S · Former Leader Short (pbSet sets adrb.tpTab = "fls").
+   Never changes: flsRun / any check or text the card shows, the short score maths, the History numbers. Storage: none (the
+   tab choice is the existing adrb.tpTab). Hooks: "panelBuild" (the tab).
+   ===================================================================== */
+// the rule under each check name (Notion v1.0 §2 wording, values from FLS / FLSE)
+const FLS_LIM = {
+  1: "MAP says Defensive, and SPY's close is below its 50 SMA with the daily 9 EMA under the 21 EMA",
+  2: `on MAP's lists in the last ${FLS.mapN} sessions, or a ${FLS.leadN}-session high ≥ ${FLS.leadPct}% over the prior ${FLS.leadN}-session low`,
+  3: "close below the 50 SMA, and the 50 SMA falling",
+  4: `the group is one of the weakest ${FLS.weakN} groups (the board's group rank)`,
+  5: "failed-rally stage Testing resistance or Rejection confirmed (falling 21 EMA, 50 SMA or broken support)",
+  6: "not more than 2 ADR below the test day's low",
+  7: `stop above the bounce high; distance ≤ ${FLS.stopMax} ADR`,
+  8: `≥ ${FLS.roomMin}R to the first support`,
+  9: "no report inside the next 5 sessions",
+  10: "tradeable liquidity not OUT; shortable at IBKR (check by hand)"};
+const FLS_ELIM = {lead: FLS_LIM[2], group: FLS_LIM[4] + " — stocks only", earn: "stocks: no report inside the next 5 sessions (unknown = verify); ETFs: N/A", liq: "tradeable liquidity not OUT", data: "enough bars for the 5-day resistance and the 20-day ADR"};
+function flsPaneHTML(r){
+  const R = pbHH() ? flsRun() : null, o = R ? R.by.get(r.sym) : null;
+  const head = (pill = "") => `<div class="pbh flsph"><b>Former Leader Short · ${esc(r.sym)}</b> <span class="small dim">short · paper / watch only · Notion v1.0</span><span class="spacer"></span>${pill}</div>`;
+  if (!R) return `<div class="flsp">${head()}<div class="small">${S.has && S.has.hist ? "Not enough stored bars." : "The short checks need the price history (Data check → Load price history)."}</div><div class="flsss"></div></div>`;
+  if (!o) return `<div class="flsp">${head()}<div class="small">${r.etf ? "Not an ETF in your ETF file — the short's ETF route reads only those." : "No stored bars for this name."}</div><div class="flsss"></div></div>`;
+  const ctx = R.mode === "ctx", rt = flsRoutes(), g = R.gate, x = o.x, e = o.e;
+  const v = R.verdict.get(r.sym) || "", ev = R.early.verdict.get(r.sym) || "";
+  const pill = (t, go) => t ? `<span class="pill ${go ? "go" : /Near|Would|Also|watch/i.test(t) ? "zone" : ""}">${esc(t)}</span>` : "";
+  const pills = `${!r.etf && rt !== "early" ? pill("Daily: " + v, /^Top/.test(v)) : ""} ${rt !== "daily" ? pill("Early: " + ev.replace(/^Early /, ""), /^Early top/.test(ev)) : ""}`;
+  // check 1 — context only by default, closes the short side only under the legacy gate
+  const gate = s61RowHTML({n: 1, l: FLS_CK[1], ok: g.open, v: `${R.mapTxt} · ${R.spy.t}${g.open ? "" : " — " + g.why.join("; ")}`, lim: FLS_LIM[1] + (ctx ? " · context only (Market gate setting)" : " · legacy hard gate: closes the short side"), kind: ctx ? "info" : ""});
+  let daily = "";
+  if (!r.etf && x && rt !== "early") {
+    const rows = [2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => { const c = x.ck[n]; return s61RowHTML({n, l: c.l, ok: c.ok, v: c.v, lim: FLS_LIM[n] + (c.ctx ? " · context only" : ""), kind: c.ctx ? "info" : ""}); }).join("");
+    const fr = x.fr, lv = fr && fin(fr.frHi) && fin(x.close) && fr.frHi > x.close ? `<div class="small" style="margin-top:6px">Levels: resistance ${esc(fr.kind || "—")} <b>${p2(fr.lv)}</b> · stop above the bounce high <b>${p2(fr.frHi)}</b>${fin(fr.stopA) ? ` (${fr.stopA.toFixed(2)} ADR)` : ""} · first support <b>${p2(fr.support)}</b>${fin(fr.room) ? ` (${fr.room.toFixed(1)}R)` : ""} · 2R from the close <b>${p2(x.close - 2 * (fr.frHi - x.close))}</b></div>` : "";
+    daily = `<div class="flssec"><div class="hx-h">Daily failed rally <small>checks 2–10 on the close of ${esc(x.to)}</small></div><div class="s61chk fpchk">${rows}</div>
+      <div class="small dim" style="margin-top:4px">${x.pass ? "Passes every check." : `First failing check: ${esc(flsFfTxt(x))}${x.fails.length > 1 ? ` · ${x.fails.length} checks fail` : ""}.`}</div>${lv}
+      <div class="small" style="margin-top:4px"><b>Trigger:</b> ${esc(FLS_NEXT)}${fr && fin(fr.frHi) ? ` <b>${p2(fr.frHi)}</b>` : ""}${R.mode !== "legacy" || rt !== "daily" ? (R.open && x.pass ? flsDailyExtra(o, R) : "") : ""}</div></div>`;
+  }
+  let early = "";
+  if (e && rt !== "daily") {
+    const rows = ["lead", "group", "earn", "liq", "data"].map((k, i) => { const c = e.ck[k]; return s61RowHTML({n: "E" + (i + 1), l: c.l, ok: c.ok, v: c.v, lim: FLS_ELIM[k] + (c.ctx ? " · context only" : ""), kind: c.ctx ? "info" : ""}); }).join("");
+    const d = e.d;
+    early = `<div class="flssec"><div class="hx-h">Early failed retest <small>${r.etf ? "ETF — tracked separately" : "the 30-min route"}${d && d.ref ? ` · daily bars to ${esc(d.ref)}` : ""}</small></div><div class="s61chk fpchk">${rows}</div>
+      ${d ? `<div class="small" style="margin-top:6px">${FLSE.look}-day resistance <b>${flsPx(d.R)}</b> · test band ${flsPx(d.lo)}–${flsPx(d.hi)} · ADR $${fin(d.adrD) ? d.adrD.toFixed(2) : "—"} · stop at most ${FLSE.stopMax} ADR above the trigger · room ≥ ${FLSE.roomMin}R</div>` : ""}
+      ${e.pass ? `<div class="small" style="margin-top:4px">State: ${flsStateHTML(o, R)}</div><div class="small" style="margin-top:4px"><b>Next:</b> ${esc(flsEarlyNext(o))}</div>` : `<div class="small dim" style="margin-top:4px">${esc(ev)}</div>`}</div>`;
+  }
+  return `<div class="flsp">${head(pills)}<div class="s61chk fpchk">${gate}</div>${daily}${early}
+    <div class="flsss"></div>
+    <div class="small dim" style="margin-top:6px">Paper / watch only — risk rules unchanged (grade C if ever traded: puts or an inverse ETF). Shortable at IBKR is checked by hand. The card is on Setups → S · Former Leader Short.</div></div>`;
+}
+hookOn("panelBuild", "formerLeaderShortTab", (r, want) => {
+  const dr = $("drawer"); if (!dr.classList.contains("open") || !r) return;
+  const tabs = dr.querySelector(".tp-tabs"), right = dr.querySelector(".tp-right"); if (!tabs || !right || dr.querySelector('.tp-pane[data-p="fls"]')) return;
+  const R = pbHH() ? flsRun() : null; if (r.etf && !(R && R.by.get(r.sym))) return;   // ETFs: only those the short reads
+  const b = document.createElement("button"); b.dataset.tpt = "fls"; b.textContent = "Former Leader Short";
+  const ref = tabs.querySelector('button[data-tpt="plan"]'); if (ref) ref.after(b); else tabs.appendChild(b);
+  const d = document.createElement("div"); d.className = "tp-pane"; d.dataset.p = "fls"; d.innerHTML = flsPaneHTML(r); right.appendChild(d);
+  // the short score block moves here from History (the same markup tpHist draws; it is the last block of .hx)
+  const hx = dr.querySelector('.tp-pane[data-p="hist"] .hx'), slot = d.querySelector(".flsss");
+  if (hx && slot) { const h = [...hx.children].find(el => el.classList.contains("hx-h") && /^Short score/.test(el.textContent.trim()));
+    if (h) { const mv = [h]; for (let n = h.nextElementSibling; n; n = n.nextElementSibling) mv.push(n); mv.forEach(el => slot.appendChild(el)); slot.classList.add("hx"); } }
+  // … and the written-out list from the History notes ("Short score n/7" + one line per sign), into a fold under it
+  const hp = dr.querySelector('.tp-pane[data-p="hist"]'), sm = hp && [...hp.querySelectorAll("div.small")].find(el => { const t = el.querySelector("b"); return t && /^Short score \d/.test(t.textContent); });
+  if (sm && slot) { const mv = [sm]; for (let n = sm.nextElementSibling; n && n.classList.contains("chk"); n = n.nextElementSibling) mv.push(n);
+    const f = document.createElement("details"); f.className = "tp-fold"; f.innerHTML = "<summary>Short score — each sign written out</summary>"; mv.forEach(el => f.appendChild(el)); slot.after(f); }
+  if (want === "fls") { WSI.tpTab = "fls"; dr.querySelectorAll("[data-tpt]").forEach(x => x.classList.toggle("on", x.dataset.tpt === "fls")); dr.querySelectorAll(".tp-pane").forEach(p => p.classList.toggle("on", p.dataset.p === "fls")); }
+});
+document.head.insertAdjacentHTML("beforeend", `<style>
+.flsp .flssec{margin-top:10px} .flsp .flsss.hx{margin-top:10px;padding:0;border:0;background:none} .flsp .flspl{margin:4px 0 6px}
+</style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   FORMER LEADER SHORT · CHART LEVELS (8 Nov 2026). DISPLAY ONLY — draws levels the short setup already computes; nothing
+   is computed differently (flsRun(): the daily failed rally's fr = frCalc on the stored bars, the early route's
+   flsEarlyDaily) — Notion "🩳 Short · Former leader, lower high — v1.0 (paper, from 7 Nov 2026)".
+   Eugene, 8 Nov 2026: "there's presently nothing for it in the chart" → "go".
+   What it touches: the board chart (ticker panel + chart window, any timeframe) when the playbook switch is on S · Former
+   Leader Short, or when the ticker panel's Former Leader Short tab is the one open: the Entry Check levels make way (as
+   for First Pullback) and these are drawn —
+     daily failed rally: FLS resistance (the falling 21 EMA / 50 SMA / broken support it bounced into), FLS stop (above the
+     bounce high), FLS first support, FLS 2R target (from the close: close − 2 × (bounce high − close));
+     early failed retest: FLS 5-day resistance and its test band (± 0.25 ADR);
+     a green 30-min signal in Live mode: FLS trigger close and FLS signal stop.
+   Switching the panel tab into or out of Former Leader Short redraws the chart (bcRemount) when the switch isn't on S.
+   In place: the playbooks bcModel wrapper reads flsChartOn() and calls flsChartLines (typeof-guarded).
+   Never changes: any level the board's other checks use, the Entry Check levels themselves. Storage: none. Hooks: none.
+   ===================================================================== */
+BCL_CODE.push([/^FLS resistance/, "flsr", "RES"], [/^FLS stop/, "flss", "STOP"], [/^FLS first support/, "flsu", "SUP"], [/^FLS 2R/, "flst", "2R"],
+  [/^FLS 5-day resistance/, "flse", "5D RES"], [/^FLS test band top/, "flsbh", "BAND hi"], [/^FLS test band bottom/, "flsbl", "BAND lo"], [/^FLS trigger/, "flsg", "TRIG"], [/^FLS signal stop/, "flsgs", "SIG STOP"]);
+const flsChartOn = () => typeof WSI !== "undefined" && WSI.tpTab === "fls";
+function flsChartLines(r, L){
+  const R = pbHH() ? flsRun() : null, o = R ? R.by.get(r.sym) : null; if (!o) return;
+  const rt = flsRoutes(), x = o.x, fr = x && x.fr, e = o.e, d = e && e.d;
+  if (fr && rt !== "early" && !r.etf) {
+    if (fin(fr.lv)) L(fr.lv, BC_STYLE.res, `FLS resistance (${fr.kind || "bounce"})`, 2);
+    if (fin(fr.frHi) && fin(x.close) && fr.frHi > x.close) {
+      L(fr.frHi, BC_STYLE.stop, "FLS stop (above the bounce high)", 0);
+      L(x.close - 2 * (fr.frHi - x.close), BC_STYLE.tgt, "FLS 2R target (from the close)", 2);
+    }
+    if (fin(fr.support)) L(fr.support, BC_STYLE.zone, "FLS first support", 1);
+  }
+  if (d && rt !== "daily") {
+    L(d.R, BC_STYLE.entry, `FLS ${FLSE.look}-day resistance`, 0);
+    L(d.hi, BC_STYLE.zone, "FLS test band top", 1); L(d.lo, BC_STYLE.zone, "FLS test band bottom", 1);
+  }
+  const g = o.iv && o.iv.sig;
+  if (g) { L(g.px, BC_STYLE.trig, "FLS trigger close", 0); L(g.stop, BC_STYLE.stop, "FLS signal stop", 0); }
+}
+// the panel tab decides the levels when the switch isn't on S — redraw the chart when that changes
+{ let was = null;
+  $("drawer").addEventListener("click", e => { if (e.target.closest("[data-tpt]")) was = flsChartOn(); }, true);   // before the tab switch
+  $("drawer").addEventListener("click", e => {
+    if (!e.target.closest("[data-tpt]") || was === null) return;
+    const now = flsChartOn(), changed = now !== was; was = null; if (!changed) return;
+    if (pbCur() !== "fls" && typeof bcRemount === "function") setTimeout(() => { try { bcRemount(); } catch (x) { console.warn("chart redraw", x); } }, 0);
+  });
 }
 </script>
