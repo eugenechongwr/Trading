@@ -1081,6 +1081,11 @@ const pc = (x, d = 2) => x == null ? "—" : (x > 0 ? "+" : "") + x.toFixed(d) +
 const cls = x => x == null ? "dim" : (x > 0 ? "pos" : (x < 0 ? "neg" : ""));
 const money = x => x == null ? "—" : (Math.abs(x) >= 1e12 ? (x / 1e12).toFixed(1) + "T" : Math.abs(x) >= 1e9 ? (x / 1e9).toFixed(1) + "B" : Math.abs(x) >= 1e6 ? (x / 1e6).toFixed(0) + "M" : Math.abs(x) >= 1e3 ? (x / 1e3).toFixed(0) + "K" : x.toFixed(0));
 const pct0 = x => x == null ? "—" : Math.round(x * 100) + "%";
+// 8 Nov 2026 (TIDY-UP, structure only): one copy of the CSV cell quoting the exports used to define for themselves (same text,
+// byte for byte). csvCell: null / undefined → empty cell (Board-log, tracker, TradingView-lists, scorecard CSVs);
+// csvStr: String(v) as is, so null → "null" (the Deep Space feed + ETF feed builders, which never pass null on purpose)
+const csvCell = v => { const x = v == null ? "" : String(v); return /[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x; };
+const csvStr = v => { const x = String(v); return /[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x; };
 const fmtDate = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 function toast(t){ const e = $("toast"); e.textContent = t; e.style.display = "block"; clearTimeout(e._t); e._t = setTimeout(() => e.style.display = "none", 2400); }
 
@@ -1554,12 +1559,29 @@ for (const m of ["setItem", "removeItem", "clear"]) { const f = Storage.prototyp
 window.addEventListener("storage", () => { store._c.clear(); store._g++; });
 // Hook points (BOARD HOOKS script, 28 Oct; moved up here 31 Oct so every section can use them — the installers that call
 // hookRun stay in BOARD HOOKS). Hooks run in the order they were added (= file order), each in its own try/catch.
-const HOOK = {panel: [], tab: [], chart: [], map: []};   // 7 Nov 2026: "map" = MAP import (phase "parse" | "apply" | "html"; called in place in mapParse / mapApply / mapImpHTML — MAP · FP / FS PAPER LINES)
+const HOOK = {panel: [], tab: [], chart: [], map: [], panelBuild: [], all: [], flags: [], snap: [], tabBefore: [], drawerBlocks: [], drawerShown: [], hist: [], settings: [], cols: [], s61Card: [], watchPage: [], envLine: []};   // 7 Nov 2026: "map" = MAP import (phase "parse" | "apply" | "html"; called in place in mapParse / mapApply / mapImpHTML — MAP · FP / FS PAPER LINES)
+// 8 Nov 2026 (TIDY-UP, structure only): in-place points that replace chains of function wrappers, run with hookEach (below):
+//   "panelBuild" (r, want) — steps of the ticker panel build, at the end of tpBuild (were 6 tpBuild wrappers)
+//   "all" (phase "before" | "after") — around the redraw in renderAll (were 8 renderAll wrappers)
+//   "flags" ({r, s}) — add to / rewrite a row's flag chips (hx.s), at the end of flagsHTML (were 7 flagsHTML wrappers)
+//   "snap" (o) — add a section's own fields to the snapshot object, at the end of snapshotObj (were 5 snapshotObj wrappers)
+//   "tabBefore" (t) — a card a page needs drawn before the page itself, at the start of renderTab (+ tabDraw(t, draw): a page
+//                     renderTab draws itself, then afterTab — together they were 6 renderTab wrappers)
+//   "drawerBlocks" (sym) — blocks added to the drawer at the end of the base openDrawer, before the panel is built from it
+//   "drawerShown" (sym) — after the workspace openDrawer has built the panel (tpBuild + "panel" hooks); runs for any sym
+//   "hist" () — after the history pass in applyHist (were 4 applyHist wrappers)
+//   "settings" () — a section's own block in the Settings panel, after renderSettings (were 4 renderSettings wrappers)
+//   "cols" ({C}) — add / relabel table columns (hx.C), at the end of COLS (were 5 COLS wrappers)
+//   "s61Card" () / "watchPage" () — after the Entry Check card / the Watchlist groups are drawn (were 3 + 3 wrappers)
+//   "envLine" ({h}) — a line added to the environment strip (hx.h), at the end of envHTML (were 3 envHTML wrappers)
 // 3 Nov (display only): sort keys a Table can sort on that aren't one of its own columns — {key: row => value}; a value of
 // null always sorts last. Used by the Ext. hours column (it's added after each draw, so it isn't in COLS).
 const TBL_XSORT = {};
 function hookOn(point, name, fn){ if (!HOOK[point]) throw new Error("No hook point " + point); HOOK[point] = HOOK[point].filter(h => h.name !== name); HOOK[point].push({name, fn}); }
 function hookRun(point, ...a){ for (const h of HOOK[point] || []) { try { h.fn(...a); } catch (e) { console.error(`hook ${point}/${h.name}:`, e); } } }
+// 8 Nov 2026 (TIDY-UP): hookEach = hookRun without the try/catch — for points that replace a chain of wrappers, so an error
+// stops the rest and reaches the caller exactly as it did through the wrappers (the panel notice, a table cell's ⚠ …)
+function hookEach(point, ...a){ for (const h of HOOK[point]) h.fn(...a); }
 const parseTickers = s => [...new Set(String(s || "").toUpperCase().split(/[\s,;|]+/).map(t => t.includes(":") ? t.split(":").pop() : t).map(t => t.replace(/[^A-Z0-9.\-]/g, "")).filter(Boolean))];
 const LISTS = {focus: new Set(), held: new Set(), focusTxt: "", heldTxt: ""};
 function setLists(focusTxt, heldTxt){
@@ -2029,7 +2051,9 @@ function flagsHTML(r){
   if (r.under200 && r.state && r.state <= 5) s += `<span class="flag g200" title="Under the 200 SMA but above the 50 — tradable one grade lower">&lt;200 · −1 grade</span>`;
   if (r.held) s += `<span class="flag held" title="You hold this — a pullback into the zone is an add candidate">HELD</span>`;
   if (r.focus) s += `<span class="flag map" title="On today's MAP focus list">MAP</span>`;
-  return s;
+  // 8 Nov 2026 (TIDY-UP, structure only): later sections add / rewrite flags with hookOn("flags", …) — {r, s} in, hx.s out,
+  // in file order with no try/catch (hookEach), exactly as the 7 flagsHTML wrappers they replace did
+  const hx = {r, s}; hookEach("flags", hx); return hx.s;
 }
 let TIPS = {};
 function attachTips(svg, getRow, tipFn, onClick){
@@ -2171,7 +2195,9 @@ function COLS(){
   if (hasE("aum")) C.push({k: "aum", l: "AUM", g: "etf", etfOnly: true, v: r => r.aum, f: r => money(r.aum)});
   if (hasE("flow1m")) C.push({k: "flow1m", l: "Flows 1M", g: "etf", etfOnly: true, v: r => r.flow1m, f: r => r.flow1m == null ? "—" : `<span class="${cls(r.flow1m)}">${r.flow1m < 0 ? "−" : "+"}${money(Math.abs(r.flow1m))}</span>`});
   C.push({k: "eFlags", l: "Flags", g: "etf", etfOnly: true, cls: "l", v: r => (r.held ? 2 : 0) + (r.focus ? 1 : 0), f: r => flagsHTML(r)});
-  return C.filter(c => !c.need || S.has[c.need]);
+  // 8 Nov 2026 (TIDY-UP, structure only): later sections add / relabel columns with hookOn("cols", hx => …) — hx.C in, hx.C out,
+  // in file order with no try/catch (hookEach), exactly as the 5 COLS wrappers they replace did
+  const hx = {C: C.filter(c => !c.need || S.has[c.need])}; hookEach("cols", hx); return hx.C;
 }
 const COL_GROUPS = [["etf", "ETF view"], ["today", "Today"], ["rsl", "RS line & pullbacks"], ["rs", "RS by timeframe"], ["perf", "Returns %"], ["struct", "Structure"], ["intra", "Intraday"], ["weekly", "Weekly"], ["info", "Info & flags"]];
 const FILTERS = [
@@ -2538,7 +2564,11 @@ function stopCalc(r){
    TABS
    ===================================================================== */
 const T = {};  // table instances
-function renderAll(){
+// 8 Nov 2026 (TIDY-UP, structure only): renderAll = the "all" hooks (phase "before"), the redraw below (renderAll0), then the
+// "all" hooks (phase "after") — later sections add theirs with hookOn (BOARD HOOKS); they were 8 renderAll wrappers and run
+// in the same order, with no try/catch of their own (hookEach), as the wrappers did
+function renderAll(){ hookEach("all", "before"); renderAll0(); hookEach("all", "after"); }
+function renderAll0(){
   if (!S.snap) return;
   const pm = S.mode === "pm";
   $("fileInfo").textContent = `${S.snap.files.length ? S.snap.files.map(f => f.name).join(" + ") : "no stock file"} · ${S.stocks.length} stocks${S.etfs.length ? " + " + S.etfs.length + " ETFs" : ""} · as of ${S.snap.asOf}`;
@@ -2567,8 +2597,18 @@ function renderAll(){
   renderTab(S.ui.tab);
   $("foot").innerHTML = footNote();
 }
+// 8 Nov 2026 (TIDY-UP, structure only): renderTab = the "tabBefore" hooks (a card a page needs first), the page's draw — a
+// page a later section adds (tabDraw(t, draw)) or one of the eight below — then afterTab (workspace page title + jump list,
+// once that section has loaded). They were six renderTab wrappers (Training, Shorts, Data check card, Market breadth strip,
+// Board log, Home / Watchlist) and run in the same order, with no try/catch (hookEach), as the wrappers did. Pages drawn
+// with pageOn (BOARD HOOKS) skip all of this, as before.
+const TAB_DRAW = {};
+function tabDraw(t, draw){ TAB_DRAW[t] = draw; }
 function renderTab(t){
-  ({today: renderToday, map: renderMap, plan: renderPlan, themes: renderThemes, etfs: renderETF, market: renderMarket, screens: renderScreens, data: renderData})[t]();
+  hookEach("tabBefore", t);
+  if (TAB_DRAW[t]) TAB_DRAW[t]();
+  else ({today: renderToday, map: renderMap, plan: renderPlan, themes: renderThemes, etfs: renderETF, market: renderMarket, screens: renderScreens, data: renderData})[t]();
+  if (typeof afterTab === "function") afterTab(t);
 }
 
 
@@ -3264,7 +3304,10 @@ function rsSignals(s, b, dates){
   for (let t = 0; t < n; t++) { if (!isFinite(s.c[t])) continue; const wk = HIST.wkAll[t]; if (wk !== wkPrev) { wc.push(s.c[t]); wkPrev = wk; } else wc[wc.length - 1] = s.c[t]; }
   return {nhToday: !!(td && td.nh), bpToday: !!(td && td.bp), rsOff: td ? td.rsOff : null, prev, cnt21: cnt, w9: emaOf(wc, 9), e21h: emaOf(s.c, 21), lowNow: s.l[n - 1], lastNow: s.c[n - 1]};
 }
-function applyHist(){
+// 8 Nov 2026 (TIDY-UP, structure only): applyHist = the history pass (applyHist0), then the "hist" hooks later sections add with
+// hookOn (BOARD HOOKS) — they were 4 applyHist wrappers and run in the same order, with no try/catch (hookEach), as they did
+function applyHist(){ applyHist0(); hookEach("hist"); }
+function applyHist0(){
   S.rowBySym = new Map(S.rows.map(r => [r.sym, r]));
   S.has.hist = HIST.status === "ready" && HIST.nD >= RS_MINBARS;
   S.rows.forEach(r => { r.rsl = null; r.hx = null; r.pb21 = r.pb9w = false; r.pbLo21 = r.pbLast21 = r.pbLoW = r.pbLastW = null; });
@@ -3503,6 +3546,7 @@ function openDrawer(sym){
   loadSocial(r.sym);
   hydrateNews($("drawer")); if (anyNews()) { getNews(r.sym, "bump"); }
   mountTV(r);
+  hookEach("drawerBlocks", sym);   // 8 Nov 2026 (TIDY-UP): blocks later sections add to the drawer (were 2 openDrawer wrappers; BOARD HOOKS)
 }
 function groupDrawer(name){
   const g = S.groupMap.get(name); if (!g) return;
@@ -3523,7 +3567,10 @@ function closeDrawer(){ $("drawer").classList.remove("open"); }
 /* =====================================================================
    SETTINGS
    ===================================================================== */
-function renderSettings(){
+// 8 Nov 2026 (TIDY-UP, structure only): renderSettings = the Settings panel (renderSettings0), then the "settings" hooks later
+// sections add with hookOn (BOARD HOOKS) — they were 4 renderSettings wrappers and run in the same order, no try/catch (hookEach)
+function renderSettings(){ renderSettings0(); hookEach("settings"); }
+function renderSettings0(){
   const row = (label, input, d = "") => `<div class="row"><div>${label}${d ? `<div class="d">${d}</div>` : ""}</div><div>${input}</div></div>`;
   const n = (k, step = 1, w = 70) => `<input type="number" step="${step}" data-s="${k}" value="${CFG[k]}" style="width:${w}px">`;
   const c = k => `<input type="checkbox" data-s="${k}" ${CFG[k] ? "checked" : ""}>`;
@@ -3706,7 +3753,7 @@ document.addEventListener("keydown", e => { if (e.key === "Escape") { closeDrawe
   $("listsClear").onclick = () => { fi.value = ""; hi.value = ""; apply(); };
 })();
 $("moversRefresh").onclick = () => { if (!anyNews()) { toast("Set up a news source in Settings first"); return; } const box = $("movers"); new Set([...moversList().map(r => r.sym), ...[...(box ? box.querySelectorAll(".mv b[data-sym]") : [])].map(x => x.dataset.sym)]).forEach(s => getNews(s, true)); };
-window.DSB_DEBUG = {S, HIST, get CFG(){ return CFG; }, applyHist, computeHL};   // read-only hooks for outside testing
+window.DSB_DEBUG = {S, HIST, get CFG(){ return CFG; }, applyHist: applyHist0, computeHL};   // read-only hooks for outside testing (8 Nov 2026 TIDY-UP: applyHist0 = the same base function it always pointed at)
 histBoot();
 addEventListener("resize", () => { clearTimeout(window._rz); window._rz = setTimeout(() => { if (S.snap) renderTab(S.ui.tab); }, 200); });
 </script>
@@ -4732,9 +4779,9 @@ function renderTodayPlot(){
    TABLE COLUMNS, SCREENS, FLAGS, DRAWER — additive extensions
    ===================================================================== */
 COL_GROUPS.splice(3, 0, ["hx", "Strength, history & weakness"]);
-const _COLS0 = COLS;
-COLS = function(){
-  const C = _COLS0();
+// 8 Nov 2026 (TIDY-UP, structure only): was a COLS wrapper — now a "cols" hook (BOARD HOOKS), same code, same order
+hookOn("cols", "history", hx => {
+  const C = hx.C;
   const pp = v => v == null ? "—" : `<span class="${cls(v)}">${sg(v, 1)}</span>`;
   const add = [
     {k: "pstat", l: "Status", h: "where it sits vs your buy zone", g: "hx", cls: "l", v: r => -STATUS_ORDER[statusOf(r).k], f: statusPill},
@@ -4752,10 +4799,10 @@ COLS = function(){
     {k: "ssc", l: "Short score", h: "of 7 weakness signs", g: "hx", v: r => r.ss ? r.ss.n : null, f: r => r.ss ? `<span class="${r.ss.n >= CFG.shortMin ? "neg" : "dim"}" style="font-weight:${r.ss.n >= CFG.shortMin ? 650 : 400}">${r.ss.n}/7</span>` : "—"},
     {k: "rej", l: "Rejection", h: "back under the daily line", g: "hx", cls: "l", v: r => r.reject ? 1 : 0, f: r => r.reject ? `<span class="flag rej">${r.rejectLv.join("·")}</span>` : ""}
   ];
-  return [...C, ...add.filter(c => !c.need || S.has[c.need])];
-};
-const _flags0 = flagsHTML;
-flagsHTML = function(r){ return _flags0(r) + (r.reject ? `<span class="flag rej" title="Pushed above the daily ${r.rejectLv.join(" / ")} today and is back under it, also under VWAP and the 30-min 21 EMA">rejected ${r.rejectLv.join("·")}</span>` : ""); };
+  hx.C = [...C, ...add.filter(c => !c.need || S.has[c.need])];
+});
+// 8 Nov 2026 (TIDY-UP, structure only): was a flagsHTML wrapper — now a "flags" hook (BOARD HOOKS), same text, same order
+hookOn("flags", "rejected", hx => { const r = hx.r; hx.s = hx.s + (r.reject ? `<span class="flag rej" title="Pushed above the daily ${r.rejectLv.join(" / ")} today and is back under it, also under VWAP and the 30-min 21 EMA">rejected ${r.rejectLv.join("·")}</span>` : ""); });
 SCREENS.push(
   {k: "washret", t: "Washout retest", d: "Closed 2.5+ ADR under the 50 SMA in the last 30 sessions, and is now back above the 21 EMA — the first flush set the low and the bounce is holding.", need: ["hist"], f: r => r.hx && r.hx.washMin != null && r.hx.washMin <= -2.5 && r.e21 != null && r.last > r.e21},
   {k: "vcoil", t: "Coiled in the zone (RMV+)", d: "In or just under the buy zone with volatility state Coiled: both RMV gates pass and 3+ of 4 confirmations, no wide bars or open gaps lately.", need: ["hist"], f: r => ecsIn(r, 1, 2) && vsOf(r) && vsOf(r).k === "coiled"},
@@ -4777,9 +4824,8 @@ const SC_CAT = {strong: "Today", factor: "Today", inplay: "Today", reclaim: "Tod
   rsnh: "RS line", rsbp: "RS line", pb21: "RS line", pb9w: "RS line",
   shortw: "Weakness (shorts)", reject: "Weakness (shorts)", rsnl: "Weakness (shorts)", weakup: "Weakness (shorts)", breakdn: "Weakness (shorts)", crack: "Weakness (shorts)", newlo: "Weakness (shorts)"};
 const SC_ORDER = ["Today", "Setups", "Leadership", "RS line", "Weakness (shorts)", "Other"];
-const _openDrawer0 = openDrawer;
-openDrawer = function(sym){
-  _openDrawer0(sym);
+// 8 Nov 2026 (TIDY-UP, structure only): was an openDrawer wrapper — now a "drawerBlocks" hook (BOARD HOOKS), same code, same order
+hookOn("drawerBlocks", "priceHistory", sym => {
   const r = S.rows.find(x => x.sym === sym), dr = $("drawer"); if (!r || !dr || r.etf) return;
   const ss = r.ss, x = r.hx;
   const blk = `<h4 style="margin:12px 0 2px;font-size:12px">Price history &amp; weakness check</h4>
@@ -4788,7 +4834,7 @@ openDrawer = function(sym){
     ${ss ? `<div class="small" style="margin-top:4px"><b>Short score ${ss.n}/7</b>${r.sLoc ? ` · ${esc(r.sLoc)}` : ""}${r.sBlock && r.sBlock.length ? ` · blockers: ${esc(r.sBlock.join(", "))}` : ""}</div>${ss.items.map(i => `<div class="chk"><span class="ic ${i.ok == null ? "na" : i.ok ? "no" : "ok"}">${i.ok == null ? "·" : i.ok ? "✕" : "✓"}</span><div>${esc(i.t)}</div><div class="small">${i.ok == null ? "no data" : i.ok ? "weak" : "fine"}</div></div>`).join("")}` : ""}`;
   const anchor = dr.querySelector("#dStopOut") || dr.querySelector(".kv");
   if (anchor) anchor.insertAdjacentHTML("afterend", blk); else dr.insertAdjacentHTML("beforeend", blk);
-};
+});
 
 /* =====================================================================
    COLLAPSIBLE CARDS — click a card's title to fold it; remembered here
@@ -4919,9 +4965,8 @@ function groupHist(){
       anc: median(m.map(r => r.hx.anc)), hq};
   }
 }
-const _applyHist0 = applyHist;
-applyHist = function(){
-  _applyHist0();
+// 8 Nov 2026 (TIDY-UP, structure only): was a applyHist wrapper — now a "hist" hook (BOARD HOOKS), same code, same order
+hookOn("hist", "sinceDate", () => {
   HIST.anc = null;
   if (!S.has.hist || !HIST.bSym) { S.groups && S.groups.forEach(g => g.hx = null); return; }
   const tb = HIST.today, dates = tb ? [...HIST.dates, tb.date] : HIST.dates;
@@ -4934,7 +4979,7 @@ applyHist = function(){
     Object.assign(r.hx, tsfExtra(s, bS, r, A));
   }
   groupHist();
-};
+});
 
 /* ---------------- render helpers ---------------- */
 function hqHTML(hq){
@@ -4990,9 +5035,9 @@ Object.assign(GF_PRESETS, {
 
 /* ---------------- columns ---------------- */
 COL_GROUPS.splice(4, 0, ["tsf", "Since date, AVWAP & events"]);
-const _COLS41 = COLS;
-COLS = function(){
-  const C = _COLS41();
+// 8 Nov 2026 (TIDY-UP, structure only): was a COLS wrapper — now a "cols" hook (BOARD HOOKS), same code, same order
+hookOn("cols", "sinceDate", hx => {
+  const C = hx.C;
   const pp = v => v == null ? "—" : `<span class="${cls(v)}">${sg(v, 1)}</span>`;
   const add = [
     {k: "ancChg", l: "Since " + (HIST.anc ? HIST.anc.date.slice(5) : "date"), h: "% change", g: "tsf", need: "hist", v: r => hxv(r, "anc"), f: r => { const v = hxv(r, "anc"); return v == null ? "—" : `<span class="${cls(v)}">${pc(v, 1)}</span>`; }},
@@ -5003,8 +5048,8 @@ COLS = function(){
     {k: "hq5", l: "5-week history", h: "oldest → this week", g: "tsf", need: "hist", v: r => hqVal(r.hx && r.hx.hq), f: r => hqHTML(r.hx && r.hx.hq)}
   ].filter(c => !c.need || S.has[c.need]);
   if (scoreOn()) add.push({k: "gScore", l: "Score", h: "filters matched", g: "id", v: r => r.etf ? null : scoreOf(r).n, f: r => { if (r.etf) return ""; const s = scoreOf(r); return `<b>${s.n}/${s.N}</b>${s.dots}`; }});
-  return [...C, ...add];
-};
+  hx.C = [...C, ...add];
+});
 
 /* ---------------- screens ---------------- */
 SCREENS.push(
@@ -5083,9 +5128,8 @@ const _renderThemes1 = renderThemes;
 renderThemes = function(){ _renderThemes1(); renderMoney(); renderGLB(); if (typeof rtDraw === "function") { try { rtDraw(); } catch (e) { console.error("rotation trail", e); } } };   // 3 Nov: + the rotation-map trail (TIMING + WEAK SIDE script)
 
 /* ---------------- drawer ---------------- */
-const _openDrawer41 = openDrawer;
-openDrawer = function(sym){
-  _openDrawer41(sym);
+// 8 Nov 2026 (TIDY-UP, structure only): was an openDrawer wrapper — now a "drawerBlocks" hook (BOARD HOOKS), same code, same order
+hookOn("drawerBlocks", "sinceDate", sym => {
   const r = S.rows.find(x => x.sym === sym), dr = $("drawer"); if (!r || !dr || r.etf || !r.hx) return;
   const x = r.hx, ev = evHTML(r, EV_LB), gx = (S.groupMap.get(r.group) || {}).hx;
   const av = (a, what) => a ? `${what} ${f2(a.av)} (${a.above ? "above" : "below"}${a.u != null ? ", " + sg(a.u, 1) + " ADR" : ""}${a.rc != null ? `, back above ${a.rc ? a.rc + " sessions ago" : "last session"}` : ""})` : "";
@@ -5096,7 +5140,7 @@ openDrawer = function(sym){
     <br>5-week history: ${hqHTML(x.hq)}${gx ? ` · group ${esc(r.group)}: ${hqHTML(gx.hq)}` : ""}</div>`;
   const anchor = dr.querySelector("#dStopOut") || dr.querySelector(".kv");
   if (anchor) anchor.insertAdjacentHTML("afterend", blk); else dr.insertAdjacentHTML("beforeend", blk);
-};
+});
 </script>
 <script>
 "use strict";
@@ -5205,10 +5249,13 @@ function snapshotObj(){
     tape: tp ? {bucket: tp.bucket, score: tp.score, healthy: tp.gN, caution: tp.aN, weak: tp.rN, asOf: tp.asOf, lines: tp.lines.map(l => ({name: l.name, read: word[l.st] || null, text: l.tx, nums: l.nums}))} : null,
     plan: S.plan.plan.map(r => snapRow(r)), onDeck: S.plan.deck.map(d => snapRow(d.r, d.why))
   } : null;
-  return {kind: "deep-space-snapshot", v: 1, savedAt: new Date().toISOString(), board: "Deep Space Board v4",
+  // 8 Nov 2026 (TIDY-UP, structure only): later sections add their own fields with hookOn("snap", o => …), in file order with no
+  // try/catch (hookEach) — the same fields in the same key order as the 5 snapshotObj wrappers they replace
+  const o = {kind: "deep-space-snapshot", v: 1, savedAt: new Date().toISOString(), board: "Deep Space Board v4",
     note: "Raw CSVs, settings, lists, MAP call, filters and a summary. No API keys and no price history.",
     files: curFiles(), settings: diff, lists: {focus: LISTS.focusTxt, held: LISTS.heldTxt, b: typeof MAPL !== "undefined" ? MAPL.bTxt : "", stalk: typeof MAPL !== "undefined" ? MAPL.stalkTxt : ""}, mapCall: store.get("adrb.mapRegime", null),
     filters: GF, ui: {session: $("modeSel").value, basis: S.basis, ipTime: S.ui.ipTime || null}, summary};
+  hookEach("snap", o); return o;
 }
 const snapName = () => { const d = new Date(), p = n => String(n).padStart(2, "0"); return `deep-space-snapshot-${fmtDate(d)}-${p(d.getHours())}${p(d.getMinutes())}.json`; };
 function downloadBlob(name, blob){
@@ -5297,9 +5344,8 @@ async function fsPaint(){
   const dEl = $("fsDir");
   if (dEl) { const h = await dirHandle(); dEl.innerHTML = h ? `<b>${esc(h.name)}</b>` : `<span class="dim">none — snapshots download</span>`; const st = $("fsDirStop"); if (st) st.disabled = !h; }
 }
-const _renderSettings0 = renderSettings;
-renderSettings = function(){
-  _renderSettings0();
+// 8 Nov 2026 (TIDY-UP, structure only): was a renderSettings wrapper — now a "settings" hook (BOARD HOOKS), same code, same order
+hookOn("settings", "savedFiles", () => {
   const reset = $("sReset"); if (!reset) return;
   const row = (label, input, d = "") => `<div class="row"><div>${label}${d ? `<div class="d">${d}</div>` : ""}</div><div>${input}</div></div>`;
   const box = document.createElement("div");
@@ -5317,7 +5363,7 @@ renderSettings = function(){
     $("fsDl").onchange = e => store.set("adrb.snapPref", e.target.checked ? "download" : null);
   }
   fsPaint();
-};
+});
 filesBoot();
 </script>
 <script>
@@ -5615,8 +5661,8 @@ function trChartClose(){ const el = $("trChart"); if (el) { el.classList.add("hi
 document.addEventListener("keydown", e => { if (e.key === "Escape") trChartClose(); });
 $("tabs").insertAdjacentHTML("beforeend", `<button data-tab="train">Training</button>`);
 $("foot").insertAdjacentHTML("beforebegin", `<section class="tab" id="tab-train"><p class="lede">Train your eye: read state and volatility from your own chart, then check against the board. Cards come from the liquid names your filter bar shows (Everything = the whole file). Nothing here changes the board's rankings, states or plan.</p><div id="trainBody"></div></section>`);
-const _renderTab0 = renderTab;
-renderTab = function(t){ if (t === "train") return renderTrain(); return _renderTab0(t); };
+// 8 Nov 2026 (TIDY-UP, structure only): was a renderTab wrapper — now a page of renderTab's own (TABS)
+tabDraw("train", () => renderTrain());
 $("tab-train").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b || !TR.cfg) return;
   if (b.dataset.tc) { const k = b.dataset.tc, v = b.dataset.tcv; TR.cfg[k] = ["n", "back"].includes(k) ? +v : v; store.set("adrb.trainCfg", TR.cfg); if (k !== "game") TR.set = null; renderTrain(); return; }
@@ -5643,6 +5689,10 @@ $("tab-train").addEventListener("click", e => {
    Classic layout = the v4 page untouched — REMOVED 5 Nov 2026 (Eugene: "Remove Classic"): html.ws is always set in <head>,
    the sidebar button and the Settings switch are gone; adrb.layout is left in storage and ignored. The !WS branches below
    are now unreachable on desktop and the phone (both always WS).
+   8 Nov 2026 (TIDY-UP, structure only — Eugene: "speed optimisation and tidy up. Don't remove dead features."): the five
+   Classic-only "else { openDrawer = … }" branches further down (Entry Check panel, Daily Plan panel, Entry Check panel order,
+   Playbooks 2 + 3 panel tabs, BOARD HOOKS) are deleted — html.ws is set unconditionally before any board script (desktop
+   <head>; phone mobile/mobile-head.js) and nothing removes it, so WS is always true and those branches never ran.
    ===================================================================== */
 const WS = document.documentElement.classList.contains("ws");
 const WSI = {list: [], restored: false, startTab: store.get("adrb.tab", null), secs: [], tpTab: store.get("adrb.tpTab", "plan") || "plan", hist: [], back: false};
@@ -5707,8 +5757,8 @@ $("tab-shorts").addEventListener("click", e => {
   const s = e.target.closest("[data-shscr]");
   if (s && !s.classList.contains("off")) { S.ui.screen = s.dataset.shscr; goTab("screens"); setTimeout(() => { const t = $("tblScreen"); if (t) jumpTo(t); }, 60); }
 });
-const _renderTab1 = renderTab;
-renderTab = function(t){ if (t === "shorts") renderShorts(); else _renderTab1(t); afterTab(t); };
+// 8 Nov 2026 (TIDY-UP, structure only): was a renderTab wrapper — now a page of renderTab's own (TABS), which calls afterTab
+tabDraw("shorts", () => renderShorts());
 function goTab(t){ const b = document.querySelector(`#tabs button[data-tab="${t}"]`); if (b) b.click(); }
 document.addEventListener("click", e => { const g = e.target.closest("[data-goto]"); if (!g) return; if ($("drawer").classList.contains("open")) closeDrawer(); goTab(g.dataset.goto); });
 
@@ -5720,14 +5770,13 @@ function navBadges(){
   if (S.tape) add("market", S.tape.bucket, S.tape.cls, "Tape read from your breadth file");
   if (S.has.hist) { const n = shortList().length; if (n) add("shorts", n, "sh", `${n} liquid names score ${CFG.shortMin}+ of 7 weakness signs`); }
 }
-const _renderAll1 = renderAll;
-renderAll = function(){
-  document.querySelectorAll("#tabs .nb").forEach(x => x.remove());   // renderAll rebuilds each tab label from its text
-  _renderAll1();
+// 8 Nov 2026 (TIDY-UP, structure only): was a renderAll wrapper — now an "all" hook (BOARD HOOKS), same code, same order
+hookOn("all", "workspace", ph => {
+  if (ph === "before") { document.querySelectorAll("#tabs .nb").forEach(x => x.remove()); return; }   // renderAll rebuilds each tab label from its text
   document.body.classList.toggle("has-snap", !!S.snap);
   navBadges();
   if (WS) wsAfterAll();
-};
+});
 
 /* ---------------- workspace layout ---------------- */
 const NAV = [
@@ -5809,12 +5858,12 @@ function drHist(item){
   if (!WSI.back && !(last && last.t === item.t && last.k === item.k)) WSI.hist.push(item);
   WSI.back = false;
 }
+// 8 Nov 2026 (TIDY-UP, structure only): the "drawerShown" hooks run after the panel is built (they were 3 openDrawer
+// wrappers right outside this one, and ran even when the name isn't in the file); the unreachable !WS line is gone
 openDrawer = function(sym){
-  if (!WS) return _openDrawer1(sym);
-  const r = S.rows.find(x => x.sym === sym); if (!r) return;
-  drHist({t: "s", k: sym});
-  _openDrawer1(sym);
-  tpBuild(r);
+  const r = S.rows.find(x => x.sym === sym);
+  if (r) { drHist({t: "s", k: sym}); _openDrawer1(sym); tpBuild(r); }
+  hookEach("drawerShown", sym);
 };
 groupDrawer = function(name){
   if (!WS) return _groupDrawer1(name);
@@ -5832,7 +5881,11 @@ function tpStep(d){
   const n = WSI.list[i + d]; if (!n) return;
   WSI.back = true; WSI.hist[WSI.hist.length - 1] = {t: "s", k: n}; openDrawer(n);
 }
-function tpBuild(r){
+// 8 Nov 2026 (TIDY-UP, structure only): tpBuild = the panel build (tpBuild0), then the "panelBuild" steps later sections add
+// with hookOn (BOARD HOOKS) — they were six tpBuild wrappers and run in the same order, with no try/catch of their own, as the
+// wrappers did; want = WSI.tpTab before the build (tpBuild0 resets it when that tab isn't in the panel yet)
+function tpBuild(r){ const want = WSI.tpTab; tpBuild0(r); hookEach("panelBuild", r, want); }
+function tpBuild0(r){
   const dr = $("drawer"); if (!dr.classList.contains("open")) return;
   const B = {head: [], chart: [], rs: [], kv: [], plan: [], hist: [], news: [], checks: [], peers: []};
   let cur = "head";
@@ -6190,8 +6243,8 @@ function navBadgeSC(asked){
   const b = document.querySelector('#tabs button[data-tab="data"]'), n = SC.res.fails.length;
   if (b) b.insertAdjacentHTML("beforeend", `<span class="nb ${n ? "r" : "g"}" title="${n ? n + " self-check problems — open Data check" : "Self-check: all " + SC.res.n + " checks passed"}">${n ? "✗ " + n : "✓"}</span>`);
 }
-const _renderTab2 = renderTab;
-renderTab = function(t){ if (t === "data" && S.snap) renderSelfCheck(); _renderTab2(t); };   // card first, so the jump list sees it
+// 8 Nov 2026 (TIDY-UP, structure only): was a renderTab wrapper — now a "tabBefore" hook (BOARD HOOKS)
+hookOn("tabBefore", "selfCheckCard", t => { if (t === "data" && S.snap) renderSelfCheck(); });   // card first, so the jump list sees it
 </script>
 <script>
 "use strict";
@@ -6262,14 +6315,14 @@ const _scCrit = [
   {k: "ep9r", cat: "Today", l: "EP 9M within the last 10 sessions", need: HH, t: r => S.has.hist ? !!ep9Hist(r) : null}
 ];
 _scCrit.forEach(c => { CRIT.push(c); CRIT_BY[c.k] = c; });
-const _flags1 = flagsHTML;
-flagsHTML = function(r){
-  const ra = reaccelOf(r), e = ep9Of(r), eh = !(e && e.ok) && ep9Hist(r);
-  return _flags1(r)
+// 8 Nov 2026 (TIDY-UP, structure only): was a flagsHTML wrapper — now a "flags" hook (BOARD HOOKS), same text, same order
+hookOn("flags", "reaccelEp9", hx => {
+  const r = hx.r, ra = reaccelOf(r), e = ep9Of(r), eh = !(e && e.ok) && ep9Hist(r);
+  hx.s = hx.s
     + (ra && ra.ok ? `<span class="flag good" title="Former leader re-accelerating: 6M leader, 3M reset, structure intact, RSAccel20 ${sg(ra.acc, 1)} points">REACCEL</span>${ra.er ? `<span class="flag er" title="Reported in the last 5 days — the REACCEL turn may be the earnings gap alone">REPORTED</span>` : ""}` : "")
     + (e && e.ok ? `<span class="flag post" title="${fmtVol(r.vol)} shares, ${e.mult.toFixed(1)}× normal — check for a real catalyst">EP 9M</span>` : "")
     + (eh ? `<span class="flag post" title="${fmtVol(eh.vol)} shares on ${eh.date} (${eh.mult.toFixed(1)}× its 50-day average)">EP 9M ${eh.ago}d</span>` : "");
-};
+});
 </script>
 <script>
 "use strict";
@@ -6418,8 +6471,8 @@ function sbPaint(){
 }
 // card on the Market tab, right after the tape read
 $("mkTape").insertAdjacentHTML("afterend", `<div class="card g1" id="sbBox"></div>`);
-const _renderTab3 = renderTab;
-renderTab = function(t){ if (t === "market" && S.snap) { sbPaint(); if (S.has.hist) sbLoad(false); } _renderTab3(t); };
+// 8 Nov 2026 (TIDY-UP, structure only): was a renderTab wrapper — now a "tabBefore" hook (BOARD HOOKS)
+hookOn("tabBefore", "breadthStrip", t => { if (t === "market" && S.snap) { sbPaint(); if (S.has.hist) sbLoad(false); } });
 </script>
 <script>
 "use strict";
@@ -6599,11 +6652,11 @@ function stageOf(r){
 const stagePill = r => { const s = stageOf(r); if (!s) return `<span class="dim small">${S.has.hist ? "—" : "load price history"}</span>`; const L = WSL[s.lab]; return `<span class="wsp" style="--c:${L.c}" title="Stage ${L.n} · ${esc(L.t)}: ${esc(L.d)}${s.since != null && s.lab !== "N/A" ? ` · ${s.since} sessions in this stage` : ""}">${L.n}</span>`; };
 const stageRank = r => { const s = stageOf(r); return s ? -WS_ORDER.indexOf(s.lab) : null; };
 // table columns (stocks: history group; ETFs: ETF group), filter, screens, ticker panel
-const _COLS1 = COLS;
-COLS = function(){ const C = _COLS1();
+// 8 Nov 2026 (TIDY-UP, structure only): was a COLS wrapper — now a "cols" hook (BOARD HOOKS), same code, same order
+hookOn("cols", "weinsteinStage", hx => { const C = hx.C;
   C.push({k: "wstage", l: "Stage", h: "Weinstein · Deepvue style", g: "hx", cls: "l", need: "hist", v: stageRank, f: stagePill},
          {k: "wstageE", l: "Stage", h: "Weinstein · Deepvue style", g: "etf", cls: "l", need: "hist", v: stageRank, f: stagePill});
-  return C; };
+});
 { const c = {k: "wstage", cat: "Structure", l: "Weinstein stage is", type: "multi", p: ["2A", "2"], need: HH, opts: () => WS_SEQ.map(k => [k, `${k} · ${WSL[k].t}`]), t: (r, p) => { const s = stageOf(r); return s ? p.includes(s.lab) : null; }};
   CRIT.push(c); CRIT_BY[c.k] = c; }
 SCREENS.push(
@@ -6612,8 +6665,8 @@ SCREENS.push(
   {k: "ws3a", t: "Stage 3A — leader breaking its 10-week", d: "A Stage 2 stock that has closed under its 50-day (10-week). Weinstein's early-top warning; a reclaim puts it back in Stage 2.", need: ["hist"], f: r => { const s = stageOf(r); return !!s && s.lab === "3A"; }}
 );
 Object.assign(SC_CAT, {ws2a: "Leadership", ws4b: "Setups", ws3a: "Weakness (shorts)"});
-const _flags2 = flagsHTML;
-flagsHTML = function(r){ const s = S.has.hist ? stageOf(r) : null; return _flags2(r) + (s && s.lab !== "N/A" ? ` <span class="wsp sm" style="--c:${WSL[s.lab].c}" title="Weinstein stage ${s.lab} · ${esc(WSL[s.lab].t)} (Deepvue-style reference)">S${s.lab}</span>` : ""); };
+// 8 Nov 2026 (TIDY-UP, structure only): was a flagsHTML wrapper — now a "flags" hook (BOARD HOOKS), same text, same order
+hookOn("flags", "weinsteinStage", hx => { const r = hx.r; const s = S.has.hist ? stageOf(r) : null; hx.s = hx.s + (s && s.lab !== "N/A" ? ` <span class="wsp sm" style="--c:${WSL[s.lab].c}" title="Weinstein stage ${s.lab} · ${esc(WSL[s.lab].t)} (Deepvue-style reference)">S${s.lab}</span>` : ""); });
 
 /* ---------------- stage distribution (Market) ---------------- */
 function stageDistHTML(rows){
@@ -6647,15 +6700,13 @@ document.addEventListener("click", e => {
   const p = has ? cur.filter(k => WS_MAIN[k] !== m) : WS_SEQ.filter(k => WS_MAIN[k] === m || cur.includes(k));
   GF.crit.wstage = {on: p.length > 0, p: p.length ? p : ["2A", "2"]}; gfApply();
 });
-if (WS) {
-  const _tpB = tpBuild;
-  tpBuild = function(r){
-    _tpB(r);
-    const s = stageOf(r), ctx = document.querySelector("#drawer .tp-ctx"); if (!s || !ctx) return;
-    const L = WSL[s.lab];
-    ctx.insertAdjacentHTML("beforeend", `<span class="arr">·</span><span class="cx" title="${esc(L.d)}"><i>Weinstein stage</i><b><span class="wsp" style="--c:${L.c}">${L.n}</span> ${esc(L.t)}</b><small>${s.since != null && s.lab !== "N/A" ? `${s.since} sessions · ` : ""}Deepvue-style reference</small></span>`);
-  };
-}
+// 8 Nov 2026 (TIDY-UP, structure only): was a tpBuild wrapper — now a "panelBuild" step (BOARD HOOKS): same place in the
+// panel build, same order, an error still stops the build and shows the panel notice
+hookOn("panelBuild", "weinsteinStage", r => {
+  const s = stageOf(r), ctx = document.querySelector("#drawer .tp-ctx"); if (!s || !ctx) return;
+  const L = WSL[s.lab];
+  ctx.insertAdjacentHTML("beforeend", `<span class="arr">·</span><span class="cx" title="${esc(L.d)}"><i>Weinstein stage</i><b><span class="wsp" style="--c:${L.c}">${L.n}</span> ${esc(L.t)}</b><small>${s.since != null && s.lab !== "N/A" ? `${s.since} sessions · ` : ""}Deepvue-style reference</small></span>`);
+});
 </script>
 <script>
 "use strict";
@@ -6776,19 +6827,18 @@ function renderLevCard(){
 // 31 Oct (structure only): was a renderTab override; now a "tab" hook — same code, same order (BOARD HOOKS, block 1)
 hookOn("tab", "levCard", t => { if (t === "etfs" && S.snap) { renderLevCard(); levLoad(false); } });
 // ticker panel / drawer: the funds right under the header
-const _openDrawer2 = openDrawer;
-openDrawer = function(sym){
-  _openDrawer2(sym);
+// 8 Nov 2026 (TIDY-UP, structure only): was an openDrawer wrapper — now a "drawerShown" hook (BOARD HOOKS), same code, same order
+hookOn("drawerShown", "leveragedChips", sym => {
   const dr = $("drawer"); if (!dr.classList.contains("open") || !LEV.list) return;
   const html = levChips(sym); if (!html) return;
   const at = dr.querySelector(".tp-lv") || dr.querySelector(".tp-ctx") || dr.querySelector("h3")?.nextElementSibling;
   if (at) at.insertAdjacentHTML("afterend", html);
-};
+});
 if (newsKey() && !LEV.list) setTimeout(() => levLoad(false), 4000);
 document.addEventListener("click", e => { if (e.target.closest("a")) return; const el = e.target.closest(".lvc[data-sym], #levBox td[data-sym]"); if (el) openDrawer(el.dataset.sym); });
 // flag + filter
-const _flags3 = flagsHTML;
-flagsHTML = function(r){ if (!LEV.list || !HIST.nD) return _flags3(r); const L = levFor(r.sym), lg = L.liquid.filter(f => f.dir === "long"); return _flags3(r) + (lg.length ? `<span class="flag lvf" title="Liquid leveraged long: ${esc(lg.map(f => `${f.t} ${f.lev}×`).join(", "))}">${esc(lg[0].t)} ${lg[0].lev}×</span>` : ""); };
+// 8 Nov 2026 (TIDY-UP, structure only): was a flagsHTML wrapper — now a "flags" hook (BOARD HOOKS), same text, same order
+hookOn("flags", "leveragedLong", hx => { const r = hx.r; if (!LEV.list || !HIST.nD) return; const L = levFor(r.sym), lg = L.liquid.filter(f => f.dir === "long"); hx.s = hx.s + (lg.length ? `<span class="flag lvf" title="Liquid leveraged long: ${esc(lg.map(f => `${f.t} ${f.lev}×`).join(", "))}">${esc(lg[0].t)} ${lg[0].lev}×</span>` : ""); });
 { const c = {k: "levok", cat: "Lists", l: "Has a leveraged long ETF trading $" + LEV.min + "M+/day", need: () => !!LEV.list && HIST.nD > 0, t: r => !LEV.list || !HIST.nD ? null : levFor(r.sym).liquid.some(f => f.dir === "long")}; CRIT.push(c); CRIT_BY[c.k] = c; }
 // ticker search: a leveraged fund opens its underlying
 if (WS) {
@@ -7114,8 +7164,8 @@ function mlCounts(){
 mlCounts();
 if (typeof SEC_NAMES !== "undefined") Object.assign(SEC_NAMES, {listsBox: "MAP lists & held", focusBox: "MAP lists"});
 // flags: B list and stalk names are tagged wherever MAP / HELD tags show
-const _flags4 = flagsHTML;
-flagsHTML = function(r){ return _flags4(r) + (MAPL.b.has(r.sym) ? `<span class="flag mapb" title="On MAP's B list — ready, passed on">MAP B</span>` : "") + (MAPL.stalk.has(r.sym) ? `<span class="flag stalk" title="On MAP's stalk list — waiting for a pullback">STALK</span>` : ""); };
+// 8 Nov 2026 (TIDY-UP, structure only): was a flagsHTML wrapper — now a "flags" hook (BOARD HOOKS), same text, same order
+hookOn("flags", "mapBStalk", hx => { const r = hx.r; hx.s = hx.s + (MAPL.b.has(r.sym) ? `<span class="flag mapb" title="On MAP's B list — ready, passed on">MAP B</span>` : "") + (MAPL.stalk.has(r.sym) ? `<span class="flag stalk" title="On MAP's stalk list — waiting for a pullback">STALK</span>` : ""); });
 { const c1 = {k: "mapB", cat: "Lists", l: "On MAP's B list", t: r => MAPL.b.has(r.sym)}, c2 = {k: "mapS", cat: "Lists", l: "On MAP's stalk list", t: r => MAPL.stalk.has(r.sym)}; CRIT.push(c1, c2); CRIT_BY[c1.k] = c1; CRIT_BY[c2.k] = c2; }
 // where each list stands now
 renderFocus = function(){
@@ -7290,7 +7340,7 @@ async function jnSaveNow(){
 function jnSave(){ clearTimeout(JN.t); JN.t = setTimeout(jnSaveNow, 250); }
 
 /* ---------------- recording ---------------- */
-const jr = x => x == null || !isFinite(x) ? null : +(+x).toFixed(4);
+const jr = r4;   // 8 Nov 2026 (TIDY-UP): was a byte-for-byte copy of r4 (snapshot rows) — now the same function
 const jnEr = r => r.erIn == null || r.erIn < 0 ? "unknown" : r.erSoon ? "soon" : "clear";
 function jnFacts(r, why){
   const v = vsOf(r); let x = null; try { x = s6Of(r); } catch (e) {}
@@ -7360,8 +7410,8 @@ mlogRecord = function(){ _mlogJ(); jnSoon(); };
 const _setMapRegimeJ = setMapRegime;
 setMapRegime = function(v, c){ _setMapRegimeJ(v, c); jnSoon(); };
 // Spec 6.1 lists need the stored bars: log again once history is ready, and when the switch is flipped
-const _applyHistJ = applyHist;
-applyHist = function(){ _applyHistJ.apply(this, arguments); if (S.has.hist && jnSpec61()) jnSoon(); };
+// 8 Nov 2026 (TIDY-UP, structure only): was a applyHist wrapper — now a "hist" hook (BOARD HOOKS), same code, same order
+hookOn("hist", "boardLog", () => { if (S.has.hist && jnSpec61()) jnSoon(); });
 
 /* ---------------- scoring ---------------- */
 let JNH = {key: ""};
@@ -7666,12 +7716,8 @@ function renderJournal(){
   if (keep) { const el = [...box.querySelectorAll(`#${keep[0]} [data-${keep[1]}="${keep[2]}"]`)].find(e => e.dataset.p === keep[3] && e.dataset.s === keep[4]); if (el) el.focus(); }
   scrollTo(0, y);
 }
-const _renderTabJ = renderTab;
-renderTab = function(t){
-  if (t !== "journal") return _renderTabJ(t);
-  renderJournal();
-  if (typeof afterTab === "function") afterTab(t);
-};
+// 8 Nov 2026 (TIDY-UP, structure only): was a renderTab wrapper — now a page of renderTab's own (TABS), which calls afterTab
+tabDraw("journal", () => renderJournal());
 
 /* ---------------- edits ---------------- */
 function jnName(p, s){ const rec = JN.recs[p]; return rec ? rec.n.find(o => o.s === s) || null : null; }
@@ -7727,7 +7773,7 @@ function jnCsvExt(x, q, P){
   return "," + JN_CSV_EXT.flatMap((e, i) => { if (!x) return e.h; let c = null; try { c = e.cells(x, P[i]); } catch (er) { console.warn("decision log columns", er); } return c || e.h.map(() => ""); }).map(q).join(",");
 }
 function jnCSV(){
-  const q = v => { const x = v == null ? "" : String(v); return /[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x; };
+  const q = csvCell;   // 8 Nov 2026 (TIDY-UP): the shared copy (block 1), same text
   const H = ["plan_day", "data_session", "file_type", "files", "ticker", "lists", "state", "status", "rs", "group", "group_state", "entry", "widest_stop", "target_2r", "adr_pct", "from_line_adr", "from_50_adr", "grade", "volatility", "earnings", "earnings_days", "pivot_script", "on_deck_why", "tape_read", "map_call",
     "call", "reasons", "note", "decided_at", "after_open", "entered", "trigger", "chart_stop", "resistance", "room_r", "outcome", "fill", "fill_date", "exit", "exit_date", "r", "move_5d_pct", "move_10d_pct", "my_fill", "my_exit", "my_stop", "my_stop_from", "my_r", "my_fill_vs_entry_adr", "my_risk_adr",
     "rules_logged", "s61_list", "s61_loc", "s61_planned_entry", "s61_1r_est", "s61_first_res", "s61_room_r", "s61_first_fail", "s61_grade", "s61_earnings_sessions", "s61_exit_by", "s61_setup_quality",
@@ -7764,8 +7810,8 @@ function jnMerge(inc){
   }
   JNH = {key: ""}; jnSave(); return n;
 }
-const _snapshotObjJ = snapshotObj;
-snapshotObj = function(){ const o = _snapshotObjJ(); o.journal = JN.recs; return o; };
+// 8 Nov 2026 (TIDY-UP, structure only): was a snapshotObj wrapper — now a "snap" hook (BOARD HOOKS): same field, same place in the file
+hookOn("snap", "boardLog", o => { o.journal = JN.recs; });
 const _openSnapshotJ = openSnapshot;
 openSnapshot = async function(file){
   try { const o = JSON.parse(await file.text()); if (o && o.kind === "deep-space-snapshot" && o.journal) { await JN.ready; jnMerge(o.journal); } } catch (e) {}
@@ -8138,7 +8184,7 @@ function feedRows(){
 }
 const fv = (v, dp) => v == null || v === "" || (typeof v === "number" && !isFinite(v)) ? "" : typeof v === "boolean" ? (v ? 1 : 0) : typeof v === "number" ? (dp == null ? Math.round(v) : +v.toFixed(dp)) : v;
 function feedCSV(){
-  const q = v => { const s = String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const q = csvStr;   // 8 Nov 2026 (TIDY-UP): the shared copy (block 1), same text
   const X = s61Live() ? [] : FEED_X, RA = FEED_RA.filter(c => !DSS5_COLS.some(d => d[0] === c[0]));   // RS Accel20 pp sits in the screener block now
   const H = ["Symbol", "Description", "Sector", "Industry", "Price", ...DSS5_COLS.map(c => c[0]), ...X.map(c => c[0]), ...RA.map(c => c[0]), ...FEED_TAS, ...FEED_PL, ...FEED_B, ...FEED_61.map(c => c[0])];
   const L = [H.map(q).join(",")];
@@ -8600,26 +8646,19 @@ function s61Retire(pane){
   const old = [...pane.querySelectorAll(":scope > .tkt, :scope > .bpck, :scope > .s6p")];
   if (old.length) { const d = document.createElement("details"); d.className = "tp-fold"; d.innerHTML = "<summary>Spec 6.0 ticket and checks (retired on test day 1)</summary>"; old.forEach(el => d.appendChild(el)); pane.appendChild(d); }
 }
-if (WS) {
-  const _tpBuild61 = tpBuild;
-  tpBuild = function(r){
-    _tpBuild61(r);
-    const pane = document.querySelector('#drawer .tp-pane[data-p="plan"]'); if (!pane || r.etf) return;
-    pane.insertAdjacentHTML("afterbegin", s61PanelHTML(r)); s61Wire(pane, r.sym); s61Retire(pane);
-    if (s61Live()) { const d = dssOf(r.sym); document.querySelectorAll("#drawer .tp-lv > span").forEach(sp => { if (/^Volatility /.test(sp.textContent)) sp.innerHTML = d && fin(d.rmv) ? `RMV <b>${Math.round(d.rmv)}${d.rmv <= S61.rmvC ? " · compressed" : ""}</b>` : ""; }); }
-  };
-} else {
-  const _openDrawer61 = openDrawer;
-  openDrawer = function(sym){
-    _openDrawer61(sym);
-    const r = S.rowBySym && S.rowBySym.get(sym), dr = $("drawer"); if (!r || r.etf || !dr) return;
-    const at = [...dr.querySelectorAll("h4")].find(h => /^Entry checks/.test(h.textContent.trim()));
-    (at ? at : dr.querySelector("#tvbox"))?.insertAdjacentHTML(at ? "beforebegin" : "afterend", s61PanelHTML(r)); s61Wire(dr, sym);
-  };
-}
+// 8 Nov 2026 (TIDY-UP, structure only): was a tpBuild wrapper — now a "panelBuild" step (BOARD HOOKS): same place in the
+// panel build, same order, an error still stops the build and shows the panel notice
+hookOn("panelBuild", "entryCheck", r => {
+  const pane = document.querySelector('#drawer .tp-pane[data-p="plan"]'); if (!pane || r.etf) return;
+  pane.insertAdjacentHTML("afterbegin", s61PanelHTML(r)); s61Wire(pane, r.sym); s61Retire(pane);
+  if (s61Live()) { const d = dssOf(r.sym); document.querySelectorAll("#drawer .tp-lv > span").forEach(sp => { if (/^Volatility /.test(sp.textContent)) sp.innerHTML = d && fin(d.rmv) ? `RMV <b>${Math.round(d.rmv)}${d.rmv <= S61.rmvC ? " · compressed" : ""}</b>` : ""; }); }
+});
 
 /* ---------------- Setups: the Entry Check lists (was "Spec 6.1 lists") ---------------- */
-function renderS61Card(){
+// 8 Nov 2026 (TIDY-UP, structure only): renderS61Card = the Entry Check card (renderS61Card0), then the "s61Card" hooks (were 3
+// renderS61Card wrappers: Watchlist pins, inverse ETFs card, ETF plan) — same order, no try/catch (hookEach), BOARD HOOKS
+function renderS61Card(){ renderS61Card0(); hookEach("s61Card"); }
+function renderS61Card0(){
   const tab = $("tab-plan"); if (!tab || !S.snap) return;
   let box = $("s61Box");
   if (!box) { $("s6pBox").insertAdjacentHTML("beforebegin", `<div class="card g1" id="s61Box"></div>`); box = $("s61Box"); }
@@ -8668,21 +8707,20 @@ function renderS61Card(){
 hookOn("tab", "entryCheckCard", t => { if (t === "plan" && S.snap) { try { renderS61Card(); } catch (e) { console.warn("entry check card", e); } } });
 
 /* ---------------- live switch: the retired hints and Wild go away ---------------- */
-const _flagsHTML61 = flagsHTML;
-flagsHTML = function(r){
-  let s = _flagsHTML61(r);
-  if (!s61Live()) return s;
+// 8 Nov 2026 (TIDY-UP, structure only): was a flagsHTML wrapper — now a "flags" hook (BOARD HOOKS), same text, same order
+hookOn("flags", "entryCheck", hx => {
+  const r = hx.r; let s = hx.s;
+  if (!s61Live()) return;
   s = s.replace(/<span class="flag rule"[^>]*>HOOD rule<\/span>/g, "").replace(/(<span class="flag rej"[^>]*>)rejected /g, "$1pushed back under ");
   const x = !r.etf ? s61Of(r) : null;
   if (x && x.x.rej) s += `<span class="flag" title="Rejected 9 — label only">rejected 9 (${x.x.rej.type})</span>`;
-  return s;
-};
-const _openDrawer61b = openDrawer;
-openDrawer = function(sym){
-  _openDrawer61b(sym);
+  hx.s = s;
+});
+// 8 Nov 2026 (TIDY-UP, structure only): was an openDrawer wrapper — now a "drawerShown" hook (BOARD HOOKS), same code, same order
+hookOn("drawerShown", "entryCheckNotes", sym => {
   if (!s61Live()) return;
   $("drawer").querySelectorAll(".note").forEach(n => { if (/^(HOOD rule|Gapper):/.test(n.textContent.trim())) n.remove(); });
-};
+});
 // the Wild → on deck toggle doesn't apply under 6.1 (compression replaces it); restored when the switch is off
 const _computePlan61 = computePlan;
 computePlan = function(){
@@ -8691,9 +8729,8 @@ computePlan = function(){
 };
 
 /* ---------------- Settings: the switch ---------------- */
-const _renderSettings61 = renderSettings;
-renderSettings = function(){
-  _renderSettings61();
+// 8 Nov 2026 (TIDY-UP, structure only): was a renderSettings wrapper — now a "settings" hook (BOARD HOOKS), same code, same order
+hookOn("settings", "entryCheck", () => {
   const reset = $("sReset"); if (!reset) return;
   const box = document.createElement("div");
   box.innerHTML = `<h4>Entry Check <span class="ectag" title="Rules: Unified Spec 6.1 (Chart &amp; Entry Spec 6.1 in Notion · Deep Space Screener v5.0 · Leader Pullback indicator)">rules v6.1</span></h4>
@@ -8701,7 +8738,7 @@ renderSettings = function(){
     <div class="row"><div>Entry Check panel: detailed view<div class="d">Off (default): one call at the top in words, the key prices, the checks strip and one sentence per failing check — every row behind "Show the working". On: the older layout, every check on its own row. The same switch sits on the panel (Simple / Detailed). Display only.</div></div><div><input type="checkbox" id="ecViewSw" ${store.get("adrb.ecView", "simple") === "detailed" ? "checked" : ""}></div></div>`;
   reset.parentElement.before(box);
   $("ecViewSw").onchange = e => { store.set("adrb.ecView", e.target.checked ? "detailed" : "simple"); if ($("drawer").classList.contains("open") && EC.sym) openDrawer(EC.sym); toast(e.target.checked ? "Entry Check: detailed view" : "Entry Check: simple view"); };
-};
+});
 
 /* ---------------- self-check: the Entry Check lists follow their written rules ---------------- */
 const _selfCheck61 = selfCheck;
@@ -8782,16 +8819,15 @@ stopCalc = function(r){
   out.innerHTML = `${fits == null ? "" : fits ? `<b class="pos">✓ Entry is within 0.6 ADR of the low.</b> ` : `<b class="neg">✕ Entry is more than 0.6 ADR above the low — no trade.</b> `}Risk $${risk.toFixed(2)} a share (${(risk / e * 100).toFixed(2)}%${r.adrD ? `, ${(risk / r.adrD).toFixed(2)} ADR; cap $${lim.toFixed(2)}` : ""}). First trim at 2R: <b>${(e + 2 * risk).toFixed(2)}</b>.${room}${z ? ` Size (Spec 6.0 grade, before the Entry Check steps): grade ${z.grade} (${z.pct}% NLV) = <b>${z.shares.toLocaleString()} shares</b>${fits === false ? " — but the entry fails the 0.6-ADR cap" : ""}.` : " Add your NLV in Setups for a share count."}`;
 };
 // the note sits by the stop check (both layouts) and under the plan's lede on Setups
-const _openDrawerRN = openDrawer;
-openDrawer = function(sym){
-  _openDrawerRN(sym);
+// 8 Nov 2026 (TIDY-UP, structure only): was an openDrawer wrapper — now a "drawerShown" hook (BOARD HOOKS), same code, same order
+hookOn("drawerShown", "rulesNow", sym => {
   const dr = $("drawer"); if (!dr) return;
   const sc = dr.querySelector(".stopcalc");
   if (sc && !dr.querySelector(".rnow")) {
     sc.insertAdjacentHTML("beforebegin", `<div class="note rnow">${RULES_NOW}</div>`);
     const lb = $("dStop") && $("dStop").closest("label"); if (lb && lb.firstChild && lb.firstChild.nodeType === 3) lb.firstChild.textContent = "Low of the day at the trigger ";
   }
-};
+});
 // 31 Oct (structure only): was a renderTab override; now a "tab" hook — same code, same order (BOARD HOOKS, block 1)
 hookOn("tab", "rulesNow", t => {
   if (t !== "plan" || !S.snap) return;
@@ -8933,8 +8969,8 @@ openDrawer = function(sym){
 const _mountTVPop = mountTV;
 mountTV = function(r, iv){ if (POP.inner) { const b = $("tvbox"); if (b) b.innerHTML = ""; return; } return _mountTVPop(r, iv); };
 // new numbers (a new file, a live refresh) reach the window's data blocks; the chart is left alone
-const _renderAllPop = renderAll;
-renderAll = function(){ _renderAllPop(); if (popLive() && POP.sym && S.rowBySym && S.rowBySym.has(POP.sym)) { try { const h = popGrab(POP.sym); if (h != null) POP.w.document.getElementById("pData").innerHTML = h; } catch (e) {} } };
+// 8 Nov 2026 (TIDY-UP, structure only): was a renderAll wrapper — now an "all" hook (BOARD HOOKS), same code, same order
+hookOn("all", "chartWindow", ph => { if (ph !== "after") return; if (popLive() && POP.sym && S.rowBySym && S.rowBySym.has(POP.sym)) { try { const h = popGrab(POP.sym); if (h != null) POP.w.document.getElementById("pData").innerHTML = h; } catch (e) {} } });
 </script>
 <script id="lwcLib">
 /* TradingView Lightweight Charts v5.2.1 (standalone production build, unmodified) — Apache License 2.0.
@@ -9156,16 +9192,15 @@ const BC_CSS = `#tvbox.bc,#pTvBox{display:block;position:relative}
 .bc-msg{padding:20px;text-align:center;color:var(--ink-3)}`;
 document.head.insertAdjacentHTML("beforeend", `<style>${BC_CSS}</style>`);
 // Settings: the switch + the licence note
-const _renderSettingsBc = renderSettings;
-renderSettings = function(){
-  _renderSettingsBc();
+// 8 Nov 2026 (TIDY-UP, structure only): was a renderSettings wrapper — now a "settings" hook (BOARD HOOKS), same code, same order
+hookOn("settings", "boardChart", () => {
   const reset = $("sReset"); if (!reset) return;
   const box = document.createElement("div");
   box.innerHTML = `<h4>Chart in the ticker panel and the chart window</h4>
     <div class="row"><div>Board chart (Lightweight Charts)<div class="d">On: candles from the stored daily bars (daily / weekly) or Massive (30m / 5m, 15-min delayed), with your 9/21 EMA, 50/200 SMA, zone, stops, 2R, Entry Check entry / first resistance / day low, swing pivots and the RS line drawn by the board. Off: the TradingView embed. "Open in TradingView" works either way. Charts by TradingView Lightweight Charts™ — Copyright (c) 2026 TradingView, Inc., <a href="https://www.tradingview.com/" target="_blank" rel="noopener">tradingview.com</a> (Apache License 2.0).</div></div><div><input type="checkbox" id="bcEngSw" ${bcEng() === "board" ? "checked" : ""}></div></div>`;
   reset.parentElement.before(box);
   $("bcEngSw").onchange = e => { store.set("adrb.chartEng", e.target.checked ? "board" : "tv"); bcRemount(); };
-};
+});
 </script>
 <script>
 "use strict";
@@ -9216,15 +9251,14 @@ document.head.insertAdjacentHTML("beforeend", `<style>.tvc-row{display:flex;just
      grades, urge / losses, verified catalysts) and give them back on restore, so a restored day reads with its own rules.
    ===================================================================== */
 const S61_KEYS = [["live", "adrb.s61Live"], ["bmo", "adrb.s61Bmo"], ["grade", "adrb.s61Grade"], ["me", "adrb.s61Me"], ["cat", "adrb.s61Cat"]];
-const _applyHistA = applyHist;
-applyHist = function(){
-  _applyHistA.apply(this, arguments);
+// 8 Nov 2026 (TIDY-UP, structure only): was a applyHist wrapper — now a "hist" hook (BOARD HOOKS), same code, same order
+hookOn("hist", "splits", () => {
   if (!S.has.hist || typeof sbLoad !== "function" || !newsKey()) return;
   const at = SB.splits ? SB.splits.at : "";
   Promise.resolve(sbLoad(false)).then(() => { if ((SB.splits ? SB.splits.at : "") !== at && S.snap) { s61Reset(); renderAll(); } }).catch(() => {});
-};
-const _snapshotObjA = snapshotObj;
-snapshotObj = function(){ const o = _snapshotObjA(); o.spec61 = Object.fromEntries(S61_KEYS.map(([k, ls]) => [k, store.get(ls, null)])); return o; };
+});
+// 8 Nov 2026 (TIDY-UP, structure only): was a snapshotObj wrapper — now a "snap" hook (BOARD HOOKS): same field, same place in the file
+hookOn("snap", "entryCheck", o => { o.spec61 = Object.fromEntries(S61_KEYS.map(([k, ls]) => [k, store.get(ls, null)])); });
 const _openSnapshotA = openSnapshot;
 openSnapshot = async function(file){
   try { const o = JSON.parse(await file.text());
@@ -9290,8 +9324,8 @@ loadNew = async function(files){
   if (!(S.snap && S.has.hist)) { try { const texts = await readFiles(arr); texts.forEach(t => msrcFromExport(t.name, t.text, t.mtime)); } catch (e) {} }
   return _loadNewB(arr);
 };
-const _snapshotObjB = snapshotObj;
-snapshotObj = function(){ const o = _snapshotObjB(); o.mapSrc = msrcAll(); return o; };
+// 8 Nov 2026 (TIDY-UP, structure only): was a snapshotObj wrapper — now a "snap" hook (BOARD HOOKS): same field, same place in the file
+hookOn("snap", "mapSources", o => { o.mapSrc = msrcAll(); });
 const _openSnapshotB = openSnapshot;
 openSnapshot = async function(file){
   try { const o = JSON.parse(await file.text()); if (o && o.kind === "deep-space-snapshot" && o.mapSrc && o.mapSrc.days) { const m = msrcAll(); for (const k in o.mapSrc.days) if (!m.days[k] || (o.mapSrc.days[k].at || 0) > (m.days[k].at || 0)) m.days[k] = o.mapSrc.days[k]; store.set(MSRC.k, m); MSRC.c = null; } } catch (e) {}
@@ -9304,7 +9338,7 @@ const FEED_WF = [["In MAP Source", s => { const v = inMapSrc(s.r.sym); return v 
   ["RS Pool (N)", () => S.stocks.length], ["Missing Days (60)", s => s.d.miss ?? ""], ["Stale Last Bar", s => s.d.stale ? "Y" : "N"], ["Rules", () => s61Live() ? "Spec 6.1" : "Spec 6.0"]];
 const _feedCSVB = feedCSV;
 feedCSV = function(){
-  const L = _feedCSVB().split("\n"), q = v => { const x = String(v); return /[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x; }, rows = feedRows();
+  const L = _feedCSVB().split("\n"), q = csvStr, rows = feedRows();
   L[0] += "," + FEED_WF.map(c => q(c[0])).join(",");
   for (let i = 0; i < rows.length; i++) { const r = rows[i].r, s6 = r && !r.etf ? s61Of(r) : null; L[i + 1] += "," + FEED_WF.map(([, f]) => s6 ? q(fv(f(s6))) : "").join(","); }
   return L.join("\n");
@@ -9478,8 +9512,8 @@ function dpDiscover(){
   for (const e of dpNames()) { if (have.has(e.s) || D[e.s] || !e.f || e.f.last == null) continue; D[e.s] = {...e, at: JN.now(), src: S.snap.live ? "live" : "file"}; ch = true; }
   if (ch) jnSave(); return ch;
 }
-const _renderAllC = renderAll;
-renderAll = function(){ _renderAllC(); if (!S.snap || !JN.loaded) return; clearTimeout(window._dpD); window._dpD = setTimeout(() => { let ch = false; try { ch = dpDiscover(); } catch (e) { console.warn("discoveries", e); } if (ch && ["home", "plan", "watch"].includes(S.ui.tab)) renderTab(S.ui.tab); }, 0); };
+// 8 Nov 2026 (TIDY-UP, structure only): was a renderAll wrapper — now an "all" hook (BOARD HOOKS), same code, same order
+hookOn("all", "discoveries", ph => { if (ph !== "after") return; if (!S.snap || !JN.loaded) return; clearTimeout(window._dpD); window._dpD = setTimeout(() => { let ch = false; try { ch = dpDiscover(); } catch (e) { console.warn("discoveries", e); } if (ch && ["home", "plan", "watch"].includes(S.ui.tab)) renderTab(S.ui.tab); }, 0); });
 const _jnMergeC = jnMerge;
 jnMerge = function(inc){
   const n = _jnMergeC(inc);
@@ -9879,7 +9913,10 @@ function wlRowHTML(e, all){
     <td class="l small">${esc(r.group || r.sector || "—")}<div class="dim">${esc(r.gState && r.gState !== "—" ? r.gState : "")}</div></td><td title="Rank among the ${S.stocks.length} stocks in your file">${rsBadge(r.rs)}</td><td class="l">${loc}</td><td class="l">${st}</td>
     <td title="Estimated: (first resistance − planned entry) ÷ 0.6 ADR — information only, check the chart">${room}</td><td class="l small">${er}</td><td class="l small">${esc(nextAction(r, e.src === "H"))}${mn ? `<div class="mapwhy">MAP: ${esc(mapNoteTxt(mn))}</div>` : ""}${e.note ? `<div class="mapwhy mppwhy">${esc(e.note)}</div>` : ""}</td></tr>`;
 }
-function renderWatch(){
+// 8 Nov 2026 (TIDY-UP, structure only): renderWatch = the Watchlist groups (renderWatch0), then the "watchPage" hooks (were 3
+// renderWatch wrappers: List / Map view, ETF setups card, playbooks card) — same order, no try/catch (hookEach), BOARD HOOKS
+function renderWatch(){ renderWatch0(); hookEach("watchPage"); }
+function renderWatch0(){
   const box = $("watchBody"); if (!box) return;
   if (!S.snap) { box.innerHTML = ""; return; }
   const G = wlGroups(), all = {}; G.forEach(([, L]) => L.forEach(e => { (all[e.src] = all[e.src] || new Set()).add(e.s); }));
@@ -9897,7 +9934,10 @@ document.addEventListener("click", e => {
 });
 
 /* ---------------- Today page ---------------- */
-function envHTML(){
+// 8 Nov 2026 (TIDY-UP, structure only): envHTML = the environment strip (envHTML0), then the "envLine" hooks, which add a line
+// to hx.h (were 3 envHTML wrappers: AS count, inverse ETFs, Research line) — same order, no try/catch (hookEach), BOARD HOOKS
+function envHTML(){ const hx = {h: envHTML0()}; hookEach("envLine", hx); return hx.h; }
+function envHTML0(){
   const tp = S.tape, mr = mapRegime(), line = k => tp ? tp.lines.find(l => l.k === k) : null, W = {g: "Healthy", a: "Caution", r: "Weak"};
   const sel = `<select data-envmap title="MAP's Overall Verdict for today — the same setting as on Market and Setups"><option value="">— not set —</option>${MAPV.map(v => `<option ${mr.v === v ? "selected" : ""}>${v}</option>`).join("")}</select>`;
   const lines = tp ? tp.lines.filter(l => l.st).map(l => `<span class="pill ${l.st === "g" ? "go" : l.st === "r" ? "bad" : "wait"}" title="${esc(l.tx)}${l.nums ? " · " + esc(l.nums) : ""}">${esc(l.name)}: ${W[l.st]}</span>`).join(" ") : `<span class="dim">no breadth file — load it for the tape read</span>`;
@@ -9933,12 +9973,9 @@ function renderHome(){
 const _jnSoonE = jnSoon;
 jnSoon = function(){ _jnSoonE(); JN.ready.then(() => setTimeout(() => { if (!S.snap) return; if (S.ui.tab === "home") dpPaint(); else if (S.ui.tab === "watch") renderWatch(); }, 30)); };
 document.addEventListener("change", e => { const t = e.target.closest("[data-envmap]"); if (!t) return; setMapRegime(t.value, mapRegime().code || ""); if (typeof s61Reset === "function") s61Reset(); renderAll(); });
-const _renderTabE = renderTab;
-renderTab = function(t){
-  if (t === "home") { renderHome(); if (typeof afterTab === "function") afterTab(t); return; }
-  if (t === "watch") { renderWatch(); if (typeof afterTab === "function") afterTab(t); return; }
-  _renderTabE(t);
-};
+// 8 Nov 2026 (TIDY-UP, structure only): was a renderTab wrapper — now two pages of renderTab's own (TABS), which calls afterTab
+tabDraw("home", () => renderHome());
+tabDraw("watch", () => renderWatch());
 // 31 Oct (structure only): was a renderTab override; now a "tab" hook — same code, same order (BOARD HOOKS, block 1)
 hookOn("tab", "dailyPlanLine", t => {
   // Setups: the Daily Plan's home is Today — here a one-line pointer
@@ -9949,8 +9986,8 @@ hookOn("tab", "dailyPlanLine", t => {
 // Daily Plan + Spec 6.1 rows get the ☆ pin
 const _dpCardHTMLE = dpCardHTML;
 dpCardHTML = function(){ return _dpCardHTMLE().replace(/<td class="l sym"><b>([A-Z0-9.\-]+)<\/b>/g, (m, s) => `<td class="l sym">${wlPin(s)}<b>${s}</b>`); };
-const _renderS61CardE = renderS61Card;
-renderS61Card = function(){ _renderS61CardE(); const box = $("s61Box"); if (!box) return; box.querySelectorAll("tr[data-sym] td.sym").forEach(td => td.insertAdjacentHTML("afterbegin", wlPin(td.closest("tr").dataset.sym))); };
+// 8 Nov 2026 (TIDY-UP, structure only): was a renderS61Card wrapper — now a "s61Card" hook (BOARD HOOKS), same code, same order
+hookOn("s61Card", "watchPins", () => { const box = $("s61Box"); if (!box) return; box.querySelectorAll("tr[data-sym] td.sym").forEach(td => td.insertAdjacentHTML("afterbegin", wlPin(td.closest("tr").dataset.sym))); });
 // MAP's own lines go into the Daily Plan entries when a plan is frozen
 const _dpEntryE = dpEntry;
 dpEntry = function(r, l, k){ const e = _dpEntryE(r, l, k); if (["A", "B", "S"].includes(l)) { const n = mapNote(r.sym); if (n) e.map = mapNoteTxt(n); } return e; };
@@ -9991,29 +10028,19 @@ $("drawer").addEventListener("change", e => {
   setTimeout(() => dpnRefresh(sym), 0);
 });
 // where it goes: the top of the ticker panel's plan pane (everything else into "Evidence"); the classic drawer under the title
-if (WS) {
-  const _tpBuildE = tpBuild;
-  tpBuild = function(r){
-    _tpBuildE(r);
-    const dr = $("drawer"), h3 = dr.querySelector(".tp-head h3"); if (h3 && !h3.querySelector("[data-wlpin]")) h3.insertAdjacentHTML("beforeend", " " + wlPin(r.sym));
-    const pane = dr.querySelector('.tp-pane[data-p="plan"]'); if (!pane || r.etf) return;
-    const ev = document.createElement("details"); ev.className = "tp-fold dpev"; ev.open = !!store.get("adrb.evOpen", false);
-    ev.innerHTML = `<summary>Evidence — every Entry Check row, the size card, the 6.0 ticket, Board plan / Pivot script, entry checks and the stop check</summary>`;
-    [...pane.childNodes].forEach(n => ev.appendChild(n)); pane.appendChild(ev);
-    ev.addEventListener("toggle", () => store.set("adrb.evOpen", ev.open));
-    pane.insertAdjacentHTML("afterbegin", dpanelHTML(r));
-  };
-} else {
-  const _openDrawerE = openDrawer;
-  openDrawer = function(sym){
-    _openDrawerE(sym);
-    const r = S.rowBySym && S.rowBySym.get(sym), dr = $("drawer"); if (!r || r.etf || !dr.classList.contains("open")) return;
-    const h = dr.querySelector("h3"); if (h && !h.querySelector("[data-wlpin]")) h.insertAdjacentHTML("beforeend", " " + wlPin(sym));
-    const at = dr.querySelector("#tvbox"); (at || h) && (at || h).insertAdjacentHTML(at ? "beforebegin" : "afterend", dpanelHTML(r));
-  };
-}
-const _snapshotObjE = snapshotObj;
-snapshotObj = function(){ const o = _snapshotObjE(); o.watch = wlAll(); o.mapImp = mapImp(); o.listsDay = store.get("adrb.listsDay", null); o.dpanel = dpnAll(); return o; };
+// 8 Nov 2026 (TIDY-UP, structure only): was a tpBuild wrapper — now a "panelBuild" step (BOARD HOOKS): same place in the
+// panel build, same order, an error still stops the build and shows the panel notice
+hookOn("panelBuild", "dailyPlanPanel", r => {
+  const dr = $("drawer"), h3 = dr.querySelector(".tp-head h3"); if (h3 && !h3.querySelector("[data-wlpin]")) h3.insertAdjacentHTML("beforeend", " " + wlPin(r.sym));
+  const pane = dr.querySelector('.tp-pane[data-p="plan"]'); if (!pane || r.etf) return;
+  const ev = document.createElement("details"); ev.className = "tp-fold dpev"; ev.open = !!store.get("adrb.evOpen", false);
+  ev.innerHTML = `<summary>Evidence — every Entry Check row, the size card, the 6.0 ticket, Board plan / Pivot script, entry checks and the stop check</summary>`;
+  [...pane.childNodes].forEach(n => ev.appendChild(n)); pane.appendChild(ev);
+  ev.addEventListener("toggle", () => store.set("adrb.evOpen", ev.open));
+  pane.insertAdjacentHTML("afterbegin", dpanelHTML(r));
+});
+// 8 Nov 2026 (TIDY-UP, structure only): was a snapshotObj wrapper — now a "snap" hook (BOARD HOOKS): same field, same place in the file
+hookOn("snap", "watchlistPlan", o => { o.watch = wlAll(); o.mapImp = mapImp(); o.listsDay = store.get("adrb.listsDay", null); o.dpanel = dpnAll(); });
 const _openSnapshotE = openSnapshot;
 openSnapshot = async function(file){
   let o = null; try { o = JSON.parse(await file.text()); } catch (e) {}
@@ -10198,15 +10225,13 @@ s61Wire = function(root, sym){
   root.querySelectorAll("details[data-ecf]").forEach(d => d.addEventListener("toggle", () => store.set(d.dataset.ecf, d.open)));
 };
 // workspace, Simple: lift the block out of the Evidence fold, under the decision panel
-if (WS) {
-  const _tpBuildEC = tpBuild;
-  tpBuild = function(r){
-    _tpBuildEC(r);
-    if (ecView() !== "simple" || r.etf) return;
-    const pane = document.querySelector('#drawer .tp-pane[data-p="plan"]'), ev = pane && pane.querySelector(":scope > details.dpev"), blk = ev && ev.querySelector(".s61p.ecs");
-    if (blk) { ev.before(blk); const sm = ev.querySelector("summary"); if (sm) sm.textContent = "Evidence — the Spec 6.0 ticket, Board plan / Pivot script, entry checks and the stop check (Entry Check is above)"; }
-  };
-}
+// 8 Nov 2026 (TIDY-UP, structure only): was a tpBuild wrapper — now a "panelBuild" step (BOARD HOOKS): same place in the
+// panel build, same order, an error still stops the build and shows the panel notice
+hookOn("panelBuild", "entryCheckSimple", r => {
+  if (ecView() !== "simple" || r.etf) return;
+  const pane = document.querySelector('#drawer .tp-pane[data-p="plan"]'), ev = pane && pane.querySelector(":scope > details.dpev"), blk = ev && ev.querySelector(".s61p.ecs");
+  if (blk) { ev.before(blk); const sm = ev.querySelector("summary"); if (sm) sm.textContent = "Evidence — the Spec 6.0 ticket, Board plan / Pivot script, entry checks and the stop check (Entry Check is above)"; }
+});
 document.head.insertAdjacentHTML("beforeend", `<style>
 .ecfoot{display:flex;justify-content:flex-end;align-items:center;gap:6px;margin-top:6px} .s61p .ecv button{font-size:11px;padding:2px 8px}
 .s61t td:last-child{white-space:normal;min-width:240px}
@@ -10264,37 +10289,26 @@ function ecTitle(h3, r){
   const st = h3.querySelector(".st"), p = ecCallPill(r);
   if (st) { if (p) st.outerHTML = p; else st.remove(); }
 }
-if (WS) {
-  const _tpBuildEO = tpBuild;
-  tpBuild = function(r){
-    _tpBuildEO(r);
-    const dr = $("drawer"); if (!dr.classList.contains("open") || r.etf) return;
-    ecStrip60(dr);
-    ecTitle(dr.querySelector(".tp-head h3"), r);
-    const lv = dr.querySelector(".tp-head .tp-lv"); if (lv) lv.outerHTML = ecLvHTML(r);
-    const cx = [...dr.querySelectorAll(".tp-ctx .cx")].find(c => (c.querySelector("i") || {}).textContent === "Stock"), sm = cx && cx.querySelector("small");
-    const s = S.has.hist ? s61Of(r) : null;
-    if (sm) sm.textContent = `RS ${r.rs ?? "—"} of ${S.stocks.length.toLocaleString()}${s ? " · " + LIST61[s.list].n : ""}`;
-    // Plan & checks: one Entry Check, the calculator, then the AVWAP / events note folded
-    const pane = dr.querySelector('.tp-pane[data-p="plan"]'); if (!pane) return;
-    const ec = pane.querySelector(".s61p"), calc = pane.querySelector(".dpn");
-    const tsH = [...pane.querySelectorAll("h4")].find(h => /^Since a date/.test(h.textContent.trim())), tsN = tsH && tsH.nextElementSibling;
-    pane.innerHTML = "";
-    if (ec) pane.appendChild(ec);
-    if (calc) pane.appendChild(calc);
-    if (tsN) { const f = document.createElement("details"); f.className = "tp-fold"; f.open = !!store.get("adrb.tsfOpen", false); f.innerHTML = "<summary>Since a date, AVWAP &amp; recent events</summary>"; f.appendChild(tsN); f.addEventListener("toggle", () => store.set("adrb.tsfOpen", f.open)); pane.appendChild(f); }
-    const tb = dr.querySelector('.tp-tabs button[data-tpt="plan"]'); if (tb) tb.textContent = "Entry Check";
-  };
-} else {
-  const _openDrawerEO = openDrawer;
-  openDrawer = function(sym){
-    _openDrawerEO(sym);
-    const r = S.rowBySym && S.rowBySym.get(sym), dr = $("drawer"); if (!r || r.etf || !dr.classList.contains("open")) return;
-    ecStrip60(dr); ecTitle(dr.querySelector("h3"), r);
-    // one Entry Check, the calculator under it
-    const ec = dr.querySelector(".s61p"), calc = dr.querySelector(".dpn"); if (ec && calc) ec.after(calc);
-  };
-}
+// 8 Nov 2026 (TIDY-UP, structure only): was a tpBuild wrapper — now a "panelBuild" step (BOARD HOOKS): same place in the
+// panel build, same order, an error still stops the build and shows the panel notice
+hookOn("panelBuild", "entryCheckOrder", r => {
+  const dr = $("drawer"); if (!dr.classList.contains("open") || r.etf) return;
+  ecStrip60(dr);
+  ecTitle(dr.querySelector(".tp-head h3"), r);
+  const lv = dr.querySelector(".tp-head .tp-lv"); if (lv) lv.outerHTML = ecLvHTML(r);
+  const cx = [...dr.querySelectorAll(".tp-ctx .cx")].find(c => (c.querySelector("i") || {}).textContent === "Stock"), sm = cx && cx.querySelector("small");
+  const s = S.has.hist ? s61Of(r) : null;
+  if (sm) sm.textContent = `RS ${r.rs ?? "—"} of ${S.stocks.length.toLocaleString()}${s ? " · " + LIST61[s.list].n : ""}`;
+  // Plan & checks: one Entry Check, the calculator, then the AVWAP / events note folded
+  const pane = dr.querySelector('.tp-pane[data-p="plan"]'); if (!pane) return;
+  const ec = pane.querySelector(".s61p"), calc = pane.querySelector(".dpn");
+  const tsH = [...pane.querySelectorAll("h4")].find(h => /^Since a date/.test(h.textContent.trim())), tsN = tsH && tsH.nextElementSibling;
+  pane.innerHTML = "";
+  if (ec) pane.appendChild(ec);
+  if (calc) pane.appendChild(calc);
+  if (tsN) { const f = document.createElement("details"); f.className = "tp-fold"; f.open = !!store.get("adrb.tsfOpen", false); f.innerHTML = "<summary>Since a date, AVWAP &amp; recent events</summary>"; f.appendChild(tsN); f.addEventListener("toggle", () => store.set("adrb.tsfOpen", f.open)); pane.appendChild(f); }
+  const tb = dr.querySelector('.tp-tabs button[data-tpt="plan"]'); if (tb) tb.textContent = "Entry Check";
+});
 
 /* ---------------- an Entry Check row list (MAP lists, held names) — the same columns as the Setups lists ---------------- */
 function ecListHTML(rows){
@@ -10343,8 +10357,8 @@ function logChipPaint(){
   c.title = rec ? `The Board log is recording ${rec.n.length} names for ${jnDay(rec.p)} from ${src.file ? src.file.files.map(f => f.name).join(" + ") : "the file"}${src.live ? " (Live mode: from the file under the live prices — live prices are never logged)" : ""}. Open until 16:00 ET that day. Click for the log.`
     : !S.snap ? "Load today's stock file and the Board log starts by itself. Click for the log." : "Nothing is being logged right now — click to see why.";
 }
-const _renderAllEO = renderAll;
-renderAll = function(){ _renderAllEO(); try { logChipPaint(); } catch (e) {} };
+// 8 Nov 2026 (TIDY-UP, structure only): was a renderAll wrapper — now an "all" hook (BOARD HOOKS), same code, same order
+hookOn("all", "logChip", ph => { if (ph !== "after") return; try { logChipPaint(); } catch (e) {} });
 const _jnSoonEO = jnSoon;
 jnSoon = function(){ _jnSoonEO(); JN.ready.then(() => setTimeout(() => { try { logChipPaint(); } catch (e) {} }, 50)); };
 const _renderJournalEO = renderJournal;
@@ -10616,9 +10630,8 @@ renderMap = function(){
   if ($("clSub")) $("clSub").textContent = "My lists only — your names by list, with each one's location";
 };
 const mlView = () => { try { return store.get("adrb.wlView", "list") === "map" ? "map" : "list"; } catch (e) { return "list"; } };
-const _renderWatchML = renderWatch;
-renderWatch = function(){
-  _renderWatchML();
+// 8 Nov 2026 (TIDY-UP, structure only): was a renderWatch wrapper — now a "watchPage" hook (BOARD HOOKS), same code, same order
+hookOn("watchPage", "listMapView", () => {
   const box = $("watchBody"); if (!box || !S.snap) return;
   const v = mlView();
   box.insertAdjacentHTML("afterbegin", `<div class="wlvw"><span class="lbl">View</span><span class="seg" data-wlv><button data-v="list" class="${v === "list" ? "on" : ""}">List</button><button data-v="map" class="${v === "map" ? "on" : ""}">Map</button></span><span class="small dim">Map = your names on the Leaders-map axes, coloured by list</span></div>`);
@@ -10631,7 +10644,7 @@ renderWatch = function(){
   const {all} = mlDraw($("wlMapPlot"), $("wlMapLegend"), $("wlMapSub"));
   const by = {}; all.forEach(e => (by[e.src] = by[e.src] || []).push(e));
   $("wlMapLists").innerHTML = Object.entries(by).map(([k, L]) => `<div style="margin:3px 0"><b class="small"><span class="sw" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${ML_C[k]};margin-right:5px"></span>${esc(ML_N[k] || k)}</b> ${L.map(e => tkChip(e.r, ecsName(e.r))).join("")}</div>`).join("");
-};
+});
 document.head.insertAdjacentHTML("beforeend", `<style>
 .wlvw{display:flex;align-items:center;gap:10px;margin:0 0 10px}
 .wlvw .lbl{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
@@ -10723,9 +10736,8 @@ function wrsCalc(s, b, n){
   const now = at(m - 1), rsOff = now && isFinite(rs[m - 1]) ? (rs[m - 1] / now.mr - 1) * 100 : null;
   return {sig, rsOff, w8: emaOf(W.map(w => w.c), 8)};
 }
-const _applyHistWRS = applyHist;
-applyHist = function(){
-  _applyHistWRS();
+// 8 Nov 2026 (TIDY-UP, structure only): was a applyHist wrapper — now a "hist" hook (BOARD HOOKS), same code, same order
+hookOn("hist", "weeklyRS", () => {
   S.rows.forEach(r => { r.wrs = null; r.pbW8 = false; });
   if (!S.has.hist || !HIST.bSym) return;
   const tb = HIST.today, bS = series(HIST.bSym, tb); if (!bS) return;
@@ -10745,11 +10757,11 @@ applyHist = function(){
     r.wrs = {sig: g.sig, rsOff: g.rsOff, near, lo9: a9 && a9.lo, lo21: a21 && a21.lo, loW8: aW && aW.lo, last9: a9 && a9.last, last21: a21 && a21.last, lastW8: aW && aW.last, w8: LW};
     r.pbW8 = !!(g.sig && keep && near.length);
   }
-};
+});
 SCREENS.push({k: "wrspb", t: "Weekly RS high → pullback (8 weeks)", d: () => `The weekly RS line (weekly close ÷ ${esc(HIST.bSym || CFG.bench)}) made a 52-week high — with price, or before price — in the last 8 weeks, and today's low is within ${CFG.pbNear} ADR of the daily 9 EMA, the daily 21 EMA or the weekly 8 EMA (undercut allowed to −${CFG.pbUnder} ADR on the last price), above the daily 50 SMA (daily lines) or the 30-week SMA (weekly line)${CFG.rsKeep ? `, weekly RS line within ${CFG.rsKeep}% of its high` : ""}. Buying RS on weakness off the weekly chart — a watch screen; the Entry Check still decides.`, need: ["hist"], f: r => !!r.pbW8, note: () => histNote()});
 if (typeof SC_CAT !== "undefined") SC_CAT.wrspb = "Leadership";
-const _flagsWRS = flagsHTML;
-flagsHTML = function(r){ const w = r && r.wrs; return _flagsWRS(r) + (w && w.sig && r.pbW8 ? ` <span class="flag" title="Weekly RS line at a 52-week high ${w.sig.ago ? w.sig.ago + " week" + (w.sig.ago > 1 ? "s" : "") + " ago" : "this week"} (${w.sig.type === "RSNH" ? "with price" : "before price"}); pulling back to the ${esc(w.near.join(" / "))}">wRS ${w.sig.type === "BP" ? "BP " : ""}${w.sig.ago}w → ${esc(w.near.map(x => x.replace("daily ", "").replace("weekly 8 EMA", "8w")).join("/"))}</span>` : ""); };
+// 8 Nov 2026 (TIDY-UP, structure only): was a flagsHTML wrapper — now a "flags" hook (BOARD HOOKS), same text, same order
+hookOn("flags", "weeklyRS", hx => { const r = hx.r; const w = r && r.wrs; hx.s = hx.s + (w && w.sig && r.pbW8 ? ` <span class="flag" title="Weekly RS line at a 52-week high ${w.sig.ago ? w.sig.ago + " week" + (w.sig.ago > 1 ? "s" : "") + " ago" : "this week"} (${w.sig.type === "RSNH" ? "with price" : "before price"}); pulling back to the ${esc(w.near.join(" / "))}">wRS ${w.sig.type === "BP" ? "BP " : ""}${w.sig.ago}w → ${esc(w.near.map(x => x.replace("daily ", "").replace("weekly 8 EMA", "8w")).join("/"))}</span>` : ""); });
 </script>
 <script>
 "use strict";
@@ -10858,8 +10870,8 @@ function zlNames(){
   if (m === "e21") { ECSK[1].d = "0 to +0.5 ADR over the daily 21 EMA (21 EMA lens). The Setups lists still use the 9/21 band."; ECSK[3].d = "More than 0.5 ADR over the daily 21 EMA (21 EMA lens)."; ECSK[2].d = ECSK[4].d = "Not used under the 21 EMA lens — under the 21 is out."; }
   if (m === "e9") { ECSK[1].d = "0 to +0.5 ADR over the daily 9 EMA, above the 21 (9 EMA lens). The Setups lists still use the 9/21 band."; ECSK[3].d = "More than 0.5 ADR over the daily 9 EMA (9 EMA lens)."; ECSK[2].d = "Up to 0.25 ADR under the daily 9 EMA, above the 21 (9 EMA lens)."; ECSK[4].d = "More than 0.25 ADR under the daily 9 EMA (9 EMA lens)."; }
 }
-const _COLSZL = COLS;
-COLS = function(){ const C = _COLSZL(), m = zlMode(); if (m !== "band") { const z = C.find(c => c.k === "zx"); if (z) { z.l = `vs ${ZL.modes[m]}`; z.h = `ADR from the daily ${ZL.modes[m]} · buy zone 0 to +0.5`; } } return C; };
+// 8 Nov 2026 (TIDY-UP, structure only): was a COLS wrapper — now a "cols" hook (BOARD HOOKS), same code, same order
+hookOn("cols", "zoneLens", hx => { const C = hx.C, m = zlMode(); if (m !== "band") { const z = C.find(c => c.k === "zx"); if (z) { z.l = `vs ${ZL.modes[m]}`; z.h = `ADR from the daily ${ZL.modes[m]} · buy zone 0 to +0.5`; } } });
 // words on the maps
 function zlText(){
   const m = zlMode(); if (m === "band") return;
@@ -10876,8 +10888,8 @@ function zlChipPaint(){
   }
   $("zlSel").value = zlMode(); c.classList.toggle("warn", zlMode() !== "band");
 }
-const _renderAllZL = renderAll;
-renderAll = function(){ zlNames(); _renderAllZL(); try { zlChipPaint(); zlText(); zlPlanNote(); } catch (e) { console.warn("lens", e); } };
+// 8 Nov 2026 (TIDY-UP, structure only): was a renderAll wrapper — now an "all" hook (BOARD HOOKS), same code, same order
+hookOn("all", "zoneLens", ph => { if (ph === "before") { zlNames(); return; } try { zlChipPaint(); zlText(); zlPlanNote(); } catch (e) { console.warn("lens", e); } });
 // 31 Oct (structure only): was a renderTab override; now a "tab" hook — same code, same order (BOARD HOOKS, block 1)
 hookOn("tab", "zoneLens", t => { try { zlText(); zlPlanNote(); } catch (e) {} });
 function zlPlanNote(){
@@ -10917,23 +10929,22 @@ const _computeAllAS = computeAll;
 computeAll = function(...a){ const o = _computeAllAS.apply(this, a); try { (S.rows || []).forEach(r => { r.as = asOf(r); }); } catch (e) { console.warn("AS", e); } return o; };
 const asTxt = v => v == null || !isFinite(v) ? "—" : (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(1) + "%";
 const asHTML = v => `<span class="${v == null ? "dim" : v > 0 ? "pos" : "neg"}" title="Absolute strength: the stock's own return over your RS timeframes, weighted like RS — not ranked, no benchmark. Above 0 = actually rising.">${asTxt(v)}</span>`;
-const _COLSAS = COLS;
-COLS = function(){
-  const C = _COLSAS(), i = C.findIndex(c => c.k === "rs");
+// 8 Nov 2026 (TIDY-UP, structure only): was a COLS wrapper — now a "cols" hook (BOARD HOOKS), same code, same order
+hookOn("cols", "asColumn", hx => {
+  const C = hx.C, i = C.findIndex(c => c.k === "rs");
   if (i >= 0 && !C.some(c => c.k === "as")) C.splice(i + 1, 0, {k: "as", l: "AS", h: "own return %, RS timeframes + weights", g: "id", v: r => r.as ?? null, f: r => asHTML(r.as)});
-  return C;
-};
+});
 const _asCrit = {k: "asMin", cat: "Strength", l: "AS above {p}% (actually rising)", type: "num", p: 0, step: 1, t: (r, p) => r.as != null && r.as > p};
 CRIT.push(_asCrit); CRIT_BY[_asCrit.k] = _asCrit;
 // Today: how many RS leaders are actually going up
 function asCount(){ const L = S.stocks.filter(r => (r.rs ?? -1) >= S61.rsMin); return {n: L.length, up: L.filter(r => r.as != null && r.as > 0).length, top: L.filter(r => r.as != null && r.as > 0).sort((a, b) => b.as - a.as).slice(0, 8)}; }
-const _envHTMLAS = envHTML;
-envHTML = function(){
-  const h = _envHTMLAS(); if (!S.snap || !S.stocks.length) return h;
+// 8 Nov 2026 (TIDY-UP, structure only): was a envHTML wrapper — now a "envLine" hook (BOARD HOOKS), same code, same order
+hookOn("envLine", "asCount", hx => {
+  const h = hx.h; if (!S.snap || !S.stocks.length) return;
   const c = asCount(), f = c.n ? c.up / c.n : 0;
   const line = `<div class="ascount small" style="margin-top:6px"><b>RS leaders actually rising: ${c.up} of ${c.n}</b> <span class="dim">(RS ≥ ${S61.rsMin} with AS above 0)</span>${c.n ? ` · <span class="${f >= .6 ? "pos" : f < .35 ? "neg" : ""}">${Math.round(f * 100)}%</span>` : ""}${c.top.length ? ` · strongest: ${c.top.map(r => tkChip(r, asTxt(r.as))).join("")}` : ""}${c.n && f < .35 ? ` <span class="small">— most leaders are only falling slower; the long opportunity set is thin.</span>` : ""}</div>`;
-  const i = h.lastIndexOf("</div>"); return i < 0 ? h + line : h.slice(0, i) + line + h.slice(i);
-};
+  const i = h.lastIndexOf("</div>"); hx.h = i < 0 ? h + line : h.slice(0, i) + line + h.slice(i);
+});
 // Watchlist: AS beside RS
 function asPaint(root = document){
   root.querySelectorAll("table.wlt:not([data-as])").forEach(t => {
@@ -11000,22 +11011,21 @@ function invCardHTML(){
     <div class="bd"><div class="small" style="margin-bottom:6px">A falling market shows up here as inverse funds in their own uptrend. Same checks as a stock where they apply to a fund — 1 liquidity (by $ volume), 2 data, 3 trend, 5 stretch, 6 location — and the same 30-min trigger on the chart. Stage, group, RS and earnings don't apply. <b>Trading one is an experiment: grade C (0.10% NLV) until the log has evidence</b> (Doctrine Lean v2.0 §6); leveraged funds are sized off their own stop (§3).</div>
     ${shown.length ? `<div class="tscroll" style="max-height:460px"><table class="mini invt"><thead><tr><th class="l">Fund</th><th class="l">Kind</th><th class="l">ETF check</th><th>Last</th><th title="Planned entry (Entry Check)">Entry</th><th title="ADR from the buy-zone line">vs line</th><th>ADR</th><th title="20-session mean $ volume">$ vol</th><th class="l">Checks</th></tr></thead><tbody>${shown.map(tr).join("")}</tbody></table></div>` : `<div class="empty">None of the inverse funds in the stored history is liquid enough.</div>`}</div>`;
 }
-const _renderS61CardINV = renderS61Card;
-renderS61Card = function(){
-  _renderS61CardINV();
+// 8 Nov 2026 (TIDY-UP, structure only): was a renderS61Card wrapper — now a "s61Card" hook (BOARD HOOKS), same code, same order
+hookOn("s61Card", "inverseEtfs", () => {
   const a = $("s61Box"); if (!a) return;
   let c = $("invBox"); if (!c) { a.insertAdjacentHTML("afterend", `<div class="card g1" id="invBox"></div>`); c = $("invBox"); }
   if (a.nextElementSibling !== c) a.after(c);   // the Setups layout can move the Entry Check card — keep this one right under it
   try { c.innerHTML = invCardHTML(); } catch (e) { console.warn("inverse ETFs", e); c.innerHTML = ""; }
-};
+});
 document.addEventListener("click", e => { const t = e.target.closest("#invBox tr[data-sym]"); if (t && S.rowBySym && S.rowBySym.has(t.dataset.sym)) openDrawer(t.dataset.sym); });
-const _envHTMLINV = envHTML;
-envHTML = function(){
-  const h = _envHTMLINV(); if (!S.snap || !S.has.hist) return h;
+// 8 Nov 2026 (TIDY-UP, structure only): was a envHTML wrapper — now a "envLine" hook (BOARD HOOKS), same code, same order
+hookOn("envLine", "inverseEtfs", hx => {
+  const h = hx.h; if (!S.snap || !S.has.hist) return;
   let R = []; try { R = invRows().filter(v => v.call.k <= 2); } catch (e) {}
   const line = `<div class="small" style="margin-top:4px"><b>Inverse ETFs in or just under the buy zone:</b> ${R.length ? R.map(v => `<span class="tk" data-sym="${esc(v.o.t)}" title="${esc(v.call.t)}">${esc(v.o.t)}</span>`).join("") : "<span class='dim'>none</span>"} <a data-goto="plan" style="cursor:pointer">Setups →</a> <span class="dim">(experiment, watch only)</span></div>`;
-  const i = h.lastIndexOf("</div>"); return i < 0 ? h + line : h.slice(0, i) + line + h.slice(i);
-};
+  const i = h.lastIndexOf("</div>"); hx.h = i < 0 ? h + line : h.slice(0, i) + line + h.slice(i);
+});
 </script>
 <script>
 "use strict";
@@ -11086,8 +11096,8 @@ function tzChipPaint(){
   c.classList.toggle("on", open);
 }
 setInterval(() => { try { tzChipPaint(); } catch (e) {} }, 30000);
-const _renderAllTZ = renderAll;
-renderAll = function(){ _renderAllTZ(); try { tzChipPaint(); if (S.snap && S.snap.tzNote && $("fileInfo") && !$("fileInfo").textContent.includes("(your date)")) $("fileInfo").textContent += ` (${S.snap.tzNote})`; } catch (e) { console.warn("clock", e); } };
+// 8 Nov 2026 (TIDY-UP, structure only): was a renderAll wrapper — now an "all" hook (BOARD HOOKS), same code, same order
+hookOn("all", "clock", ph => { if (ph !== "after") return; try { tzChipPaint(); if (S.snap && S.snap.tzNote && $("fileInfo") && !$("fileInfo").textContent.includes("(your date)")) $("fileInfo").textContent += ` (${S.snap.tzNote})`; } catch (e) { console.warn("clock", e); } });
 // a MAP import records the Daily Plan now and repaints Today
 // Clean-up for lists made before this fix: a plan day p can't have a record before p's previous session OPENED (its
 // after-close or premarket file doesn't exist yet). Such records came from a Singapore-dated file read a session late
@@ -11659,8 +11669,8 @@ function renderESCard(){
   if (at && at.nextElementSibling !== c) at.after(c);
   try { c.innerHTML = esCardHTML(); } catch (e) { console.warn("ETF setups", e); c.innerHTML = ""; }
 }
-const _renderWatchES = renderWatch;
-renderWatch = function(){ _renderWatchES(); if (S.snap) renderESCard(); };
+// 8 Nov 2026 (TIDY-UP, structure only): was a renderWatch wrapper — now a "watchPage" hook (BOARD HOOKS), same code, same order
+hookOn("watchPage", "etfSetups", () => { if (S.snap) renderESCard(); });
 document.addEventListener("click", e => {
   if (e.target.closest("[data-esfeed]")) { esFeedExport(); return; }
   const tk = e.target.closest("#esBox .tk[data-sym]"); if (tk) { e.stopPropagation(); openDrawer(tk.dataset.sym); return; }
@@ -11671,7 +11681,7 @@ document.addEventListener("click", e => {
 const ES_FEED_EXT = [];   // 1 Nov 2026: columns added at the end by later sections (see esFeedCSV)
 const ES_FEED_H = ["Session", "Rank", "Symbol", "Side", "Group", "Status", "Location", "Dist ADR", "Nearer EMA", "RS5", "RS20", "Vehicle", "Grade", "Why not", "Close", "ADR%", "ADR $", "EMA9", "EMA21", "SMA50", "Ext ADR", "Avg $Vol 20D $M", "Worst day 20D $M", "In ETF file"];
 function esFeedCSV(){
-  const R = esRun(); const q = v => { const s = String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const R = esRun(); const q = csvStr;   // 8 Nov 2026 (TIDY-UP): the shared copy (block 1), same text
   const L = [ES_FEED_H.join(",")]; if (!R) return L.join("\n");
   const n = (v, d) => fin(v) ? +v.toFixed(d) : "";
   const order = [...R.rows].sort((a, b) => (a.rank || 9) - (b.rank || 9) || ((a.j.status === "Out") - (b.j.status === "Out")) || (!!a.cutBy - !!b.cutBy) || (a.g < b.g ? -1 : a.g > b.g ? 1 : a.sym < b.sym ? -1 : 1));
@@ -11923,7 +11933,7 @@ feedCSV = function(){
   L[0] += "," + RAX_H.join(",");
   for (let i = 0; i < rows.length; i++) { const x = rows[i].d ? raxOf(rows[i].sym) : null;
     L[i + 1] += "," + (x ? [fv(x.ext, 3), x.a21, x.a50, x.a200] : ["", "", "", ""]).join(","); }
-  const q = v => { const t = String(v); return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  const q = csvStr;   // 8 Nov 2026 (TIDY-UP): the shared copy (block 1), same text
   for (const e of FEED_EXT) { L[0] += "," + e.h.map(q).join(","); let P = null; try { P = e.prep ? e.prep(rows) : null; } catch (er) { console.warn("feed columns", er); }
     for (let i = 0; i < rows.length; i++) { let c; try { c = e.cells(rows[i], P); } catch (er) { console.warn("feed columns", rows[i].sym, er); c = null; } L[i + 1] += "," + (c || e.h.map(() => "")).map(v => q(feedFx(v))).join(","); } }
   return L.join("\n");
@@ -12100,8 +12110,8 @@ document.addEventListener("click", e => {
     elRedraw(false); }, 0);
 });
 // snapshot carries the list
-const _snapshotObjFL = snapshotObj;
-snapshotObj = function(){ const o = _snapshotObjFL(); o.etfList = elGet(); return o; };
+// 8 Nov 2026 (TIDY-UP, structure only): was a snapshotObj wrapper — now a "snap" hook (BOARD HOOKS): same field, same place in the file
+hookOn("snap", "etfList", o => { o.etfList = elGet(); });
 const _openSnapshotFL = openSnapshot;
 openSnapshot = async function(file){
   let o = null; try { o = JSON.parse(await file.text()); } catch (e) {}
@@ -12165,8 +12175,8 @@ function renderESPlan(){
   if (a.nextElementSibling !== c) a.after(c);
   try { c.innerHTML = esCardHTML(); } catch (e) { console.warn("ETF setups (Setups)", e); c.innerHTML = ""; }
 }
-const _renderS61CardFL = renderS61Card;
-renderS61Card = function(){ _renderS61CardFL(); renderESPlan(); };
+// 8 Nov 2026 (TIDY-UP, structure only): was a renderS61Card wrapper — now a "s61Card" hook (BOARD HOOKS), same code, same order
+hookOn("s61Card", "etfPlan", () => { renderESPlan(); });
 document.addEventListener("click", e => {
   if (!e.target.closest("#esBoxPlan")) return;
   const tk = e.target.closest(".tk[data-sym]"); if (tk) { e.stopPropagation(); openDrawer(tk.dataset.sym); return; }
@@ -12935,8 +12945,8 @@ hookOn("tab", "playbooks", t => {
   if (t !== "plan" || !S.snap) return;
   try { pbPlanPaint(); } catch (e) { console.warn("playbooks", e); }
 });
-const _renderAllPB = renderAll;
-renderAll = function(){ _renderAllPB(); try { pbChipPaint(); } catch (e) { console.warn("playbook chip", e); } };
+// 8 Nov 2026 (TIDY-UP, structure only): was a renderAll wrapper — now an "all" hook (BOARD HOOKS), same code, same order
+hookOn("all", "playbookChip", ph => { if (ph !== "after") return; try { pbChipPaint(); } catch (e) { console.warn("playbook chip", e); } });
 document.addEventListener("change", e => { const s = e.target.closest("[data-r1terr]"); if (!s) return; store.set("adrb.r1Terr", s.value === "old" ? "old" : "notion"); R1X.key = ""; renderAll(); });
 document.addEventListener("click", e => {
   const t = e.target.closest("#pbBox tr[data-sym], #pbBox .tk[data-sym], #pbWatch tr[data-sym], #pbWatch .tk[data-sym]");
@@ -12970,30 +12980,19 @@ function obPaneHTML(r){
     ${lvRows ? `<table class="mini obl" style="margin-top:6px"><thead><tr><th>Level</th><th class="l">Made of</th><th class="l"></th><th>Set on</th></tr></thead><tbody>${lvRows}</tbody></table>` : ""}
     <div class="small" style="margin-top:6px">Trigger (TradingView, Floor Bounce indicator, 30-min): from 10:00 ET, today's low in or under the zone, a bar closes back at or over the level and over the prior bar's high; entry ≤ 0.6 ADR over the day low; stop = the day low. One attempt per level. Dead on a daily close under ${fin(x.L) ? p2(x.L - x.z) : "the zone"}, or a gap up more than 1 ADR over the level. Paper / watch only — never sized.</div></div>`;
 }
-if (WS) {
-  const _tpBuildPB = tpBuild;
-  tpBuild = function(r){
-    const want = WSI.tpTab;
-    _tpBuildPB(r);
-    const dr = $("drawer"); if (!dr.classList.contains("open")) return;
-    const tabs = dr.querySelector(".tp-tabs"), plan = dr.querySelector('.tp-tabs button[data-tpt="plan"]'), right = dr.querySelector(".tp-right"); if (!tabs || !right) return;
-    const add = (k, label, html, afterK) => { const b = document.createElement("button"); b.dataset.tpt = k; b.textContent = label;
-      const ref = dr.querySelector(`.tp-tabs button[data-tpt="${afterK}"]`) || plan; if (ref) ref.after(b); else tabs.appendChild(b);
-      const d = document.createElement("div"); d.className = "tp-pane"; d.dataset.p = k; d.innerHTML = html; right.appendChild(d); };
-    if (!r.etf) add("r1", "Shakeout", r1PaneHTML(r), "plan");
-    add("ob", "Floor Bounce", obPaneHTML(r), "r1");
-    const on = (want === "r1" && !r.etf) || want === "ob" ? want : (want === "r1" ? "ob" : null);
-    if (on) { WSI.tpTab = on; dr.querySelectorAll("[data-tpt]").forEach(x => x.classList.toggle("on", x.dataset.tpt === on)); dr.querySelectorAll(".tp-pane").forEach(p => p.classList.toggle("on", p.dataset.p === on)); }
-  };
-} else {
-  const _openDrawerPB = openDrawer;
-  openDrawer = function(sym){
-    _openDrawerPB(sym);
-    const r = S.rowBySym && S.rowBySym.get(sym), dr = $("drawer"); if (!r || !dr.classList.contains("open")) return;
-    const at = dr.querySelector(".dpn") || dr.querySelector(".s61p"); const html = (r.etf ? "" : r1PaneHTML(r)) + obPaneHTML(r);
-    if (at) at.insertAdjacentHTML("afterend", `<div class="pbcls">${html}</div>`); else dr.insertAdjacentHTML("beforeend", `<div class="pbcls">${html}</div>`);
-  };
-}
+// 8 Nov 2026 (TIDY-UP, structure only): was a tpBuild wrapper — now a "panelBuild" step (BOARD HOOKS): same place in the
+// panel build, same order, an error still stops the build and shows the panel notice; want = the panel tab asked for before the build
+hookOn("panelBuild", "playbookTabs", (r, want) => {
+  const dr = $("drawer"); if (!dr.classList.contains("open")) return;
+  const tabs = dr.querySelector(".tp-tabs"), plan = dr.querySelector('.tp-tabs button[data-tpt="plan"]'), right = dr.querySelector(".tp-right"); if (!tabs || !right) return;
+  const add = (k, label, html, afterK) => { const b = document.createElement("button"); b.dataset.tpt = k; b.textContent = label;
+    const ref = dr.querySelector(`.tp-tabs button[data-tpt="${afterK}"]`) || plan; if (ref) ref.after(b); else tabs.appendChild(b);
+    const d = document.createElement("div"); d.className = "tp-pane"; d.dataset.p = k; d.innerHTML = html; right.appendChild(d); };
+  if (!r.etf) add("r1", "Shakeout", r1PaneHTML(r), "plan");
+  add("ob", "Floor Bounce", obPaneHTML(r), "r1");
+  const on = (want === "r1" && !r.etf) || want === "ob" ? want : (want === "r1" ? "ob" : null);
+  if (on) { WSI.tpTab = on; dr.querySelectorAll("[data-tpt]").forEach(x => x.classList.toggle("on", x.dataset.tpt === on)); dr.querySelectorAll(".tp-pane").forEach(p => p.classList.toggle("on", p.dataset.p === on)); }
+});
 
 /* ---------------- board chart: the chosen playbook's levels ---------------- */
 BCL_CODE.push([/^R1 washout low/, "wash", "WASH"], [/^R1 U&R pivot/, "rpiv", "PIV"], [/^R1 stop limit/, "r1s", "1 ADR"], [/^OB level/, "obl", "LVL"], [/^OB zone top/, "obzh", "ZN hi"], [/^OB zone bottom/, "obzl", "ZN lo"], [/^OB lost level/, "obx", "LOST"], [/^OB next level/, "obn", "NEXT"]);
@@ -13026,13 +13025,13 @@ bcBand = function(M){
 };
 
 /* ---------------- Today + Watchlist ---------------- */
-const _envHTMLPB = envHTML;
-envHTML = function(){
-  const h = _envHTMLPB(); if (!S.snap || !pbHH()) return h;
+// 8 Nov 2026 (TIDY-UP, structure only): was a envHTML wrapper — now a "envLine" hook (BOARD HOOKS), same code, same order
+hookOn("envLine", "research", hx => {
+  const h = hx.h; if (!S.snap || !pbHH()) return;
   let line = ""; try { const R = r1Rows() || [], a = R.filter(o => o.x.state === 3).map(o => o.r.sym), O = obRun(), c = O ? O.rows.filter(o => obCandOK(o) && !o.etf).sort(obRank).map(o => o.sym) : [];
     line = (typeof fpTodayLine === "function" ? fpTodayLine() : "") + `<div class="small pbline" style="margin-top:6px"><b>Research (off the switch):</b> Shakeout Reclaim ${a.length} armed${a.length ? ` (${a.slice(0, 6).map(s => `<span class="tk" data-sym="${esc(s)}">${esc(s)}</span>`).join(" ")})` : ""} · Floor Bounce ${c.length} at or near a floor${c.length ? ` (${c.slice(0, 6).map(s => `<span class="tk" data-sym="${esc(s)}">${esc(s)}</span>`).join(" ")})` : ""} — <a href="#" data-pbgo="2">open Shakeout Reclaim</a> · <a href="#" data-pbgo="3">open Floor Bounce</a> (Research card on Setups)</div>`; } catch (e) { console.warn("playbooks today", e); }
-  const i = h.lastIndexOf("</div>"); return i < 0 ? h + line : h.slice(0, i) + line + h.slice(i);
-};
+  const i = h.lastIndexOf("</div>"); hx.h = i < 0 ? h + line : h.slice(0, i) + line + h.slice(i);
+});
 document.addEventListener("click", e => { const a = e.target.closest("[data-pbgo]"); if (!a) return; e.preventDefault(); pbSet(a.dataset.pbgo); goTab("plan"); });
 document.addEventListener("click", e => { const t = e.target.closest(".pbline .tk[data-sym]"); if (t) { e.stopPropagation(); openDrawer(t.dataset.sym); } }, true);
 function pbWatchHTML(){
@@ -13045,16 +13044,16 @@ function pbWatchHTML(){
     <div class="small" style="margin:4px 0"><b>Floor Bounce — board's top 5</b>: ${c.length ? c.map(o => `<span class="tk" data-sym="${esc(o.sym)}">${esc(o.sym)}</span> <span class="dim">${OB_ST[o.x.st].n} · ${p2(o.x.L)}</span>`).join(" · ") : "none"}</div>
     <div class="small">Research card on Setups: <a href="#" data-pbgo="2">Shakeout Reclaim</a> · <a href="#" data-pbgo="3">Floor Bounce</a></div></div>`;
 }
-const _renderWatchPB = renderWatch;
-renderWatch = function(){
-  _renderWatchPB(); if (!S.snap) return;
+// 8 Nov 2026 (TIDY-UP, structure only): was a renderWatch wrapper — now a "watchPage" hook (BOARD HOOKS), same code, same order
+hookOn("watchPage", "playbooks", () => {
+  if (!S.snap) return;
   const box = $("watchBody"); if (!box) return;
   let c = $("pbWatch"); if (!c) { box.insertAdjacentHTML("beforeend", `<div class="card g1" id="pbWatch"></div>`); c = $("pbWatch"); }
   const es = $("esBox"); if (es && es.nextElementSibling !== c) es.after(c);
   try { c.innerHTML = pbWatchHTML(); } catch (e) { console.warn("playbooks watch", e); c.innerHTML = ""; }
   if (typeof fpWatchPaint === "function") try { fpWatchPaint(box, c); } catch (e) { console.warn("first pullback watch", e); }   /* 7 Nov 2026: First Pullback card (FIRST PULLBACK at the end; paper) */
   if (typeof lpPaint === "function") try { lpPaint(box); } catch (e) {}   /* 4 Nov: stage badges on every Watchlist group (STAGE AGE at the end; display only) */
-};
+});
 
 /* ---------------- MAP import: O lines (the oversold watch) ---------------- */
 const OB_OLINE = /^O\s*(\d+)[.):]?\s+([A-Za-z0-9.:\-]+)\s*(?:\|(.*))?$/i;
@@ -13335,8 +13334,8 @@ const _popSkelPG = popSkel;
 popSkel = function(w){ _popSkelPG(w); popUpgrade(w); };
 const _popShowPG = popShow;
 popShow = function(sym){ _popShowPG(sym); popAfter(); };
-const _renderAllPG = renderAll;
-renderAll = function(){ _renderAllPG(); try { popAfter(); } catch (e) {} };
+// 8 Nov 2026 (TIDY-UP, structure only): was a renderAll wrapper — now an "all" hook (BOARD HOOKS), same code, same order
+hookOn("all", "groupWindow", ph => { if (ph !== "after") return; try { popAfter(); } catch (e) {} });
 // news and Stocktwits that arrive after the copy was made
 const _newsChangedPG = newsChanged;
 newsChanged = function(sym){ _newsChangedPG(sym); try { if (popLive()) POP.w.document.querySelectorAll("[data-news-sym]").forEach(el => { if (el.dataset.newsSym === sym) el.innerHTML = newsHTML(sym, el.dataset.newsMode); }); } catch (e) {} };
@@ -13857,9 +13856,8 @@ async function syTurnOn(url, key){
   await syPush(); syLoop(); return syHasFiles() ? "On · this device's board is now the saved board" : "On · load your files here and they'll be saved";
 }
 function syOff(){ store.set("adrb.syncOn", false); clearTimeout(SY.t); SY.t = null; syLoop(); }
-const _renderSettingsSY = renderSettings;
-renderSettings = function(){
-  _renderSettingsSY();
+// 8 Nov 2026 (TIDY-UP, structure only): was a renderSettings wrapper — now a "settings" hook (BOARD HOOKS), same code, same order
+hookOn("settings", "sync", () => {
   const reset = $("sReset"); if (!reset) return;
   const box = document.createElement("div"); box.id = "sySet";
   box.innerHTML = `<h4>Sync between devices</h4>
@@ -13882,7 +13880,7 @@ renderSettings = function(){
   $("syNow").onclick = async () => { if (!syOn()) { msg("Sync is off"); return; } msg("Checking…"); if (SY.t) { clearTimeout(SY.t); SY.t = null; await syPush(); } await syCheck(true); syPaint(); };
   $("syOffB").onclick = () => { syOff(); msg(syLine()); toast("Sync off — this device keeps its own board"); };
   $("syCopy").onclick = () => copyText(SY_WORKER, "Worker code copied — paste it into the Cloudflare editor");
-};
+});
 // start once the board has put back its own saved files (or found none)
 (function syStart(){
   let n = 0;
@@ -14194,13 +14192,35 @@ mSync();
    Eugene (chat, 28 Oct), on the rebuild proposal (docs/rebuild-proposal-review-2026-10-28.md): "ok do 1/2/3" — part 2 =
    stop adding function overrides. Until now every new section saved the old renderTab / openDrawer / tpBuild … and put a
    wrapper over it (200 such overrides; renderTab alone 22). From here, new work plugs in at a named hook point instead:
-     hookOn("panel", name, (r, dr, ws) => …)  after the ticker panel is fully built (workspace: tpBuild; classic: openDrawer),
+     hookOn("panel", name, (r, dr, ws) => …)  after the ticker panel is fully built (tpBuild; ws is always true — the Classic
+                                              openDrawer installer was unreachable and is gone, 8 Nov 2026 TIDY-UP),
                                               also when the chart window renders a name unseen (workspace layout)
      hookOn("tab", name, t => …)              after renderTab(t) has drawn a page
      pageOn(t, draw)                          a page of its own: renderTab(t) calls draw() (31 Oct, Universe page)
      hookOn("chart", name, c => …)            after the board chart is drawn (30 Oct; c = {chart, cs, M, r, box, w, own}:
                                               the Lightweight chart, its candle series, the model, the row, the box and
                                               the window that owns it). Called in place at the end of bcMount — no wrapper.
+   8 Nov 2026 (TIDY-UP — Eugene: "speed optimisation and tidy up. Don't remove dead features."; structure only, no number,
+   list, page text or export changes): chains of wrappers become in-place points, run with hookEach (block 1: no try/catch,
+   so an error stops the rest and reaches the caller exactly as through the old wrappers). Hooks run in file order = the
+   order the wrappers ran in.
+     hookOn("panelBuild", name, (r, want) => …)  a step of the ticker panel build, at the end of tpBuild, before the "panel"
+                                              hooks (were 6 tpBuild wrappers); want = WSI.tpTab before the build
+     hookOn("all", name, ph => …)             renderAll: ph "before" the redraw, "after" it (were 8 renderAll wrappers)
+     hookOn("flags", name, hx => …)           a row's flag chips: hx = {r, s}, change hx.s (were 7 flagsHTML wrappers)
+     hookOn("snap", name, o => …)             the snapshot object: add fields to o (were 5 snapshotObj wrappers)
+     hookOn("tabBefore", name, t => …)        before renderTab draws page t (Data check card, Market breadth strip)
+     tabDraw(t, draw)                         a page renderTab draws itself and then calls afterTab (Training, Shorts,
+                                              Board log, Home, Watchlist) — unlike pageOn, which skips afterTab and the
+                                              Entry Check group counts; together these were 6 renderTab wrappers
+     hookOn("drawerBlocks", name, sym => …)  a block for the drawer, before the panel is built from it (2 wrappers)
+     hookOn("drawerShown", name, sym => …)   after the panel is built and its "panel" hooks ran (3 wrappers)
+     hookOn("hist", name, () => …)            after applyHist's history pass (4 applyHist wrappers)
+     hookOn("settings", name, () => …)        a block in the Settings panel, after the base panel (4 renderSettings wrappers)
+     hookOn("cols", name, hx => …)            table columns: hx = {C}, change or replace hx.C (5 COLS wrappers)
+     hookOn("s61Card", name, () => …)         after the Entry Check card on Setups is drawn (3 renderS61Card wrappers)
+     hookOn("watchPage", name, () => …)       after the Watchlist groups are drawn (3 renderWatch wrappers)
+     hookOn("envLine", name, hx => …)         the environment strip: hx = {h}, change hx.h (3 envHTML wrappers)
    Each hook runs in its own try/catch (a broken card logs an error and the panel still opens). A section that needs a point
    that isn't here adds it in this script — one wrapper per point, here and nowhere else.
    Ratchet: tools/board-hooks-test.js counts the function overrides in index.html and fails if the count grows past the
@@ -14221,9 +14241,6 @@ const hookOK = t => { const sec = document.getElementById("tab-" + t), n = sec &
 if (WS) {
   const _tpBuildHK = tpBuild;
   tpBuild = function(r){ let out; try { out = _tpBuildHK(r); } catch (e) { hookErr("panel " + (r && r.sym), e); } const dr = $("drawer"); if (r && dr.classList.contains("open") && dr.classList.contains("tp")) hookRun("panel", r, dr, true); return out; };
-} else {
-  const _openDrawerHK = openDrawer;
-  openDrawer = function(sym){ let out; try { out = _openDrawerHK(sym); } catch (e) { hookErr("panel " + sym, e); } const r = S.rowBySym && S.rowBySym.get(sym), dr = $("drawer"); if (r && dr.classList.contains("open") && !dr.classList.contains("invp")) hookRun("panel", r, dr, false); return out; };
 }
 const _renderTabHK = renderTab;
 // 31 Oct: hook point "page" — a page of its own (pageOn(t, draw)); renderTab draws it instead of the old page switch
@@ -14676,7 +14693,7 @@ function tvlId(s){
   return {tv: null, why: r && r.exch ? `the file says "${r.exch}" — not a TradingView exchange` : r ? "the file has no exchange" : "not in today's files"};
 }
 function tvlEtf(s){ const r = tvlRow(s); if (r) return !!r.etf; return (typeof ETFU !== "undefined" && ETFU.has(s)) || TVL_KNOWN.has(s) || (typeof INV !== "undefined" && INV.core.includes(s)); }
-const tvlHist = () => !!(S.has && S.has.hist && HIST.nD);
+const tvlHist = pbHH;   // 8 Nov 2026 (TIDY-UP): was a byte-for-byte copy of pbHH (PLAYBOOKS) — now the same function
 
 /* ---------------- the lists: sections × items, in TXT order ---------------- */
 const tvlE = (s, why, st) => ({s, why, st: st || ""});
@@ -14957,7 +14974,7 @@ const TVL_CSV_H = ["session", "generated_at", "built_at", "source_mode", "data_t
 const TVL_PERM_TXT = {held: "your position", p1: "Entry Check list — rules v6.1", p1e: "ETF setups experiment / MAP list", r1: "experimental live · 0.10% NLV", r1e: "", ob: "paper / watch only · never sized", obe: "paper / watch only · never sized",
   sh: "research / watch only — no live stock shorts", she: "ETF setups experiment (short side)", camp: "campaign tracking", fav: "favourite", scr: "screen hit — context only", pool: "research pool — not an attention list"};
 function tvlCSV(B, L, scope){
-  const q = v => { const s = v == null ? "" : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const q = csvCell;   // 8 Nov 2026 (TIDY-UP): the shared copy (block 1), same text
   const sst = new Map(B.secs.map(s => [s.k, s.st === "ok" ? "complete" : s.st === "partial" ? "partial: " + s.why.join("; ") : "unavailable: " + s.why.join("; ")]));
   const gen = new Date().toISOString(), built = new Date(B.at).toISOString(), mode = B.live ? "live (Massive, 15 min delayed)" : B.mode === "pm" ? "premarket file" : "regular-session file";
   const dataTo = B.live ? new Date(B.live).toISOString() : B.session || "";
@@ -15400,7 +15417,7 @@ function frOf(r){
   FRX.m.set(r.sym, x); return x;
 }
 function frRows(){ const out = []; for (const r of S.stocks) { const x = frOf(r); if (x) out.push({r, x}); } return out.sort((a, b) => FR_ST[a.x.st].o - FR_ST[b.x.st].o || (a.r.sym < b.r.sym ? -1 : 1)); }
-const frP = v => fin(v) ? v.toFixed(2) : "—";
+const frP = p2;   // 8 Nov 2026 (TIDY-UP): was a byte-for-byte copy of p2 (PLAYBOOKS) — now the same function
 function frHTML(){
   const hd = `<div class="hd"><h2>Failed rally research</h2><span class="sub">watch only · research spec (Notion, 31 Oct) · damaged names: on the short watch in the last ${FRC.dmgN} sessions and under the 50 SMA · intraday trigger in TradingView</span></div>`;
   if (!tvlHist()) return hd + `<div class="bd"><div class="empty">Needs the stored price history. <button class="btn sm" data-hist="full">Load price history</button></div></div>`;
@@ -16104,7 +16121,7 @@ const R1S_F = [
   {k: "grp", l: "Group not weak", tip: "the group's state isn't Weakening or Lagging", cut: o => ["Weakening", "Lagging"].includes(o.r.gState) ? `group ${o.r.gState.toLowerCase()}` : ""},
   {k: "reg", l: "Not on Defensive days", tip: "MAP's call, else the board's tape read; none = no ★", cut: () => { const g = s61Reg(); return !g.v ? "no MAP call or tape read" : g.v === "Defensive" ? `${g.v} (${g.src === "map" ? "MAP" : "tape read"})` : ""; }}
 ];
-const r1sLbl = (f, c) => typeof f.l === "function" ? f.l(c) : f.l;
+const r1sLbl = obsLbl;   // 8 Nov 2026 (TIDY-UP): was a byte-for-byte copy of obsLbl (Floor Bounce stricter filters) — now the same function
 // reasons an armed name misses the ★ (all ticked filters; empty = ★). Not armed = no mark.
 function r1sWhy(o, c){ c = c || r1sCfg(); const w = []; if (!o || !o.x || o.x.state !== 3) return null;
   for (const f of R1S_F) if (c[f.k]) { try { const s = f.cut(o, c); if (s) w.push(s); } catch (e) { console.warn("R1 filter", e); } } return w; }
@@ -16270,7 +16287,7 @@ const RT = {key: "", past: {}};
 const RT_LAG = {w1: [5, "1W"], m1: [21, "1M"], m3: [63, "3M"]};
 const RT_HZ = {p1w: 5, p1m: 21, p3m: 63, p6m: 126, p1y: 252};
 const rtMode = () => { try { const v = store.get("adrb.rotTrail", "none"); return RT_LAG[v] ? v : "none"; } catch (e) { return "none"; } };
-const rtWeek = s => { const d = new Date(s + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() - (d.getUTCDay() + 6) % 7); return d.toISOString().slice(0, 10); };
+const rtWeek = wkKey;   // 8 Nov 2026 (TIDY-UP): was a byte-for-byte copy of wkKey (Monday of the week) — now the same function
 // every ranked group's rotation-map position `lag` sessions before the file's session: Map name → {lvl, mom}, + the date
 function rtPast(lag){
   if (!HIST.nD || !S.snap || !S.groups) return null;
@@ -17596,7 +17613,7 @@ function mlCsvRows(){
 }
 function mlCsv(){
   if (!S.snap) { toast("Load the files first"); return; }
-  const q = v => { const x = v == null ? "" : String(v); return /[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x; };
+  const q = csvCell;   // 8 Nov 2026 (TIDY-UP): the shared copy (block 1), same text
   const n4 = v => v == null || !isFinite(v) ? "" : +v.toFixed(4);
   const KL = {A: "A list", B: "B list", S: "Stalk"};
   const src = S.snap.live && S.snap.live.dataMs ? `Live (Massive, 15 min delayed) ${new Date(S.snap.live.dataMs).toISOString()}` : `File ${S.snap.asOf || ""}`;
@@ -17800,7 +17817,7 @@ JN_CSV_EXT.push({h: ["map_list", "daily_plan_top5", "new_discovery", "new_discov
     const map = o.src.includes("A") ? "A" : o.src.includes("B") ? "B" : o.src.includes("S") ? "On deck" : "";
     return [map, m && m.top ? "yes" : "", disc ? "yes" : "", disc ? mscIso(disc.at) : "", m ? MSC_K[m.s.k] || m.s.k : "", m ? MSC_K[m.s.sh] || m.s.sh : ""]; }});
 function mscCsv(){
-  const q = v => { const x = v == null ? "" : String(v); return /[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x; }, n4 = v => v == null || !fin(v) ? "" : +v.toFixed(4);
+  const q = csvCell, n4 = v => v == null || !fin(v) ? "" : +v.toFixed(4);
   const I = mscIndex(), dt = t => t != null && HIST.dates[t] ? HIST.dates[t] : "";
   const H = ["plan_day", "data_session", "ticker", "groups", "map_list", "daily_plan_top5", "new_discovery", "new_discovery_at", "new_discovery_src", "in_board_log", "levels_from", "planned_entry", "stop", "one_r", "plus_1r", "adr_usd", "fill", "fill_date", "hit_1r", "hit_1r_date", "stop_1adr", "plus_1r_1adr", "hit_1r_1adr", "hit_1r_1adr_date", "replay_outcome", "replay_r"];
   const L = [H.join(",")], GL = Object.fromEntries(MSC_G);
@@ -17970,9 +17987,9 @@ document.head.insertAdjacentHTML("beforeend", `<style>
    "First Pullback tracker" (#fpTrackBox); ticker-panel tab "First Pullback" (hook "panel"); chart levels (in-place call in
    the playbooks bcModel wrapper: 9 / 21 EMA ± 0.5 ADR, leg high, pullback low, first-candle high / low when live); filter
    criteria (category Playbooks), preset "Playbook 2 · First Pullback", screens (group "Playbook 2 · First Pullback"); a
-   Watchlist card (#fpWatch, in-place call in the playbooks renderWatch wrapper); TradingView lists section "First
+   Watchlist card (#fpWatch, in-place call in the playbooks "watchPage" hook — a renderWatch wrapper until the 8 Nov TIDY-UP); TradingView lists section "First
    Pullback" (in-place spread in TVL_SECS, off DS Daily); a one-line count on Today's environment line (in-place call in the
-   playbooks envHTML wrapper). NOT on the frozen Daily Plan (paper).
+   playbooks "envLine" hook — an envHTML wrapper until the 8 Nov TIDY-UP). NOT on the frozen Daily Plan (paper).
    RESEARCH CARD (#pbResBox, Setups, collapsed by default): Shakeout Reclaim + Floor Bounce cards (r1CardHTML / obCardHTML,
    unchanged) one at a time. Readers of R1 / OB kept working, found by grep: r1Of / obOf / r1Rows / obRun (cards, Today line,
    Watchlist card #pbWatch, ticker-panel tabs "Shakeout" / "Floor Bounce", screens r1arm / r1camp / obc / obur, criteria
@@ -18430,7 +18447,7 @@ function fpTrackPaint(){
   box.classList.toggle("hidden", k !== "fp");
   box.innerHTML = k === "fp" ? fpTrackHTML() : "";
 }
-const fpCsvQ = v => { const x = v == null ? "" : String(v); return /[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x; };
+const fpCsvQ = csvCell;   // 8 Nov 2026 (TIDY-UP): the shared copy (block 1), same text
 const FP_CSV_H = ["first_seen", "last_seen", "list_then", "ticker", "location_then", "price_then", "adr_pct_then", "leg_high_then", "pullback_low_then", "price_now", "now_from", "move_pct", "move_adr", "best_since_adr", "worst_since_adr", "sessions",
   "fp_list_now", "fp_location_now", "trade_session", "first_candle_high", "first_candle_low", "first_candle_seen_at", "triggered_at", "one_r_adr", "triggered", "result", "result_on", "in_current_file"];
 function fpTrackCsvText(rows){
@@ -18997,7 +19014,7 @@ const FLS_CSV_H = ["ticker", "verdict", "first_failing_check", "checks_failed", 
 // 7 Nov 2026 rebuild: columns appended (the 48 above keep their meanings; ETF rows follow the stocks with those blank)
 const FLS_CSV_H2 = ["route", "early_state", "resistance_5d", "band_lo", "band_hi", "gate_mode", "spy_state", "map_call", "symbol_type", "green_time", "fill_or_skip",
   "early_verdict", "early_ref_date", "early_session", "early_adr_usd", "early_first_fail", "earnings_note", "entry_routes", "entry_trigger_close", "entry_stop", "entry_support", "entry_stop_adr", "entry_room_r", "entry_fill", "entry_target_2r", "entry_outcome", "group_role"];
-const flsQ = v => { const x = v == null ? "" : String(v); return /[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x; };
+const flsQ = csvCell;   // 8 Nov 2026 (TIDY-UP): the shared copy (block 1), same text
 function flsCsv2(o, R, n4){
   const e = o.e, d = e && e.d, iv = o.iv, g = iv && iv.sig, f = g && g.fill, sk = !g && iv && iv.skips && iv.skips.length ? iv.skips[iv.skips.length - 1] : null;
   const route = [e && e.pass ? "early" : null, o.x && o.x.pass ? "daily" : null].filter(Boolean).join("+");
