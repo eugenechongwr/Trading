@@ -973,9 +973,16 @@ const zoneText = () => `${zoneRange()} from the ${zm().line}`;
 const zoneStamp = () => `Buy zone mode ${zm().n} · ${zm().label} ${zoneRange()}${onSpec() ? " · matches spec" : " · outside spec"}`;
 const zoneTag = () => `zone${zm().n}`;
 // ---- time of day for the in-play tiers
+// 8 Nov 2026 (SPEED PASS 3 — speed only, same answers): one formatter, made once (building an Intl formatter was most of the
+// cost; fileClock calls this once per stock), and the minute of a recent clock time is remembered (pure: same ms → same minute)
 function etMin(ms){
-  const p = new Intl.DateTimeFormat("en-US", {timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hourCycle: "h23"}).formatToParts(new Date(ms));
-  return +p.find(x => x.type === "hour").value * 60 + +p.find(x => x.type === "minute").value;
+  const M = etMin._m || (etMin._m = new Map());
+  if (typeof ms === "number" && M.has(ms)) return M.get(ms);
+  const F = etMin._f || (etMin._f = new Intl.DateTimeFormat("en-US", {timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hourCycle: "h23"}));
+  const p = F.formatToParts(new Date(ms));
+  const m = +p.find(x => x.type === "hour").value * 60 + +p.find(x => x.type === "minute").value;
+  if (typeof ms === "number") { if (M.size >= 512) M.clear(); M.set(ms, m); }
+  return m;
 }
 const hhmm = m => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 const snapKey = () => S.snap ? S.snap.files.map(f => f.name).join("+") : "";
@@ -1347,7 +1354,10 @@ const store = {
 // any direct localStorage write (older code, a pasted snapshot, another tab's change) drops the remembered reads at once
 // 31 Oct: store._g counts real changes only — a write of the same value isn't one, nor a write of page bookkeeping or a
 // tracking record that the self-check never reads (which page is open, the panel tab, TradingView-lists campaign memory)
-const STORE_UI = new Set(["adrb.tab", "adrb.tpTab", "adrb.tvlCamp"]);
+// 8 Nov 2026 (SPEED PASS 3): + the Training page's own records (current set, choices, score history) — read only by the
+// Training page, never by the self-check or the Former leader short lists, so a Training answer no longer makes the next
+// visit to Data check / Shorts recompute everything
+const STORE_UI = new Set(["adrb.tab", "adrb.tpTab", "adrb.tvlCamp", "adrb.trainSet", "adrb.trainCfg", "adrb.train"]);
 for (const m of ["setItem", "removeItem", "clear"]) { const f = Storage.prototype[m]; Storage.prototype[m] = function(...a){ try { store._c.clear();
   if (m === "clear" || !(STORE_UI.has(a[0]) || this.getItem(a[0]) === (m === "setItem" ? String(a[1]) : null))) store._g++; } catch (e) {} return f.apply(this, a); }; }
 window.addEventListener("storage", () => { store._c.clear(); store._g++; });
@@ -2896,8 +2906,13 @@ const HDB = {name: "dsb-hist", ver: 1, store: "days"};
 const HIST = {status: "none", msg: "", dates: [], syms: [], idx: new Map(), nD: 0, nS: 0, C: null, Hh: null, L: null, V: null,
   live: null, busy: false, prog: null, bSym: null, today: null, hl: null};
 const SYM_OK = /^[A-Z]{1,5}(\.[A-Z])?$/;
-const etParts = ms => { const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", {timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23"}).formatToParts(new Date(ms)).map(x => [x.type, x.value])); return {d: `${p.year}-${p.month}-${p.day}`, m: +p.hour * 60 + +p.minute, hm: `${p.hour}:${p.minute}`}; };
-const isWkday = d => { const w = new Date(d + "T12:00:00Z").getUTCDay(); return w > 0 && w < 6; };
+// 8 Nov 2026 (SPEED PASS 3 — speed only): the formatter is made once instead of on every call; same options, same parts
+const ET_PARTS_F = new Intl.DateTimeFormat("en-US", {timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23"});
+const etParts = ms => { const p = Object.fromEntries(ET_PARTS_F.formatToParts(new Date(ms)).map(x => [x.type, x.value])); return {d: `${p.year}-${p.month}-${p.day}`, m: +p.hour * 60 + +p.minute, hm: `${p.hour}:${p.minute}`}; };
+// 8 Nov 2026 (SPEED PASS 3 — speed only): remembered per date string (a pure function of it; called for every stock on each
+// refresh through todaySource / the NYSE session counts). Bounded; anything but a string is worked out as before.
+const WKD_MEMO = new Map();
+const isWkday = d => { if (typeof d === "string") { const k = WKD_MEMO.get(d); if (k !== undefined) return k; } const w = new Date(d + "T12:00:00Z").getUTCDay(), r = w > 0 && w < 6; if (typeof d === "string") { if (WKD_MEMO.size >= 20000) WKD_MEMO.clear(); WKD_MEMO.set(d, r); } return r; };
 const prevWkday = d => { let x = d; while (!isWkday(x)) x = addDays(x, -1); return x; };
 // 23 Oct (speed): memoised — a pure function of the date string, called for every bar of every stock on each refresh
 const WK_MEMO = new Map();
@@ -3523,7 +3538,16 @@ const saveLiveCfg = () => store.set("adrb.liveCfg", LV.cfg);
 const NYD = new Intl.DateTimeFormat("en-CA", {timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit"});
 const NYW = new Intl.DateTimeFormat("en-US", {timeZone: "America/New_York", weekday: "short"});
 const dET = ms => NYD.format(new Date(ms));
-const addDays = (ds, n) => { const d = new Date(ds + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+// 8 Nov 2026 (SPEED PASS 3 — speed only): remembered per (date string, n) — a pure function; the NYSE session counts (earnings
+// in sessions, next / previous session) called it ~500,000 times per sweep of the pages. Bounded; a call that throws (a bad
+// date) still throws and is not remembered; anything but a string date is worked out as before.
+const ADD_MEMO = new Map();
+const addDays = (ds, n) => {
+  let M = null; if (typeof ds === "string" && typeof n === "number") { M = ADD_MEMO.get(n); if (M) { const r = M.get(ds); if (r !== undefined) return r; } else { if (ADD_MEMO.size >= 64) ADD_MEMO.clear(); ADD_MEMO.set(n, M = new Map()); } }
+  const d = new Date(ds + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + n); const r = d.toISOString().slice(0, 10);
+  if (M) { if (M.size >= 20000) M.clear(); M.set(ds, r); }
+  return r;
+};
 const wkKey = ds => { const d = new Date(ds + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() - (d.getUTCDay() + 6) % 7); return d.toISOString().slice(0, 10); };
 const posN = x => (x != null && isFinite(x) && x > 0) ? x : null;
 const isRTH = ms => { const m = etMin(ms); return m >= 570 && m < 960; };
@@ -5529,7 +5553,10 @@ function afterTab(t){
   $("pgT").textContent = [...b.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join("").trim();
   $("pgS").textContent = b.dataset.sub || "";
   store.set("adrb.tab", t);
-  buildSecs(t);
+  // 8 Nov 2026 (SPEED PASS 3 — speed only): inside the BOARD HOOKS renderTab the jump list is rebuilt once more after every
+  // hook has drawn (WSI.rt > 0 there), and that last build is the one left on screen — this earlier one only made the
+  // browser work out the styles of the whole page an extra time per page switch. Outside it (or with no file) it runs as before.
+  if (!(WSI.rt > 0 && S.snap)) buildSecs(t);
 }
 function secLabel(el){
   if (SEC_NAMES[el.id]) return SEC_NAMES[el.id];
@@ -7604,7 +7631,10 @@ const PZ = {
 };
 const fin = x => typeof x === "number" && isFinite(x);
 // bars for one symbol: stored history (+ today's bar when the file is newer and the benchmark has it too), leading gap trimmed
-function dssBars(sym){
+// 8 Nov 2026 (SPEED PASS 3 — speed only): built once per stored-history state by sp3BarsGet (end of the file), every caller
+// gets its own copy; dssBarsBuild below is the unchanged builder
+function dssBars(sym){ return typeof sp3BarsGet === "function" ? sp3BarsGet(sym, dssBarsBuild) : dssBarsBuild(sym); }
+function dssBarsBuild(sym){
   if (!HIST.nD || !HIST.idx) return null;
   const i = HIST.idx.get(sym), bi = HIST.idx.get(DSSC.bench); if (i == null) return null;
   const ts = todaySource(), r = S.rowBySym && S.rowBySym.get(sym);
@@ -8068,8 +8098,11 @@ const S61 = {adrN: 20, liqCap: 1e9, liqDv: 100e6, liqPx: 10, liqN: 20, intBars: 
 const NYSE_HOL = new Set(["2026-01-01", "2026-01-19", "2026-02-16", "2026-04-03", "2026-05-25", "2026-06-19", "2026-07-03", "2026-09-07", "2026-11-26", "2026-12-25",
   "2027-01-01", "2027-01-18", "2027-02-15", "2027-03-26", "2027-05-31", "2027-06-18", "2027-07-05", "2027-09-06", "2027-11-25", "2027-12-24"]);
 const isSess = d => isWkday(d) && !NYSE_HOL.has(d);
-const nextSess = d => { let x = addDays(d, 1); while (!isSess(x)) x = addDays(x, 1); return x; };
-const prevSess = d => { let x = addDays(d, -1); while (!isSess(x)) x = addDays(x, -1); return x; };
+// 8 Nov 2026 (SPEED PASS 3 — speed only): next / previous NYSE session remembered per date string (pure: weekends + the fixed
+// NYSE_HOL list). Same walk as before on a miss; bounded.
+const SESS_MEMO = {n: new Map(), p: new Map()};
+const nextSess = d => { const M = SESS_MEMO.n, c = typeof d === "string" ? M.get(d) : undefined; if (c !== undefined) return c; let x = addDays(d, 1); while (!isSess(x)) x = addDays(x, 1); if (typeof d === "string") { if (M.size >= 20000) M.clear(); M.set(d, x); } return x; };
+const prevSess = d => { const M = SESS_MEMO.p, c = typeof d === "string" ? M.get(d) : undefined; if (c !== undefined) return c; let x = addDays(d, -1); while (!isSess(x)) x = addDays(x, -1); if (typeof d === "string") { if (M.size >= 20000) M.clear(); M.set(d, x); } return x; };
 // 22 Oct (Eugene: "remove spec 6.0 entirely"): Entry Check (rules v6.1) is the only rule set — always on; adrb.s61Live is ignored.
 const s61Live = () => true;
 const s61Me = () => store.get("adrb.s61Me", {}) || {};
@@ -8828,8 +8861,9 @@ async function bcModel(r, iv){
       M.markers.push({time: bars[k].time, position: "belowBar", color: BC_STYLE.trig, shape: "arrowUp", text: "T"});
     M.trigLast = last; }
   M.markers.sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
-  // RS line vs QQQ (daily / weekly)
-  if (!intra && sh.rs && sym !== "QQQ") { const q = bcDaily("QQQ");
+  // RS line vs QQQ (daily / weekly) — 8 Nov 2026: vs the benchmark picked on the chart (CHART · RS LINE BENCHMARK; QQQ by default)
+  const RB = typeof bcRsSym === "function" ? bcRsSym() : "QQQ"; M.rsB = RB;
+  if (!intra && sh.rs && sym !== RB) { const q = bcDaily(RB);
     if (q) { const qq = iv === "W" ? bcWeekly(q) : q, qm = new Map(qq.map(b => [b.time, b.close]));
       M.rs = bars.filter(b => qm.get(b.time) > 0).map(b => ({time: b.time, value: b.close / qm.get(b.time) * 100})); } }
   M.erTxt = s && s.er ? (s.er.n == null ? "earnings date unknown" : `earnings in ${s.er.n} sessions · exit by ${s.er.exitBy}`) : "";
@@ -8846,7 +8880,7 @@ async function bcMount(box, r, iv, w){
   const LW = w.LightweightCharts; if (!LW) { box.innerHTML = `<span class="small">Chart library not loaded.</span>`; return; }
   if (M.err) { box.innerHTML = `<div class="bc-msg">${esc(M.err)} <button class="btn sm" data-bctv>Show the TradingView chart</button></div>`; box.querySelector("[data-bctv]").onclick = () => { store.set("adrb.chartEng", "tv"); bcRemount(); }; BC.last = {sym: r.sym, iv, err: M.err}; return; }
   const P = o => w.JSON.parse(JSON.stringify(o)), css = getComputedStyle(document.documentElement), v = (n, f) => css.getPropertyValue(n).trim() || f, sh = bcShow();
-  box.innerHTML = `<div class="bc-wrap"><div class="bc-c"></div><div class="bc-leg"></div><div class="bc-tg">${BC_TOG.filter(([k]) => !(M.intra && k === "rs") && !(M.intra && k === "piv")).map(([k, l]) => `<button data-bct="${k}" class="${sh[k] ? "on" : ""}">${l}</button>`).join("")}</div></div>`;
+  box.innerHTML = `<div class="bc-wrap"><div class="bc-c"></div><div class="bc-leg"></div><div class="bc-tg">${BC_TOG.filter(([k]) => !(M.intra && k === "rs") && !(M.intra && k === "piv")).map(([k, l]) => `<button data-bct="${k}" class="${sh[k] ? "on" : ""}">${l}</button>`).join("")}${typeof bcRsPickHTML === "function" ? bcRsPickHTML(M, sh) : ""}</div></div>`;   // 8 Nov 2026: RS benchmark picker
   const cEl = box.querySelector(".bc-c"), leg = box.querySelector(".bc-leg");
   const chart = LW.createChart(cEl, P({autoSize: true, layout: {background: {type: "solid", color: v("--surface", "#ffffff")}, textColor: v("--ink-2", "#52514e"), fontSize: 11, attributionLogo: true, panes: {separatorColor: v("--line", "#e5e4df")}},
     grid: {vertLines: {color: v("--line", "#e5e4df")}, horzLines: {color: v("--line", "#e5e4df")}}, rightPriceScale: {borderColor: v("--line", "#e5e4df")},
@@ -8860,7 +8894,7 @@ async function bcMount(box, r, iv, w){
   const bcLv = typeof bcLevels === "function" && !sh.cl;
   if (!bcLv) for (const l of M.lines) cs.createPriceLine(P({price: l.price, color: l.color, lineWidth: 1, lineStyle: l.lineStyle, axisLabelVisible: true, title: l.title}));
   if (M.markers.length) LW.createSeriesMarkers(cs, P(M.markers));
-  if (M.rs && M.rs.length) { const rs = chart.addSeries(LW.LineSeries, P({color: BC_STYLE.rs, lineWidth: 1, priceLineVisible: false, lastValueVisible: true, title: "RS vs QQQ"}), 1); rs.setData(P(M.rs)); try { chart.panes()[1].setStretchFactor(0.22); chart.panes()[0].setStretchFactor(0.78); } catch (e) {} }
+  if (M.rs && M.rs.length) { const rs = chart.addSeries(LW.LineSeries, P({color: BC_STYLE.rs, lineWidth: 1, priceLineVisible: false, lastValueVisible: true, title: "RS vs " + (M.rsB || "QQQ")}), 1); rs.setData(P(M.rs)); try { chart.panes()[1].setStretchFactor(0.22); chart.panes()[0].setStretchFactor(0.78); } catch (e) {} }
   const n = M.bars.length, span = M.iv === "W" ? 80 : M.iv === "D" ? 150 : M.iv === "30" ? 70 : 160;
   chart.timeScale().setVisibleLogicalRange(P({from: Math.max(0, n - span), to: n + 4}));
   if (bcLv) bcLevels(chart, cs, M, w, own, span);
@@ -10153,15 +10187,21 @@ document.head.insertAdjacentHTML("beforeend", `<style>
    - weekKey memoised (edited in place, block 2 — a const can't be wrapped).
    Storage: none.
    ===================================================================== */
-const SPD = {gen: 0, fpRows: null, fp: "", store: new Map()};
+const SPD = {gen: 0, fpRows: null, fp: "", fpN: 0, store: new Map()};
 const _histBuildSPD = histBuild;
 histBuild = function(...a){ SPD.gen++; return _histBuildSPD.apply(this, a); };
 // today's-bar inputs of every row (dssBars / todaySource read only these from S.rows)
+// 8 Nov 2026 (SPEED PASS 3 — speed only): the fingerprint (a ~30 kB string) is swapped for a short name that stands for it —
+// equal fingerprints always get the same name, different ones different names — so spdKey stays short: it was joined and
+// hashed again on every dssOf call (~90 ms per sweep). Which stored result a key finds is unchanged.
+const SPD_FPID = new Map();
 function spdRowsFp(){
   if (SPD.fpRows === S.rows) return SPD.fp;
   const f = v => v == null ? "" : String(v), out = [];
   for (const r of S.rows || []) out.push(r.sym + ":" + f(r.last) + "," + f(r.hi1d) + "," + f(r.lo1d) + "," + f(r.vol) + "," + f(r.op1d) + "," + f(r.cfo1d));
-  SPD.fpRows = S.rows; SPD.fp = out.join(";"); return SPD.fp;
+  const fp = out.join(";"); let id = SPD_FPID.get(fp);
+  if (id === undefined) { if (SPD_FPID.size >= 64) SPD_FPID.clear(); id = "r" + (++SPD.fpN); SPD_FPID.set(fp, id); }
+  SPD.fpRows = S.rows; SPD.fp = id; return SPD.fp;
 }
 function spdKey(){
   const ts = todaySource();
@@ -12865,11 +12905,21 @@ mapImpHTML = function(){
 function pbSelf(){
   const out = [], F = (ok, sym, what, board, mine) => out.push({ok, sym, what, board, mine});
   const ema = (a, p) => { const al = 2 / (p + 1), o = []; let e = NaN, s = 0, q = 0; for (const x of a) { if (!isFinite(e)) { s += x; q++; e = q === p ? s / p : NaN; } else e = al * x + (1 - al) * e; o.push(e); } return o; };
-  const sma = (a, p) => a.map((_, k) => { if (k < p - 1) return NaN; let s = 0; for (let u = k - p + 1; u <= k; u++) s += a[u]; return s / p; });
+  // 8 Nov 2026 (SPEED PASS 3 — speed only): four neighbouring windows are summed side by side; each window is still added up
+  // on its own from 0, first bar to last, so every average has the same bits as the one-window-at-a-time loop it replaces:
+  // const sma = (a, p) => a.map((_, k) => { if (k < p - 1) return NaN; let s = 0; for (let u = k - p + 1; u <= k; u++) s += a[u]; return s / p; });
+  const sma = (a, p) => { const n = a.length, o = new Array(n); let k = 0;
+    for (; k < n && k < p - 1; k++) o[k] = NaN;
+    for (; k + 3 < n; k += 4) { let s0 = 0, s1 = 0, s2 = 0, s3 = 0; for (let u = k - p + 1; u <= k; u++) { s0 += a[u]; s1 += a[u + 1]; s2 += a[u + 2]; s3 += a[u + 3]; } o[k] = s0 / p; o[k + 1] = s1 / p; o[k + 2] = s2 / p; o[k + 3] = s3 / p; }
+    for (; k < n; k++) { let s = 0; for (let u = k - p + 1; u <= k; u++) s += a[u]; o[k] = s / p; }
+    return o; };
   const terr = r1Terr();
   for (const r of S.stocks) {
     const b = dssBars(r.sym); if (!b || b.n < 30) continue;
-    const c = [...b.c], h = [...b.h], l = [...b.l], v = [...b.v], n = c.length;
+    // 8 Nov 2026 (SPEED PASS 3 — speed only): a plain copy loop instead of [...b.c] (spreading a Float64Array walks its
+    // iterator — ~1/6 of this self-check's time); the same plain arrays of the same numbers
+    const arr = A => { const o = new Array(A.length); for (let k = 0; k < A.length; k++) o[k] = A[k]; return o; };
+    const c = arr(b.c), h = arr(b.h), l = arr(b.l), v = arr(b.v), n = c.length;
     if (![c, h, l, v].every(a => a.every(isFinite))) continue;
     // R1, bar by bar
     const x = r1Of(r);
@@ -12887,7 +12937,7 @@ function pbSelf(){
         const ins = terr === "old" ? c[k] > E9[k] && c[k] > E21[k] : c[k] > E21[k] && k >= 5 && E21[k] > E21[k - 5];
         const pro = terr === "old" ? c[k] > E9[k] && c[k] > E21[k] && c[k] > E50[k] : ins;
         const rs = aD > 0 && (H20[k] - l[k]) / aD >= 1.5 && (l[k] <= E21[k] || l[k] <= S50[k]);
-        if (k >= 4 && [l[k - 3], l[k - 4], l[k - 1], l[k]].every(y => l[k - 2] < y)) p1 = [[l[k - 2], k - 2], ...p1].slice(0, 2);
+        if (k >= 4 && l[k - 2] < l[k - 3] && l[k - 2] < l[k - 4] && l[k - 2] < l[k - 1] && l[k - 2] < l[k]) p1 = [[l[k - 2], k - 2], ...p1].slice(0, 2);   // 8 Nov (speed): the same four tests, no array per bar
         const ref = (p1.find(([, i]) => k - i >= 3 && k - i <= 40) || [NaN])[0];
         const uar = isFinite(ref) && l[k] < ref && c[k] > ref, rg = h[k] - l[k];
         const cap = k > 0 && rg > 0 && l[k] < at(L10, k - 1) && rg >= 1.5 * RG[k - 1] && v[k] >= 1.5 * VA[k - 1] && (c[k] - l[k]) / rg >= 0.65;
@@ -12909,12 +12959,17 @@ function pbSelf(){
       const liq = r.mcap != null && r.mcap >= 1e9 && dv >= 100e6 && c[t] > 10;
       const lm = iH < t ? Math.min(...l.slice(iH + 1)) : NaN, up = c.slice(iH + 1).filter((y, j) => y > c[iH + j]).length, sud = iH < t && (h[iH] - lm) / D >= 3 && up <= 1;
       const lv = [];
+      // 8 Nov 2026 (SPEED PASS 3 — speed only, comparisons only): "is any close / low after bar p, up to the high, above /
+      // below x" is read off the highest / lowest value from p+1 to the high (worked out once, every bar is a number here —
+      // checked above) instead of copying that stretch for every p; the ±5-bar window test is a plain loop. Same answers.
+      const mxC = new Float64Array(iH + 2).fill(-Infinity), mnC = new Float64Array(iH + 2).fill(Infinity), mnL = new Float64Array(iH + 2).fill(Infinity);
+      for (let u = iH; u >= 0; u--) { mxC[u] = Math.max(c[u], mxC[u + 1]); mnC[u] = Math.min(c[u], mnC[u + 1]); mnL[u] = Math.min(l[u], mnL[u + 1]); }
+      const winOk = (p, hi) => { for (let u = p - 5; u <= p + 5; u++) if (u !== p && !(hi ? h[p] >= h[u] : l[p] <= l[u])) return false; return true; };
       for (let p = Math.max(5, t - 251); p <= iH - 5; p++) {
-        const win = [...Array(11).keys()].map(j => p - 5 + j).filter(u => u !== p);
-        if (win.every(u => h[p] >= h[u]) && c.slice(p + 1, iH + 1).some(y => y > h[p])) lv.push(h[p]);
-        if (win.every(u => l[p] <= l[u]) && !c.slice(p + 1, iH + 1).some(y => y < l[p])) lv.push(l[p]);
+        if (winOk(p, true) && mxC[p + 1] > h[p]) lv.push(h[p]);
+        if (winOk(p, false) && !(mnC[p + 1] < l[p])) lv.push(l[p]);
       }
-      for (let k = Math.max(1, t - 251); k <= iH - 5; k++) if (l[k] > h[k - 1] && !l.slice(k + 1, iH + 1).some(y => y <= h[k - 1])) lv.push(h[k - 1]);
+      for (let k = Math.max(1, t - 251); k <= iH - 5; k++) if (l[k] > h[k - 1] && !(mnL[k + 1] <= h[k - 1])) lv.push(h[k - 1]);
       const tops = []; for (const p of lv.filter(p => p < h[iH]).sort((a, b) => b - a)) if (!tops.length || tops[tops.length - 1].top - p > z) tops.push({top: p});
       const act = tops.find(q => c[t] >= q.top - z);
       let s;
@@ -13763,7 +13818,8 @@ const PAGES = {};
 function pageOn(t, draw){ PAGES[t] = draw; }
 // 31 Oct: the workspace jump list is rebuilt once here, after every card (and every "tab" hook) has drawn — the sections
 // that used to rebuild it themselves after their own card are hooks now
-renderTab = function(t){ let out; try { out = PAGES[t] ? PAGES[t]() : _renderTabHK(t); hookOK(t); } catch (e) { hookErr("page " + t, e); } hookRun("tab", t);
+// 8 Nov 2026 (SPEED PASS 3): WSI.rt counts the renderTab calls in progress, so afterTab can leave the jump list to the build below
+renderTab = function(t){ let out; WSI.rt = (WSI.rt || 0) + 1; try { try { out = PAGES[t] ? PAGES[t]() : _renderTabHK(t); hookOK(t); } catch (e) { hookErr("page " + t, e); } hookRun("tab", t); } finally { WSI.rt--; }
   if (WS && S.snap && typeof buildSecs === "function") buildSecs(t); return out; };
 </script>
 <script>
@@ -14271,7 +14327,8 @@ function TVL_SECS(C){
       {k: "shA", n: `Weakness score ${CFG.shortMin}+ of 7 (all)`, def: 0, need: H, f: () => shortList().sort((a, b) => ((!!a.sBlock.length) - (!!b.sBlock.length)) || (b.ss.n - a.ss.n) || ((a.rs ?? 99) - (b.rs ?? 99))).map(r => tvlE(r.sym, `Short watch · weakness ${r.ss.n}/7${r.sBlock.length ? " · blocked" : ""}`))}]},
     {k: "she", h: "SHORT RESEARCH ETFS", n: "Short research · ETFs", etf: 1, perm: "ETF setups short side · experiment", items: [
       {k: "sheE", n: "MAP ETF list · short", def: 1, f: tvlMapE("short")},
-      ...(typeof mppTvlFS === "function" ? mppTvlFS(true) : []),   // 7 Nov 2026: MAP's FS paper list, ETFs (MAP · FP / FS PAPER LINES) — off DS Daily
+      ...(typeof mppTvlFS === "function" ? mppTvlFS(true) : []),   // 7 Nov 2026: MAP's FS paper list, ETFs (MAP · FP / FS PAPER LINES); on DS Daily from 8 Nov
+      ...(typeof dsdFlsEtfItems === "function" ? dsdFlsEtfItems(H) : []),   // 8 Nov 2026: the early route's ETF watch (DS DAILY = THE ACTIVE PLAYBOOKS)
       {k: "sheR", n: "ETF setups · Ready (short)", def: 1, need: H, f: tvlESItems(C, "short", true)},
       {k: "sheW", n: "ETF setups · Reclaim watch (short)", def: 1, need: H, f: tvlESItems(C, "short", false)},
       {k: "sheX", n: "Their inverse wrappers", def: 0, need: H, f: tvlESWraps(C, "short")}]},
@@ -14290,7 +14347,7 @@ function TVL_SECS(C){
 const TVL_PRE = {"DS Daily": null, "Leader Pullback": ["p1", "p1e"], "First Pullback": ["fp"], "Shakeout Reclaim": ["r1"], "Floor Bounce": ["ob", "obe"], "Short research": ["sh", "she"], "Held & campaigns": ["held", "camp"], "Research pool": ["pool"]};
 function tvlPreset(name){
   const on = {}, secs = TVL_SECS({}), P = TVL_PRE[name];
-  for (const s of secs) for (const it of s.items) { if (s.screens) continue; on[it.k] = P ? (P.includes(s.k) && (it.def || s.k === "sh" || s.k === "fp" && it.pre || s.k === "pool" && it.k === "poolM") ? 1 : 0) : it.def ? 1 : 0; }
+  for (const s of secs) for (const it of s.items) { if (s.screens) continue; on[it.k] = P ? (P.includes(s.k) && (it.def || s.k === "sh" || s.k === "fp" && it.pre || s.k === "pool" && it.k === "poolM") ? 1 : 0) : typeof dsdOn === "function" ? dsdOn(s.k, it) : it.def ? 1 : 0; }   // 8 Nov 2026: DS Daily = the active playbooks (DS DAILY = THE ACTIVE PLAYBOOKS)
   return on;
 }
 function tvlSel(){
@@ -17531,6 +17588,10 @@ document.head.insertAdjacentHTML("beforeend", `<style>
    7 Nov 2026 (later, display / tracking only): script "MAP · FP / FS PAPER LINES" adds guarded in-place calls here —
    mppFpTag (card rows), mppFpMissHTML (after On deck), mppFpTrTag (tracker rows), mppTvlFP (TradingView item) — all empty
    without MAP FP lines; lists, ranks, tracker log and feed columns unchanged.
+   8 Nov 2026 (TRADING LOGIC, a list change — Notion, this page's 8 Nov callout "undercut & reclaim"): script "FIRST PULLBACK ·
+   UNDERCUT & RECLAIM" adds guarded in-place calls here — fpUcList (fpBuild: Out → the new list "W" = Undercut watch),
+   fpUcNext, fpLists' L.W, fpUcCell / fpUcKpi / fpUcCardHTML (card), fpUcPaneLine, fpUcChart, fpUcTvl, fpUcFill (log),
+   uc fields + fpUcTrTag / fpUcTally / fpUcCsvCells (tracker). Without that script every list, rank and value is as before.
    ===================================================================== */
 const FPC = {minBars: 100, brk: 40, brkLB: 50, s50N: 50, s50LB: 10, s50Flat: 0.995, wkLen: 10, legN: 63, legMin: 25, legAgoMin: 3, legAgoMax: 15,
   depthMax: 50, near: 0.5, volN: 50, rngN: 3, rngMax: 0.75, adrN: 20, rsMin: 70, liqTier: 500e6, risk: 0.6, wide: 1.0, tight: 0.25,
@@ -17653,6 +17714,7 @@ function fpBuild(r, s){
   add(11, gs != null && gs !== "Lagging", gs || "no group state", "not Lagging", "hard");
   const er = s.er; add(12, er.n != null && er.n >= S61.erMin, er.n == null ? "earnings date unknown" : `in ${er.n} session${er.n === 1 ? "" : "s"}`, "none in the next 5 sessions (as Playbook 1)", "soft");
   const L = fpListOf(ck, x.loc, main);
+  if (typeof fpUcList === "function" && fpUcList(r.sym, x, ck, L)) L.list = "W";   // 8 Nov 2026: Undercut watch instead of Out (script "FIRST PULLBACK · UNDERCUT & RECLAIM")
   const ff = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].find(n => ck[n].ok !== true) ?? null;
   const ffTxt = ff == null ? "" : ff === 7 ? `7 Location ${x.loc ? FP_LOCF[x.loc] : "no ADR"}` : ff === 4 ? `4 Stage ${stg ? stg.lab : "?"}` : ff === 5 ? `5 Leg ${fin(x.leg.pct) ? x.leg.pct.toFixed(1) + "% · " + x.leg.ago + "d" : "none"}`
     : ff === 6 ? `6 Depth ${fin(x.depth) ? x.depth.toFixed(0) + "%" : "?"}` : ff === 8 ? `8 Volume ${fin(x.volRatio) ? x.volRatio.toFixed(2) + "x" : "?"}` : ff === 9 ? `9 Range ${fin(x.rngRatio) ? x.rngRatio.toFixed(2) + " ADR" : "?"}`
@@ -17694,6 +17756,7 @@ function fpNext(f){
   if (f.list === "R") return fpTrigTxt(f, fpLive(f.r.sym));
   if (f.list === "D") return "On deck: " + (W[f.soft[0]] || "one thing missing");
   if (f.list === "N") return `Above both lines — wait for the pullback to the 9 EMA ${p2(x.e9)} or the 21 EMA ${p2(x.e21)} (±0.5 ADR)`;
+  if (f.list === "W" && typeof fpUcNext === "function") return fpUcNext(f);   // 8 Nov 2026: Undercut watch (UNDERCUT & RECLAIM script)
   return "Out — " + (f.ff ? `${f.ff}. ${FP_CK[f.ff]}: ${f.ck[f.ff].v}` : "");
 }
 // whole-file lists (filters change visibility only)
@@ -17707,13 +17770,14 @@ function fpRankR(a, b){
 }
 const fpRankRS = (a, b) => ((b.r.rs ?? -1) - (a.r.rs ?? -1)) || (a.r.sym < b.r.sym ? -1 : a.r.sym > b.r.sym ? 1 : 0);
 function fpLists(all){
-  const L = {R: [], D: [], N: [], O: []}; if (!S.snap || !S.has || !S.has.hist) return L;
+  const L = {R: [], D: [], N: [], O: []}; if (FP_L.W) L.W = [];   // 8 Nov 2026: Undercut watch, only with the UNDERCUT & RECLAIM script
+  if (!S.snap || !S.has || !S.has.hist) return L;
   for (const r of S.stocks) { if (!all && !gOK(r)) continue; const f = fpOf(r); if (f) L[f.list].push(f); }
-  L.R.sort(fpRankR); L.D.sort(fpRankRS); L.N.sort(fpRankRS); L.O.sort(fpRankRS);
+  L.R.sort(fpRankR); L.D.sort(fpRankRS); L.N.sort(fpRankRS); L.O.sort(fpRankRS); if (L.W) L.W.sort(fpRankRS);
   return L;
 }
 const fpPill = f => f ? `<span class="pill ${FP_L[f.list].c}">${FP_L[f.list].n}</span>` : "";
-const fpLocPill = f => f && f.x.loc ? `<span class="pill ${f.x.loc === "9" || f.x.loc === "21" ? "go" : f.x.loc === "ABOVE" ? "wait" : "bad"}">${esc(FP_LOC[f.x.loc])}</span>` : "—";
+const fpLocPill = f => f && f.x.loc ? `<span class="pill ${f.x.loc === "9" || f.x.loc === "21" ? "go" : f.x.loc === "ABOVE" || f.list === "W" ? "wait" : "bad"}">${esc(f.list === "W" ? "Under the 21 — undercut watch" : FP_LOC[f.x.loc])}</span>` : "—";   // 8 Nov: Undercut watch reads as watch, not out
 
 /* ---------------- Setups card ---------------- */
 function fpCardHTML(){
@@ -17725,7 +17789,7 @@ function fpCardHTML(){
   const er = f => `<td class="${f.ck[12].ok ? "" : "neg"}">${f.er.n == null ? "?" : f.er.n}</td>`;
   const row = f => { const x = f.x, r = f.r;
     return `<tr data-sym="${esc(r.sym)}"><td class="l sym">${esc(r.sym)}${typeof fpPivTag === "function" ? fpPivTag(f) : ""}${typeof mppFpTag === "function" ? mppFpTag(r.sym) : ""}${typeof lpBadge === "function" ? " " + lpBadge(r.sym) : ""}</td><td>${rsBadge(r.rs)}</td><td class="l small">${esc(r.group || "")}<br><span class="dim">${esc(r.gState || "")}</span></td>
-      <td class="l">${fpLocPill(f)}</td><td>${sg(x.d9, 2)}</td><td>${sg(x.d21, 2)}</td><td title="Leg: ${esc(f.ck[5].v)}">${fin(x.leg.pct) ? "+" + x.leg.pct.toFixed(0) + "%" : "—"}<br><span class="dim small">${x.leg.ago}d ago</span></td>
+      <td class="l">${fpLocPill(f)}${typeof fpUcCell === "function" ? fpUcCell(f) : ""}</td><td>${sg(x.d9, 2)}</td><td>${sg(x.d21, 2)}</td><td title="Leg: ${esc(f.ck[5].v)}">${fin(x.leg.pct) ? "+" + x.leg.pct.toFixed(0) + "%" : "—"}<br><span class="dim small">${x.leg.ago}d ago</span></td>
       <td title="Share of the leg given back">${fin(x.depth) ? x.depth.toFixed(0) + "%" : "—"}</td><td class="${f.ck[8].ok ? "pos" : "neg"}">${fin(x.volRatio) ? x.volRatio.toFixed(2) + "×" : "—"}</td><td class="${f.ck[9].ok ? "pos" : "neg"}">${fin(x.rngRatio) ? x.rngRatio.toFixed(2) : "—"}</td>
       <td class="l small">${f.stage ? esc(f.stage.lab) : "—"}</td>${er(f)}<td>${p2(x.leg.hi)}<br><span class="dim small">${fin(x.room) ? x.room.toFixed(1) + "R est." : ""}</span></td><td class="l small">${esc(fpNext(f))}</td></tr>`; };
   const head = `<thead><tr><th class="l">Ticker</th><th>RS</th><th class="l">Group</th><th class="l">Location</th><th title="Close vs the daily 9 EMA, in ADR">9 ADR</th><th title="Close vs the daily 21 EMA, in ADR">21 ADR</th><th title="The leg: highest close of 63 sessions over the lowest close before it · sessions since the high">Leg</th><th title="Share of the leg given back (Out over 50%)">Depth</th><th title="Pullback volume ÷ 50-day average volume (needs under 1)">Volume</th><th title="Average range of the last 3 sessions, in ADR (needs ≤ 0.75)">Range</th><th class="l">Stage</th><th title="Sessions to earnings — needs 6+">Earn.</th><th title="Leg high = first resistance · room in R (estimate)">Leg high</th><th class="l">Next action</th></tr></thead>`;
@@ -17737,9 +17801,9 @@ function fpCardHTML(){
     <div class="kpis" style="margin:8px 0"><div class="kpi card"><div class="k">Ready</div><div class="v">${n("R")}</div><div class="n">checks 1–12 pass · at the 9 first</div></div>
       <div class="kpi card"><div class="k">On deck</div><div class="v">${n("D")}</div><div class="n">one of stage 1 · volume · ranges · earnings missing</div></div>
       <div class="kpi card"><div class="k">Not yet</div><div class="v">${n("N")}</div><div class="n">more than 0.5 ADR above both lines</div></div>
-      <div class="kpi card"><div class="k">Out</div><div class="v">${n("O")}</div><div class="n" title="The first check that fails">${Object.entries(ffc).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => `${FP_CK[k]}: ${v}`).join(" · ")}</div></div></div>
+      <div class="kpi card"><div class="k">Out</div><div class="v">${n("O")}</div><div class="n" title="The first check that fails">${Object.entries(ffc).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => `${FP_CK[k]}: ${v}`).join(" · ")}</div></div>${typeof fpUcKpi === "function" ? fpUcKpi(A) : ""}</div>
     <h4 style="margin:8px 0 2px">Ready${fl}</h4>${tbl(L.R, "No name passes every First Pullback check today.")}
-    <h4 style="margin:12px 0 2px">On deck</h4>${tbl(L.D, "Nothing on deck.")}${typeof mppFpMissHTML === "function" ? mppFpMissHTML() : ""}
+    <h4 style="margin:12px 0 2px">On deck</h4>${tbl(L.D, "Nothing on deck.")}${typeof mppFpMissHTML === "function" ? mppFpMissHTML() : ""}${typeof fpUcCardHTML === "function" ? fpUcCardHTML(L, A, tbl) : ""}
     <details class="tp-fold" style="margin-top:8px"><summary>Not yet (${L.N.length})</summary><div style="padding:6px 0">${L.N.slice(0, 80).map(f => tkChip(f.r, sg(f.x.d9, 1))).join("") || `<span class="dim small">none</span>`}</div></details>
     <details class="tp-fold"><summary>Out but close — a leg or the location is there (${ro.length})</summary><div class="small" style="padding:6px 0">${ro.slice(0, 60).map(f => `<span class="tk" data-sym="${esc(f.r.sym)}">${esc(f.r.sym)}</span> <span class="dim">${esc(f.ffTxt)}</span>`).join(" · ") || "none"}</div></details>
     <details class="tp-fold"><summary>How the lists work (Notion v1.0)</summary><div class="small" style="padding:6px 0"><b>Ready</b> = checks 1–12 pass · <b>On deck</b> = exactly one of 4 Stage 1, 8 drying volume, 9 contraction or 12 earnings missing · <b>Not yet</b> = more than 0.5 ADR above both lines, everything else passes · <b>Out</b> = anything else. Checks: 1 liquidity as Playbook 1 (incl. 1b) · 2 ≥ 100 sessions, no move over 40% · 3 close over a rising or flat 50 SMA, weekly close over the 10-week · 4 Stage 2 (2A = fresh from Stage 1) · 5 a leg of 25%+ in 63 sessions, its high 3–15 sessions ago · 6 no more than half the leg given back · 7 within ±0.5 ADR of the daily 9 or 21 EMA · 8 pullback volume under the 50-day average · 9 last 3 ranges ≤ 0.75 ADR · 10 RS ≥ 70 · 11 group not Lagging · 12 no earnings in 5 sessions · 13 room to the leg high (information) · 14 the live trigger. Ready order: at the 9 → stage age EARLY / MID / LATE → $500M+ a day → RS. Paper only: never on the Daily Plan, the Entry Check lists or the Board log.</div></details>
@@ -17758,7 +17822,7 @@ function fpPaneHTML(r){
   const rows = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].map(n => s61RowHTML(f.ck[n])).join("");
   return `<div class="fpp"><div class="pbh"><b>First Pullback · ${esc(r.sym)}</b> <span class="small dim">Playbook 2 · v1.0 · paper / watch only</span><span class="spacer"></span>${fpPill(f)} ${fpLocPill(f)}</div>
     <div class="small" style="margin:4px 0"><b>Next:</b> ${esc(fpNext(f))}</div>
-    <div class="small fplive" style="margin:4px 0">${live}</div>${typeof fpPivPaneLine === "function" ? fpPivPaneLine(f) : ""}
+    <div class="small fplive" style="margin:4px 0">${live}</div>${typeof fpPivPaneLine === "function" ? fpPivPaneLine(f) : ""}${typeof fpUcPaneLine === "function" ? fpUcPaneLine(f) : ""}
     <div class="s61chk fpchk">${rows}</div>
     <div class="small dim" style="margin-top:4px">${f.list === "O" && f.ff ? `First failing check: ${f.ff}. ${esc(FP_CK[f.ff])}. ` : ""}Daily checks on the close of ${esc(f.x.to)}. Exits as Playbook 1 (⅓ at 2R or the T+3 close, stop to breakeven, runner on a daily close under the 9 EMA). Paper only — never on the Entry Check lists or the Daily Plan.</div></div>`;
 }
@@ -17786,6 +17850,7 @@ function fpChartLines(r, L, M){
   L(x.leg.hi, BC_STYLE.res, "FP leg high (first resistance)", 2); L(x.pbLow, BC_STYLE.zone, "FP pullback low", 2);
   const q = fpLive(r.sym); if (q && fin(q.hi)) { L(q.hi, BC_STYLE.trig, "FP first 30m high (trigger)", 0); L(q.lo, BC_STYLE.stop, "FP first 30m low (stop)", 0); }
   if (typeof fpPivChart === "function") fpPivChart(f, L);   // 7 Nov 2026: pivot ★ level (script "FIRST PULLBACK · PIVOT CONFLUENCE ★"; mark only)
+  if (typeof fpUcChart === "function") fpUcChart(f, L);   // 8 Nov 2026: the shelf + undercut low (script "FIRST PULLBACK · UNDERCUT & RECLAIM")
   M.pb = {k: "fp", list: f.list};
 }
 
@@ -17829,7 +17894,8 @@ function fpTvlSecs(C, H){
       {k: "fpR", n: "Ready", def: 0, pre: 1, need: H, f: items("R", "Ready")},
       {k: "fpD", n: "On deck", def: 0, pre: 1, need: H, f: items("D", "On deck")},
       {k: "fpT", n: "First Pullback tracker (every name tracked)", def: 0, f: () => fpTrackRows("all").map(o => tvlE(o.s, `First Pullback tracker · ${FP_L[o.k].n} ${o.d}`))},
-      {k: "fpN", n: "Not yet (above both lines)", def: 0, need: H, f: items("N", "Not yet")}]},
+      {k: "fpN", n: "Not yet (above both lines)", def: 0, need: H, f: items("N", "Not yet")},
+      ...(typeof fpUcTvl === "function" ? fpUcTvl(H) : [])]},   // 8 Nov 2026: Undercut watch (UNDERCUT & RECLAIM script) — on DS Daily
     {k: "fpe", h: "FIRST PULLBACK ETFS", n: "First Pullback · ETFs", etf: 1, perm: "", none: "The board runs First Pullback on stocks only — there's no ETF version to list.", items: []}];
 }
 
@@ -17893,8 +17959,8 @@ function fpDataDate(){
 function fpLogRecord(){
   const d = fpDataDate(), log = fpLogGet(); let ch = false;
   if (d) { const L = fpLists(true), day = log.d[d] || {};
-    for (const f of [...L.R, ...L.D]) { const s = f.r.sym; if (day[s]) { if (typeof fpPivFill === "function" && fpPivFill(day[s], f)) ch = true; continue; } const x = f.x;   // 7 Nov: pivot ★ fields appended (PIVOT CONFLUENCE ★ script)
-      day[s] = [f.list, x.loc, +x.close.toFixed(4), fin(x.adr) ? +x.adr.toFixed(3) : null, +x.leg.hi.toFixed(4), fin(x.pbLow) ? +x.pbLow.toFixed(4) : null, ...(typeof fpPivLog === "function" ? fpPivLog(f) : [])]; ch = true; }
+    for (const f of [...L.R, ...L.D]) { const s = f.r.sym; if (day[s]) { if (typeof fpPivFill === "function" && fpPivFill(day[s], f)) ch = true; if (typeof fpUcFill === "function" && fpUcFill(day[s], f)) ch = true; continue; } const x = f.x;   // 8 Nov: undercut fields appended after the ★ fields (UNDERCUT & RECLAIM script)   // 7 Nov: pivot ★ fields appended (PIVOT CONFLUENCE ★ script)
+      day[s] = [f.list, x.loc, +x.close.toFixed(4), fin(x.adr) ? +x.adr.toFixed(3) : null, +x.leg.hi.toFixed(4), fin(x.pbLow) ? +x.pbLow.toFixed(4) : null, ...(typeof fpPivLog === "function" ? fpPivLog(f) : [])]; if (typeof fpUcFill === "function") fpUcFill(day[s], f); ch = true; }
     if (ch) log.d[d] = day; }
   // the first 30-min candle of the session after a listing, as first seen in Live mode
   if (typeof LV !== "undefined" && LV.frame && LV.frame.phase === "rth") { const F = LV.frame;
@@ -17909,7 +17975,7 @@ function fpLogRecord(){
 function fpTrackRows(show){
   const log = fpLogGet(), dates = Object.keys(log.d).sort(), by = S.rowBySym || new Map(), first = new Map();
   for (const d of dates) for (const [s, e] of Object.entries(log.d[d] || {})) { if (!Array.isArray(e)) continue; const id = e[0] + ":" + s;
-    if (!first.has(id)) first.set(id, {k: e[0], s, d, last: d, loc: e[1], px: e[2], adr: e[3], legHi: e[4], pbLow: e[5], pv: e.length > 6 ? e.slice(6, 10) : null}); else first.get(id).last = d; }
+    if (!first.has(id)) first.set(id, {k: e[0], s, d, last: d, loc: e[1], px: e[2], adr: e[3], legHi: e[4], pbLow: e[5], pv: e.length > 6 ? e.slice(6, 10) : null, uc: e.length > 10 ? e.slice(10, 13) : null}); else first.get(id).last = d; }
   const sw = show || FPT.show;
   return [...first.values()].filter(o => FP_L[o.k] && (sw === "all" || o.k === sw)).map(o => {
     const r = by.get(o.s), unit = fin(o.px) && fin(o.adr) ? o.px * o.adr / 100 : null, now = r && fin(r.last) ? r.last : null, rg = typeof mlRange === "function" ? mlRange(o.s, o.d) : null;
@@ -17934,10 +18000,10 @@ function fpTrackHTML(){
   if (!nd) return hd + `<div class="bd"><div class="empty" style="padding:4px 0">Nothing logged yet. Each file date's Ready and On deck names are logged by themselves once the price history is loaded and the lists read a completed daily close (not during the Live session).</div></div>`;
   const resC = k => k === "win" ? "pos" : k === "loss" ? "neg" : "dim";
   return hd + `<div class="bd">
-    <div class="small" style="margin-bottom:6px"><b>Paper tally</b> (rows shown): ${T.sig} signal${T.sig === 1 ? "" : "s"} with first-candle data · ${T.trig} triggered · <b class="pos">${T.win} win${T.win === 1 ? "" : "s"}</b> · <b class="neg">${T.loss} loss${T.loss === 1 ? "" : "es"}</b> · ${T.open} open · ${T.nofill} not triggered${T.nodata ? ` · ${T.nodata} with no 30-min data` : ""}${T.pend ? ` · ${T.pend} pending` : ""} · win rate ${wr == null ? "—" : `<b class="${wr >= 40 ? "pos" : "neg"}">${wr.toFixed(0)}%</b>`} <span class="dim">(win = +1R before the stop; kill rule: after 30 paper signals, drop it under a 40% win rate or if it isn't +0.15R a trade better than Leader Pullback)</span></div>${typeof fpPivTally === "function" ? fpPivTally(rows) : ""}
+    <div class="small" style="margin-bottom:6px"><b>Paper tally</b> (rows shown): ${T.sig} signal${T.sig === 1 ? "" : "s"} with first-candle data · ${T.trig} triggered · <b class="pos">${T.win} win${T.win === 1 ? "" : "s"}</b> · <b class="neg">${T.loss} loss${T.loss === 1 ? "" : "es"}</b> · ${T.open} open · ${T.nofill} not triggered${T.nodata ? ` · ${T.nodata} with no 30-min data` : ""}${T.pend ? ` · ${T.pend} pending` : ""} · win rate ${wr == null ? "—" : `<b class="${wr >= 40 ? "pos" : "neg"}">${wr.toFixed(0)}%</b>`} <span class="dim">(win = +1R before the stop; kill rule: after 30 paper signals, drop it under a 40% win rate or if it isn't +0.15R a trade better than Leader Pullback)</span></div>${typeof fpPivTally === "function" ? fpPivTally(rows) : ""}${typeof fpUcTally === "function" ? fpUcTally(rows) : ""}
     <div class="tscroll" style="max-height:440px"><table class="mini fptr"><thead><tr><th class="l">First seen</th><th class="l">List</th><th class="l">Ticker</th><th class="l">Location</th><th>Then</th><th>ADR</th><th>Leg high</th><th>PB low</th><th>Now</th><th>Move</th><th>Move ADR</th><th>Best</th><th>Worst</th><th>Sessions</th><th class="l">List now</th><th class="l">First 30-min candle (${"next session"})</th><th class="l">Result</th></tr></thead><tbody>
     ${rows.map(o => `<tr ${o.r ? `data-sym="${esc(o.s)}"` : ""}><td class="l">${esc(o.d)}${o.last !== o.d ? `<div class="small dim">to ${esc(o.last)}</div>` : ""}</td><td class="l"><span class="pill ${FP_L[o.k].c}">${FP_L[o.k].n}</span></td><td class="l sym">${esc(o.s)}${typeof fpPivTrTag === "function" ? fpPivTrTag(o) : ""}${typeof mppFpTrTag === "function" ? mppFpTrTag(o) : ""}</td>
-      <td class="l small">${esc(FP_LOC[o.loc] || "—")}</td><td>${p2(o.px)}</td><td>${fin(o.adr) ? o.adr.toFixed(1) + "%" : "—"}</td><td>${p2(o.legHi)}</td><td>${p2(o.pbLow)}</td><td>${o.now == null ? "—" : p2(o.now)}</td>
+      <td class="l small">${esc(FP_LOC[o.loc] || "—")}${typeof fpUcTrTag === "function" ? fpUcTrTag(o) : ""}</td><td>${p2(o.px)}</td><td>${fin(o.adr) ? o.adr.toFixed(1) + "%" : "—"}</td><td>${p2(o.legHi)}</td><td>${p2(o.pbLow)}</td><td>${o.now == null ? "—" : p2(o.now)}</td>
       <td class="${o.pct == null ? "" : o.pct >= 0 ? "pos" : "neg"}">${o.pct == null ? "—" : sg(o.pct, 1) + "%"}</td><td class="${o.u == null ? "" : o.u >= 0 ? "pos" : "neg"}"><b>${fu(o.u)}</b></td><td>${fu(o.best)}</td><td>${fu(o.worst)}</td><td>${o.sess || "—"}</td>
       <td class="l">${o.f ? fpPill(o.f) : `<span class="dim small">${o.r ? "—" : "not in the file"}</span>`}</td>
       <td class="l small">${esc(o.s1)}: ${o.fc ? `${p2(o.fc[0])} / ${p2(o.fc[1])}${fin(o.rA) ? ` · 1R ${o.rA.toFixed(2)} ADR` : ""}${o.fc[3] ? ` · triggered ${esc(fpHM(Date.parse(o.fc[3])))} ET` : ""}` : `<span class="dim">${o.res.k === "pending" ? "not traded yet" : "no 30-min data (Live mode wasn't on)"}</span>`}</td>
@@ -17960,7 +18026,7 @@ function fpTrackCsvText(rows){
   const L = [FP_CSV_H.join(",")];
   for (const o of rows) L.push([o.d, o.last, FP_L[o.k].n, o.s, FP_LOCF[o.loc] || "", n4(o.px), n4(o.adr), n4(o.legHi), n4(o.pbLow), n4(o.now), o.now == null ? "" : src, n4(o.pct), n4(o.u), n4(o.best), n4(o.worst), o.sess,
     o.f ? FP_L[o.f.list].n : "", o.f && o.f.x.loc ? FP_LOCF[o.f.x.loc] : "", o.s1, o.fc ? n4(o.fc[0]) : "", o.fc ? n4(o.fc[1]) : "", o.fc ? o.fc[2] || "" : "", o.fc ? o.fc[3] || "" : "", n4(o.rA),
-    o.res.trig ? "yes" : o.res.k === "nofill" ? "no" : "", FP_RES[o.res.k], o.res.xt || "", o.r ? "yes" : "no", ...(typeof fpPivCsvCells === "function" ? fpPivCsvCells(o) : [])].map(fpCsvQ).join(","));
+    o.res.trig ? "yes" : o.res.k === "nofill" ? "no" : "", FP_RES[o.res.k], o.res.xt || "", o.r ? "yes" : "no", ...(typeof fpPivCsvCells === "function" ? fpPivCsvCells(o) : []), ...(typeof fpUcCsvCells === "function" ? fpUcCsvCells(o) : [])].map(fpCsvQ).join(","));
   return L.join("\n");
 }
 function fpTrackCsv(){
@@ -18878,6 +18944,9 @@ document.head.insertAdjacentHTML("beforeend", `<style>
    SELF-CHECK: mppSelf in SC_X — the FS feed columns for MAP's FS names + both routes' listed names: own 5-day high, own
      failed-rally ADR loop, band; Out exactly when neither route passes; the daily route's stop ADR / room from its own
      bounce-high / swing-support loops.
+   8 Nov 2026 (Eugene: "MAP should list Undercut watch names too"; MAP page FP lines = Ready, On deck, Not yet, Undercut
+   watch): mppFpMissHTML counts the board's Undercut watch as on its lists; mppScore hands each FP pick to fpUcMapRes
+   (script "FIRST PULLBACK · UNDERCUT & RECLAIM") — a pick on Undercut watch scores "not triggered" (guarded in-place calls).
    Reads: mapImp, curPlanDay / prevSess, fpLists / fpOf / fpLive / fpResult / fpLogGet, flsRun / flsOf / flsIntraday,
    LV (Live mode), dssBars, HIST. Storage NEW: adrb.mapPaper. No function overrides (override count unchanged), no page
    watcher. On trial to 21 Nov 2026 (docs/trials.md): the badges, the "not on the board's lists" lines, the Watchlist groups,
@@ -18983,7 +19052,7 @@ const mppTk = s => `<span class="tk" data-sym="${esc(s)}">${esc(s)}</span>`;
 // First Pullback: MAP's FP names that aren't Ready / On deck on the board's whole-file lists, with the board's verdict
 function mppFpMissHTML(){
   const c = mppCur(); if (!c || !c.FP.length || !pbHH()) return "";
-  const A = fpLists(true), on = new Set([...A.R, ...A.D].map(f => f.r.sym)), by = S.rowBySym || new Map(), M = c.FP.filter(x => !on.has(x.t)); if (!M.length) return "";
+  const A = fpLists(true), on = new Set([...A.R, ...A.D, ...(A.W || [])].map(f => f.r.sym)), by = S.rowBySym || new Map(), M = c.FP.filter(x => !on.has(x.t)); if (!M.length) return "";   // 8 Nov 2026: + Undercut watch (Eugene: "MAP should list Undercut watch names too"; UNDERCUT & RECLAIM script)
   return `<div class="small mppmiss"><b>MAP picked, not on the board's lists:</b> ${M.map(x => { const r = by.get(x.t); let f = null; try { f = r ? fpOf(r) : null; } catch (e) { f = null; }
     return `${mppTk(x.t)} <span class="dim">${f ? `First Pullback ${FP_L[f.list].n}${f.ffTxt ? " — " + esc(f.ffTxt) : ""}` : !r ? "not in the files" : r.etf ? "ETF — First Pullback runs on stocks only" : "not enough stored bars"}${x.now ? ` · MAP: ${esc(x.now)}` : ""}</span>`; }).join(" · ")}</div>`;
 }
@@ -19064,7 +19133,9 @@ function mppScore(kind, p, d){
   const now = jnET(), tr = kind === "FP" ? ((typeof fpLogGet === "function" ? fpLogGet().tr : null) || {}) : null;
   return (kind === "FP" ? d.FP : d.FS || []).map(x => { const b = mppBars(x.t);
     if (kind === "FP") { const fc = (d.fc && d.fc[x.t]) || tr[p + "|" + x.t] || null; let res = typeof fpResult === "function" ? fpResult(b, p, fc) : {k: "nodata"};
-      if (res.k === "pending" && !b && (now.d > p || (now.d === p && now.m >= 960))) res = {k: "nodata"}; return {x, fc, res}; }
+      if (res.k === "pending" && !b && (now.d > p || (now.d === p && now.m >= 960))) res = {k: "nodata"};
+      if (typeof fpUcMapRes === "function") res = fpUcMapRes(x, d, res);   // 8 Nov 2026: a pick on Undercut watch has no trigger → not triggered (UNDERCUT & RECLAIM script)
+      return {x, fc, res}; }
     return {x, fs: d.fs ? d.fs[x.t] || null : null, res: mppFsResult(d.fs ? d.fs[x.t] : null, b, p, now)}; });
 }
 function mppDays(win){ const today = jnET().d, all = Object.keys(mppLog().d).filter(p => p <= today).sort(); return win === "since" ? all.filter(p => p >= MSC.d1) : all.slice(-MSC.days); }
@@ -19141,4 +19212,388 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 .wlg.wlpaper{border:1px dashed var(--line-strong);box-shadow:none} .wlg.wlpaper .hd h2::after{content:" · paper — not a live MAP list";font-size:11px;font-weight:400;color:var(--ink-3)}
 .mppwhy{color:var(--ink-2)} .msc-xh td{background:var(--chip);border-top:1px dashed var(--line-strong)}
 </style>`);
+</script>
+<script>
+/* =====================================================================
+   DS DAILY = THE ACTIVE PLAYBOOKS (8 Nov 2026). DISPLAY / TRACKING ONLY — which names go into the TradingView list; no
+   rank, list, state, size, feed column or Board-log field changes.
+   Eugene, 8 Nov 2026: "Under watchlist. Tradingview lists. Update the DS daily filter to follow only the latest playbooks
+   that are active. So leader pullback. First pullback and former leader short." · on the ETF setups: "keep the ETF setups,
+   go ahead and build."
+   - The "DS Daily" preset (tvlPreset, one guarded in-place call) now ticks:
+       Held (unchanged) · Leader Pullback stocks + ETFs (unchanged defaults, ETF setups long side kept) · First Pullback:
+       MAP · First Pullback (paper), Ready, On deck, Not yet (the tracker stays off) · Short research: Short · Former
+       leader (daily route), Short · Former leader, early retest, MAP · Short (paper) · Short research ETFs: unchanged
+       defaults (MAP ETF list · short, ETF setups short side) + MAP · Short (paper) · ETFs + the new early-retest ETF item.
+     Off DS Daily: Shakeout Reclaim, Floor Bounce (stocks + ETFs) and Campaigns carried (their Shakeout Reclaim / Floor
+     Bounce campaigns). Nothing is removed: every section and item stays on the card to tick by hand, and the other presets
+     (Leader Pullback, First Pullback, Shakeout Reclaim, Floor Bounce, Short research, …) keep their own ticks.
+   - NEW item "Short · Former leader, early retest · ETFs" (sheFLe, in SHORT RESEARCH ETFS, def 0 = off unless DS Daily /
+     ticked): the ETFs on the Former leader card's early-route ETF fold (its run's early ETF list, weakest RS first). 2-week trial.
+   - A stored selection (adrb.tvlSel) is never rewritten: Eugene's saved ticks stay as they are until he presses DS Daily.
+   - 8 Nov 2026 (script "FIRST PULLBACK · UNDERCUT & RECLAIM", trading logic — Notion First Pullback page, 8 Nov callout):
+     DSD_ON also ticks fpW, First Pullback's new "Undercut watch" item, so DS Daily carries those names.
+   Storage: none new. Hook points: none (one guarded call in tvlPreset, one guarded spread in TVL_SECS' she items).
+   ===================================================================== */
+// sections DS Daily leaves off, and the items it ticks beyond their defaults
+const DSD_OFF = new Set(["r1", "r1e", "ob", "obe", "camp"]);
+const DSD_ON = new Set(["fpM", "fpR", "fpD", "fpN", "fpW", "shFL", "shFLe", "shMP", "sheMP", "sheFLe"]);
+function dsdOn(secK, it){ if (DSD_OFF.has(secK)) return 0; return DSD_ON.has(it.k) || it.def ? 1 : 0; }
+// the early route's ETF watch (the card's "ETFs — early route, tracked separately" fold)
+function dsdFlsEtfItems(H){
+  return [{k: "sheFLe", n: "Short · Former leader, early retest · ETFs", def: 0, need: H, f: () => { const R = typeof flsRun === "function" ? flsRun() : null; if (!R) return null;
+    return R.early.etf.map((o, i) => tvlE(o.r.sym, `Short · Former leader, early retest · ETF #${i + 1} · ${FLSE.look}-day resistance ${frP(o.e.d.R)} · test band ${frP(o.e.d.lo)}–${frP(o.e.d.hi)}`, o.iv && o.iv.sig ? "Green" : o.iv && o.iv.state === "testing" ? "Testing" : "Watch")); }}];
+}
+</script>
+<script>
+/* =====================================================================
+   FIRST PULLBACK · CHECKLIST LAYOUT (8 Nov 2026). DISPLAY ONLY — CSS for the First Pullback checklist rows (ticker panel
+   tab + card); no number, list, check or text changes.
+   Eugene, 8 Nov 2026 (screenshot of FISV's First Pullback tab next to its Entry Check): "The formatting for then first
+   pullback is squeeze for the first column. … if we can do a better job to wrap the text and fill up the empty space
+   similar to how the frames are used for the leader pullback checklist."
+   Cause: the shared row grid (.chk: 22px 1fr auto) sizes the value column to its text, so a long reading (check 3's
+   close / 50 SMA / weekly line) squeezed the check name to a word per line. Here, inside .fpchk only, the value column is
+   capped at 55% and wraps, right-aligned like the Entry Check readings; the name column keeps the rest. Entry Check
+   (Leader Pullback) rows keep the global .chk rule untouched.
+   ===================================================================== */
+document.head.insertAdjacentHTML("beforeend", `<style>
+.fpchk .chk{grid-template-columns:22px minmax(0,1fr) fit-content(55%)}
+.fpchk .chk>.small{text-align:right;overflow-wrap:break-word}
+.fpchk .chk>div:not(.small){min-width:0}
+</style>`);
+</script>
+<script>
+/* =====================================================================
+   CHART · RS LINE BENCHMARK (8 Nov 2026). DISPLAY ONLY — which instrument the board chart's RS pane divides by.
+   Eugene, 8 Nov 2026 (screenshot of Price history & RS line, "RS line vs QQQ"): "For the charting. Can you give the option
+   to chart against different index/ instrument other then the qqq."
+   - A picker "RS vs …" beside the chart's toggles (daily / weekly views, when the RS line is on): QQQ (default, the chart
+     as before), SPY, IWM, RSP, DIA, MDY, the sector / theme ETFs and every other ETF in the file — only instruments with
+     stored daily bars are offered. The choice is remembered per viewer (adrb.bcRsBench, new key) and used on every chart
+     (board and chart window). A choice with no stored bars falls back to QQQ and the legend says so.
+   - Never changes: the RS signals (RSNH, RS-line flags, the short watch's RS-line low, groups), which keep using the
+     Settings benchmark (CFG.bench / HIST.bSym, "RS line vs …" on the Price history card); RS ranks; lists; feeds.
+   - In place (guarded): bcModel reads bcRsSym(); the toolbar adds bcRsPickHTML(M, sh); the pane title names the
+     benchmark. The picker's change handler is bound through hook point "chart" (BOARD HOOKS). No override.
+   ===================================================================== */
+const BCRS_K = "adrb.bcRsBench", BCRS_CORE = ["QQQ", "SPY", "IWM", "RSP", "DIA", "MDY", "QQQE", "SMH", "XLK", "XLF", "XLE", "XLV", "XLI", "XLY", "XLP", "XLU", "XLB", "XLRE", "XLC"];
+const bcRsHas = s => !!(typeof HIST !== "undefined" && HIST.idx && HIST.idx.has(s));
+function bcRsWant(){ let v = null; try { v = store.get(BCRS_K, null); } catch (e) { v = null; } return typeof v === "string" && /^[A-Z0-9.\-]{1,10}$/.test(v) ? v : "QQQ"; }
+// the benchmark to draw: the stored choice when it has stored bars, else QQQ
+function bcRsSym(){ const v = bcRsWant(); return v === "QQQ" || bcRsHas(v) ? v : "QQQ"; }
+function bcRsOpts(){
+  const etf = typeof S !== "undefined" && S.etfs ? S.etfs.filter(r => !r.lev).map(r => r.sym).sort() : [];
+  return [...BCRS_CORE, ...etf].filter((v, i, a) => a.indexOf(v) === i && bcRsHas(v));
+}
+function bcRsPickHTML(M, sh){
+  if (!M || M.intra || !sh || !sh.rs) return "";
+  const want = bcRsWant(), cur = M.rsB || "QQQ", O = bcRsOpts(); if (!O.includes(cur)) O.unshift(cur);
+  const miss = want !== cur ? ` <span class="small neg" title="No stored daily bars for ${esc(want)} — load its price history or pick another">${esc(want)}: no bars, showing ${esc(cur)}</span>` : "";
+  return `<label class="bcrs small" title="The chart's RS line only (close ÷ the instrument you pick). The RS signals keep using the Settings benchmark.">RS vs <select data-bcrs>${O.map(s => `<option value="${esc(s)}"${s === cur ? " selected" : ""}>${esc(s)}</option>`).join("")}</select></label>${miss}`;
+}
+hookOn("chart", "rsBench", c => {
+  const sel = c.box && c.box.querySelector("select[data-bcrs]"); if (!sel) return;
+  sel.onchange = () => { try { store.set(BCRS_K, sel.value); } catch (e) { console.warn("RS benchmark", e); } bcMount(c.box, c.r, c.M.iv, c.w); };
+});
+document.head.insertAdjacentHTML("beforeend", `<style>.bc-tg .bcrs{display:inline-flex;align-items:center;gap:4px;margin-left:6px} .bc-tg .bcrs select{font-size:12px;padding:1px 4px}</style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   FIRST PULLBACK · UNDERCUT & RECLAIM (8 Nov 2026) — TRADING LOGIC (a list change: the new First Pullback list "Undercut
+   watch") + an information tag on every First Pullback name. PAPER / WATCH ONLY.
+   Eugene (chat, 8 Nov 2026): "How do I add that intelligence into the board to determine if there's a potential for an
+   undercut and reclaim or just a touch of the buy zone. Technically both will perform similarly it's just the zone we are
+   trying to code and recognise." · "yes keep them visible as watch, update Notion and build".
+   Rule: Notion "🧭 Playbook 2 · First Pullback — v1.0 (paper, from 7 Nov 2026)" https://app.notion.com/p/411ff58fe7ad81b98765f5d7552ae888,
+   blue callout "8 Nov 2026 — undercut & reclaim (Eugene, chat)" (page last edited 8 Nov 2026; check 7's row and the Lists
+   section name Undercut watch too). v1.0 starting numbers, not backtested — all in FPUC.
+   AS IMPLEMENTED (fpUcCalc, pure; on the same dssBars + fpCalc result the First Pullback checks use; leg high = check 5's
+   leg-high session iH; ADR = check 7's ADR x.D; EMAs = check 7's daily 9 / 21 EMA):
+     shelf (the prior low) = the most recent swing low — a daily low strictly lower than the lows of the 2 sessions on each
+       side — on a session after the leg high and at least 3 sessions before the last close (iH < p ≤ t − 3); if there is
+       none, the lowest low from the leg-high session itself up to t − 3 (iH ≤ k ≤ t − 3). Fewer than 3 sessions since the
+       leg high (no bar in that range, incl. "no pullback bars yet") = no shelf, no tag.
+     undercut = the lowest low of the last 3 sessions (t − 2 … t, today included) is at least 0.05 ADR under the shelf
+       (shelf − low ≥ 0.05 × ADR); undercut low = that lowest low. reclaimed = the last close > the shelf.
+     tag (information only — never re-ranks, never changes Ready / On deck / Not yet):
+       "Undercut & reclaim" = undercut + reclaimed · "Undercut, not reclaimed" = undercut, close ≤ the shelf ·
+       "Undercut possible" = no undercut, |shelf − 9 EMA| ≤ 0.5 ADR or |shelf − 21 EMA| ≤ 0.5 ADR, and 0 ≤ close − shelf ≤
+       0.5 ADR · "Touch" = at the 9 or at the 21 (check 7), none of the above · otherwise no tag.
+     LIST "Undercut watch" (FP_L.W; fpUcList, called in place from fpBuild): a name the First Pullback rules put on Out
+       whose location is "more than 0.5 ADR under the 21" (check 7 = UNDER) becomes Undercut watch when: tag "Undercut, not
+       reclaimed"; shelf − close ≤ 1.0 ADR; checks 1, 2, 3, 5, 6, 10, 11 pass; Stage 1 or 2 only (Eugene, 8 Nov 2026:
+       "yes, require Stage 1 or 2 for undercut watch" — fpUcStOk; Notion callout updated the same day). Checks 8, 9, 12
+       may fail. Watch only: never Ready, no trigger, never
+       logged by the tracker (it logs Ready / On deck). Next action: "watch for a close back above the shelf"; in Live mode
+       (Massive, 15 min delayed) the first COMPLETED regular-session 30-min bar of today (LV.today, the bars First Pullback's
+       first candle reads) that closes above the shelf → "reclaimed HH:MM ET" (HH:MM = that bar's close time).
+   ON SCREEN: card — the tag + shelf / undercut low under the Location pill on every row, an "Undercut watch" KPI and table
+   (after On deck), a fold explaining the tags; ticker-panel "First Pullback" tab — an undercut line (tag, shelf + how it was
+   found, undercut low, close vs the shelf; the Live reclaim when undercut); chart under Playbook 2 — "FP shelf (prior low)"
+   (pill SHELF) and, when undercut, "FP undercut low" (pill UC LO; comparison only — the stop stays the first 30-min
+   candle's low); filter "First Pullback undercut tag is" (visibility only); screen "First Pullback · Undercut watch";
+   TradingView lists item "Undercut watch" in FIRST PULLBACK (fpW, off by default, ON in DS Daily via DSD_ON).
+   TRACKER: adrb.fpLog day entries get three fields APPENDED after the four ★ fields (index 10–12; padded with null at 6–9
+   if the ★ script is gone): [tag code "UR" | "UN" | "UP" | "T" | "", shelf, undercut low (null without an undercut)].
+   Tracker rows show the tag; the paper tally gets a split line by tag (the review after 30 paper signals); tracker CSV gets
+   undercut_tag, shelf, undercut_low at the END.
+   FEED: "FP List" now also reads "Undercut watch" (the approved list change). Three columns appended at the very END of the
+   Deep Space feed (FEED_EXT): "FP Undercut" (the tag), "FP Shelf", "FP Undercut Low" (blank without an undercut).
+   MAP (Eugene, 8 Nov 2026: "MAP should list Undercut watch names too"; the MAP page's FP lines = Ready, On deck, Not yet,
+   Undercut watch, up to 5, list in the now: field): a MAP FP pick on the board's Undercut watch counts as on the board's
+   lists (in place in mppFpMissHTML) and gets the MAP picked badge on its card row like any other; the MAP scorecard scores
+   a pick on Undercut watch "not triggered" (fpUcMapRes, in place in mppScore) — on Undercut watch = MAP's now: field says
+   "Undercut watch …" or the board had it there on the close before the plan day (adrb.mapPaper day field uw, written by
+   fpUcMapRecord on hook "tab", add only). A later re-qualified listing is a new pick and scores as usual. The First Pullback
+   tracker logs Ready / On deck only, so Undercut watch picks appear there only once they re-qualify.
+   SELF-CHECK: fpUcSelf in SC_X — own EMA / ADR / leg-high / swing-low / undercut loops for the listed names, Undercut watch
+   and a sample of Out-under-the-21 names; tag, shelf and the Undercut watch list compared.
+   Storage: adrb.mapPaper day records may gain the field uw (list of tickers) — an existing key, no new key.
+   NEVER CHANGES: Ready / On deck / Not yet membership or order, any check result, the first fail, Playbook 1 (Entry Check
+   lists / sizes / ranks), the Daily Plan, the Board log, the Decision-log CSV, MAP's paste lines / import, older feed
+   columns (only the FP List value of the former Out names), the ★ pivot read. Storage NEW: none (new fields inside
+   adrb.fpLog entries; the filter lives in the existing filter set). Plugs in: guarded in-place calls in the PLAYBOOK 2 ·
+   FIRST PULLBACK script (fpBuild, fpNext, fpLists, card, panel, chart, TradingView items, log, tracker rows / tally / CSV),
+   DSD_ON (DS DAILY script), CRIT, SCREENS, FEED_EXT, SC_X, BCL_CODE. No function overrides. Twin:
+   indicators/structure/first-pullback/first-pullback.pine ("FP Undercut" / shelf line). Test: tools/board-fp-undercut-test.js.
+   ===================================================================== */
+const FPUC = {piv: 2, gap: 3, ucN: 3, ucMin: 0.05, poss: 0.5, watch: 1.0, hard: [1, 2, 3, 5, 6, 10, 11]};
+const FPUC_T = {UR: "Undercut & reclaim", UN: "Undercut, not reclaimed", UP: "Undercut possible", T: "Touch"};
+const FPUC_S = {UR: "U&R", UN: "U · not reclaimed", UP: "U possible", T: "Touch"};
+FP_L.W = {n: "Undercut watch", c: "wait"};
+// b = {c, h, l, dates, n}; x = fpCalc(b). Returns null without a leg; {shelf: NaN, tag: ""} without a shelf.
+function fpUcCalc(b, x){
+  if (!b || !x || !x.leg || !(x.leg.iH >= 0) || !(b.n >= 2)) return null;
+  const C = FPUC, {c, l} = b, t = x.t, iH = x.leg.iH, last = t - C.gap, D = x.D, P = C.piv;
+  const o = {shelf: NaN, sI: -1, sDate: "", kind: "", ucLow: NaN, ucI: -1, ucDate: "", undercut: false, reclaimed: false, tag: "", dShelf: NaN, ucDepth: NaN};
+  if (last < iH) return o;
+  for (let p = last; p > iH && p - P >= 0; p--) { let ok = isFinite(l[p]); for (let u = 1; u <= P && ok; u++) if (!(l[p] < l[p - u]) || !(l[p] < l[p + u])) ok = false; if (ok) { o.sI = p; o.kind = "swing low"; break; } }
+  if (o.sI < 0) { let k0 = -1; for (let k = iH; k <= last; k++) if (isFinite(l[k]) && (k0 < 0 || l[k] <= l[k0])) k0 = k; if (k0 < 0) return o; o.sI = k0; o.kind = "lowest low since the leg high"; }
+  const sh = l[o.sI]; o.shelf = sh; o.sDate = b.dates[o.sI];
+  let lo = Infinity, li = -1; for (let k = Math.max(0, t - C.ucN + 1); k <= t; k++) if (isFinite(l[k]) && l[k] < lo) { lo = l[k]; li = k; }
+  if (li < 0 || !(D > 0)) return o;
+  o.ucLow = lo; o.ucI = li; o.ucDate = b.dates[li]; o.ucDepth = (sh - lo) / D; o.undercut = sh - lo >= C.ucMin * D;
+  o.reclaimed = c[t] > sh; o.dShelf = (c[t] - sh) / D;
+  const poss = !o.undercut && (Math.abs(sh - x.e9) <= C.poss * D || Math.abs(sh - x.e21) <= C.poss * D) && c[t] - sh >= 0 && c[t] - sh <= C.poss * D;
+  o.tag = o.undercut ? (o.reclaimed ? "UR" : "UN") : poss ? "UP" : x.loc === "9" || x.loc === "21" ? "T" : "";
+  return o;
+}
+const FPUCB = new WeakMap();
+// one fpCalc result → its undercut read (cached on that object, so it follows every recompute)
+function fpUcOfX(sym, x){
+  if (!x) return null; if (FPUCB.has(x)) return FPUCB.get(x);
+  let v = null; try { v = fpUcCalc(dssBars(sym), x); } catch (e) { console.warn("first pullback undercut", sym, e); v = null; }
+  FPUCB.set(x, v); return v;
+}
+const fpUcOf = f => f && f.x && f.r ? fpUcOfX(f.r.sym, f.x) : null;
+// the list change (pure on the check results): Out + under the 21 + the undercut conditions → Undercut watch
+// Stage 1 or 2 only (check 4: ok = Stage 2; a soft "Stage 1…" reading = Stage 1; Stage 3 / 4 or no stage = not allowed)
+const fpUcStOk = c4 => !!c4 && (c4.ok === true || /^Stage 1/.test(String(c4.v || "")));
+function fpUcList(sym, x, ck, L){
+  if (!L || L.list !== "O" || !x || x.loc !== "UNDER" || !(x.D > 0)) return false;
+  if (!FPUC.hard.every(n => ck[n] && ck[n].ok === true)) return false;
+  if (!fpUcStOk(ck[4])) return false;   // 8 Nov 2026, Eugene: "yes, require Stage 1 or 2 for undercut watch"
+  const u = fpUcOfX(sym, x); return !!u && u.tag === "UN" && u.shelf - x.close <= FPUC.watch * x.D;
+}
+// Live (Massive, 15 min delayed): the first completed regular-session 30-min bar today that closes above the shelf
+function fpUcLive(sym, shelf){
+  if (typeof LV === "undefined" || !LV.cfg || !LV.cfg.on || !LV.frame || LV.frame.phase !== "rth" || !LV.frame.dataMs || !fin(shelf)) return null;
+  const F = LV.frame, T = LV.today && LV.today.get(sym);
+  if (!T || T.d !== F.date || !T.bars || !T.bars.length) return {none: true};
+  const upTo = Math.min(F.dataMs, fin(T.asOf) ? T.asOf : F.dataMs); let n = 0;
+  for (const q of T.bars) { const m = etMin(q.t); if (m < 570 || m >= 960 || q.t + 18e5 > upTo) continue; n++; if (fin(q.c) && q.c > shelf) return {rec: true, at: q.t + 18e5, c: q.c, n}; }
+  return {rec: false, n};
+}
+function fpUcLiveTxt(q, shelf){
+  if (!q) return "";
+  if (q.none) return "no 30-min bars for this name in Live mode";
+  if (q.rec) return `reclaimed ${fpHM(q.at)} ET (30-min close ${p2(q.c)} over the shelf ${p2(shelf)}; Massive, 15 min delayed)`;
+  return q.n ? "no 30-min close back above the shelf yet (Massive, 15 min delayed)" : "no completed 30-min bar yet (Massive, 15 min delayed)";
+}
+function fpUcNext(f){
+  const u = fpUcOf(f); if (!u) return "Undercut watch — watch for a close back above the shelf";
+  const q = fpUcLive(f.r.sym, u.shelf);
+  return `Undercut watch — watch for a close back above the shelf ${p2(u.shelf)} (undercut low ${p2(u.ucLow)} · watch only, no trigger)${q ? " · " + fpUcLiveTxt(q, u.shelf) : ""}`;
+}
+const fpUcTip = u => `${FPUC_T[u.tag]} — shelf (prior low) ${p2(u.shelf)}, the ${u.kind} on ${u.sDate}${u.undercut ? ` · undercut low ${p2(u.ucLow)} (${u.ucDepth.toFixed(2)} ADR under the shelf, ${u.ucDate})` : ""} · close ${sgA(u.dShelf)} ADR from the shelf. Information only — never changes the list; the stop stays the first 30-min candle's low.`;
+function fpUcCell(f){
+  const u = fpUcOf(f); if (!u || !u.tag) return "";
+  return `<br><span class="fpuc fpuc-${u.tag}" title="${esc(fpUcTip(u))}">${esc(FPUC_T[u.tag])}</span><br><span class="dim small">shelf ${p2(u.shelf)}${u.undercut ? ` · low ${p2(u.ucLow)}` : ""}</span>`;
+}
+function fpUcKpi(A){ return `<div class="kpi card"><div class="k">Undercut watch</div><div class="v">${(A.W || []).length}</div><div class="n">under the 21 after undercutting the shelf, not reclaimed — watch only</div></div>`; }
+function fpUcCardHTML(L, A, tbl){
+  const W = L.W || [], nA = (A.W || []).length, cnt = {}; for (const k of ["R", "D", "N"]) for (const f of A[k]) { const u = fpUcOf(f); const t = u && u.tag ? u.tag : "-"; cnt[t] = (cnt[t] || 0) + 1; }
+  return `<h4 style="margin:12px 0 2px">Undercut watch <span class="small dim">(watch only — never Ready, no trigger${W.length < nA ? ` · filters on: ${W.length} shown of ${nA}` : ""})</span></h4>${tbl(W, "No name on Undercut watch.")}
+    <details class="tp-fold"><summary>Undercut &amp; reclaim tags (Notion, 8 Nov 2026) — Ready / On deck / Not yet: ${["UR", "UN", "UP", "T"].map(k => `${FPUC_S[k]} ${cnt[k] || 0}`).join(" · ")}${cnt["-"] ? ` · no tag ${cnt["-"]}` : ""}</summary><div class="small" style="padding:6px 0"><b>Shelf</b> = the prior low: the most recent swing low (a daily low lower than the 2 sessions on each side) after the leg high and at least 3 sessions before the last close; if none, the lowest low from the leg high to 3 sessions before the last close. <b>Undercut</b> = a low in the last 3 sessions at least 0.05 ADR under the shelf (undercut low = the lowest of those lows); <b>reclaimed</b> = the last close above the shelf. Tags: <b>Undercut &amp; reclaim</b> · <b>Undercut, not reclaimed</b> · <b>Undercut possible</b> (no undercut, the shelf within 0.5 ADR of the 9 or 21 EMA and the close 0–0.5 ADR above it) · <b>Touch</b> (at the 9 or 21, none of the above). Information only: the tag never changes Ready / On deck / Not yet; the undercut low is shown for comparison — the stop stays the first 30-min candle's low. <b>Undercut watch</b> = more than 0.5 ADR under the 21 (otherwise Out), tag Undercut, not reclaimed, the close no more than 1.0 ADR under the shelf, checks 1, 2, 3, 5, 6, 10, 11 passing. Next: a close back above the shelf; back inside the zone it re-qualifies as usual. The tracker records the tag; after 30 paper signals the tags' win rates are compared.</div></details>`;
+}
+function fpUcPaneLine(f){
+  const u = fpUcOf(f); let t;
+  if (!u) t = `<b>Undercut read</b>: — (no leg)`;
+  else if (!fin(u.shelf)) t = `<b>Undercut read</b>: no shelf yet — fewer than 3 sessions since the leg high.`;
+  else if (!fin(u.ucLow)) t = `<b>Undercut read</b>: shelf ${p2(u.shelf)} (${esc(u.kind)}, ${esc(u.sDate)}) — no ADR.`;
+  else {
+    const q = u.undercut ? fpUcLive(f.r.sym, u.shelf) : null;
+    t = `<b>Undercut read</b>: ${u.tag ? `<b class="fpuc fpuc-${u.tag}">${esc(FPUC_T[u.tag])}</b>` : "no tag"} · shelf (prior low) <b>${p2(u.shelf)}</b> (the ${esc(u.kind)}, ${esc(u.sDate)}) · ${u.undercut ? `undercut low <b>${p2(u.ucLow)}</b> (${u.ucDepth.toFixed(2)} ADR under the shelf, ${esc(u.ucDate)})` : `lowest low of the last 3 sessions ${p2(u.ucLow)} (${sgA(-u.ucDepth)} ADR from the shelf; an undercut needs 0.05 under)`} · close ${sgA(u.dShelf)} ADR from the shelf.${f.list === "W" ? " <b>Undercut watch</b> — watch for a close back above the shelf (watch only, no trigger)." : ""}${q ? ` <b>Live:</b> ${esc(fpUcLiveTxt(q, u.shelf))}.` : ""} <span class="dim">Information only — the stop stays the first 30-min candle's low.</span>`;
+  }
+  return `<div class="small fpucl" style="margin:4px 0">${t}</div>`;
+}
+BCL_CODE.push([/^FP shelf/, "fpshelf", "SHELF"], [/^FP undercut low/, "fpucl", "UC LO"]);
+function fpUcChart(f, L){ const u = fpUcOf(f); if (!u || !fin(u.shelf)) return;
+  L(u.shelf, BC_STYLE.entry, "FP shelf (prior low)", 2);
+  if (u.undercut && fin(u.ucLow)) L(u.ucLow, BC_STYLE.lod, "FP undercut low (comparison only — the stop stays the 30-min low)", 1); }
+function fpUcTvl(H){
+  return [{k: "fpW", n: "Undercut watch (under the 21, undercut the shelf — watch only)", def: 0, need: H, f: () => { if (!pbHH()) return null; const L = fpLists(true);
+    return (L.W || []).map(f => { const u = fpUcOf(f); return tvlE(f.r.sym, `First Pullback · Undercut watch · shelf ${u ? p2(u.shelf) : "—"} · undercut low ${u ? p2(u.ucLow) : "—"}`, "Undercut watch"); }); }}];
+}
+
+/* ---------------- tracker: three fields appended to an adrb.fpLog day entry (index 10–12) ---------------- */
+const fpUcLog = f => { const u = fpUcOf(f); return u ? [u.tag || "", fin(u.shelf) ? +u.shelf.toFixed(4) : null, u.undercut && fin(u.ucLow) ? +u.ucLow.toFixed(4) : null] : ["", null, null]; };
+function fpUcFill(e, f){ if (!Array.isArray(e) || e.length < 6 || e.length > 10) return false; while (e.length < 10) e.push(null); e.push(...fpUcLog(f)); return true; }
+function fpUcTrTag(o){ const v = o && o.uc; if (!v || !FPUC_T[v[0]]) return "";
+  return ` <span class="fpuc fpuc-${v[0]}" title="${esc(`when first listed: ${FPUC_T[v[0]]} · shelf ${p2(v[1])}${fin(v[2]) ? ` · undercut low ${p2(v[2])}` : ""} — information only`)}">${esc(FPUC_S[v[0]])}</span>`; }
+function fpUcTally(rows){
+  const part = (n, R) => { const T = fpTally(R), wr = T.win + T.loss ? T.win / (T.win + T.loss) * 100 : null; return `${n}: <b>${T.sig}</b>, win rate ${wr == null ? "—" : `<b>${wr.toFixed(0)}%</b>`}`; };
+  const by = k => rows.filter(o => o.uc && (o.uc[0] || "") === k), un = rows.filter(o => !o.uc).length;
+  return `<div class="small fpuct" style="margin:-2px 0 6px" title="Signals = rows with first-candle data; win rate = wins ÷ (wins + losses), +1R before the stop. After 30 paper signals the tags' win rates are compared; if they show no difference the tag is removed (Notion, 8 Nov 2026).">By undercut tag — ${["UR", "UN", "UP", "T"].map(k => part(FPUC_T[k], by(k))).join(" · ")} · ${part("no tag", by(""))}${un ? ` <span class="dim">· ${un} row${un === 1 ? "" : "s"} logged before the tag was recorded</span>` : ""}</div>`;
+}
+const FP_UC_CSV_H = ["undercut_tag", "shelf", "undercut_low"];
+FP_CSV_H.push(...FP_UC_CSV_H);
+function fpUcCsvCells(o){ const v = o && o.uc, n4 = x => x == null || !fin(x) ? "" : +x.toFixed(4); return v ? [FPUC_T[v[0]] || "", n4(v[1]), n4(v[2])] : ["", "", ""]; }
+
+/* ---------------- MAP's FP picks on Undercut watch (Eugene, 8 Nov 2026: "MAP should list Undercut watch names too") ---------------- */
+// A MAP FP pick is "on Undercut watch" for plan day p when MAP's now: field says so ("now: Undercut watch · shelf 52.40") or
+// the board had it on Undercut watch on the completed close before p (adrb.mapPaper day record field uw, written once per
+// name by fpUcMapRecord — add only). Watch only, no trigger → the MAP scorecard scores it "not triggered" (pending until
+// the session is in the bars, as every row).
+const fpUcMapW = (x, d) => !!x && (/^\s*undercut watch/i.test(x.now || "") || (Array.isArray(d && d.uw) && d.uw.includes(x.t)));
+function fpUcMapRes(x, d, res){ if (!fpUcMapW(x, d) || !res || res.k === "pending") return res; return {k: "nofill", uw: true}; }
+function fpUcMapRecord(){
+  if (typeof mppLog !== "function" || typeof mppLogSet !== "function" || !pbHH()) return false;
+  const dd = fpDataDate(); if (!dd) return false;
+  const p = nextSess(dd), log = mppLog(), d = log.d[p]; if (!d || !Array.isArray(d.FP) || !d.FP.length) return false;
+  const L = fpLists(true), W = new Set((L.W || []).map(f => f.r.sym)), old = Array.isArray(d.uw) ? d.uw : [], add = d.FP.map(x => x.t).filter(s => W.has(s) && !old.includes(s));
+  if (!add.length) return false; d.uw = [...old, ...add]; mppLogSet(log); return true;
+}
+hookOn("tab", "fpUndercutMap", () => { if (!S.snap || !S.has || !S.has.hist) return; try { fpUcMapRecord(); } catch (e) { console.warn("first pullback undercut (MAP picks)", e); } });
+
+/* ---------------- filter criterion (visibility only) + screen ---------------- */
+for (const c of [
+  {k: "fpUc", cat: "Playbooks", l: "First Pullback undercut tag is", type: "multi", p: ["UR"], need: HH, opts: () => Object.entries(FPUC_T), t: (r, p) => { const f = fpOf(r); if (!f) return null; const u = fpUcOf(f); return u ? p.includes(u.tag) : null; }}
+]) { CRIT.push(c); CRIT_BY[c.k] = c; }
+for (const sc of [
+  {k: "fpW", t: "First Pullback · Undercut watch (watch only)", d: "More than 0.5 ADR under the daily 21 EMA after a low at least 0.05 ADR under the shelf (the prior low of the pullback), close still at or under the shelf and no more than 1.0 ADR below it; liquidity, data, trend, the leg, depth, RS and group pass. Watch for a close back above the shelf — never a trigger.", need: ["hist"], f: r => { const f = fpOf(r); return !!f && f.list === "W"; }}
+]) { SCREENS.push(sc); SC_CAT[sc.k] = "Playbook 2 · First Pullback"; }
+
+/* ---------------- Deep Space feed: three columns at the very end ---------------- */
+const FP_UC_FEED_H = ["FP Undercut", "FP Shelf", "FP Undercut Low"];
+FEED_EXT.push({h: FP_UC_FEED_H, cells: o => { const r = o && o.r; if (!r || r.etf) return null; const f = fpOf(r); if (!f) return null; const u = fpUcOf(f), n = v => fin(v) ? +v.toFixed(4) : "";
+  return u ? [FPUC_T[u.tag] || "", n(u.shelf), u.undercut ? n(u.ucLow) : ""] : ["", "", ""]; }});
+
+/* ---------------- self-check: a separate short recompute (tag, shelf, Undercut watch) ---------------- */
+function fpUcSelf(){
+  const out = []; if (!S.snap || !S.has || !S.has.hist || !HIST.nD) return out;
+  const A = fpLists(true), pick = [...A.R.slice(0, 30), ...A.D.slice(0, 30), ...A.N.slice(0, 15), ...(A.W || []).slice(0, 30), ...A.O.filter(f => f.x.loc === "UNDER" && f.x.legOk).slice(0, 20)];
+  for (const f of pick) {
+    const b = dssBars(f.r.sym); if (!b || b.n < 63) continue;
+    const c = [...b.c], h = [...b.h], l = [...b.l], n = c.length, t = n - 1;
+    if (![c, h, l].every(a => a.slice(Math.max(0, t - 70)).every(isFinite))) continue;
+    const ema = p => { const al = 2 / (p + 1); let e = NaN, s = 0; for (let k = 0; k < n; k++) { if (k < p) { s += c[k]; if (k === p - 1) e = s / p; } else e = al * c[k] + (1 - al) * e; } return e; };
+    let D = 0; for (let k = t - 19; k <= t; k++) D += (h[k] - l[k]) / c[k]; D = D / 20 * c[t];
+    const e9 = ema(9), e21 = ema(21), d9 = (c[t] - e9) / D, d21 = (c[t] - e21) / D;
+    const loc = d21 < -0.5 ? "UNDER" : Math.abs(d9) <= 0.5 ? "9" : Math.abs(d21) <= 0.5 ? "21" : d9 > 0.5 && d21 > 0.5 ? "ABOVE" : "BETWEEN";
+    let iH = t - 62; for (let k = t - 62; k <= t; k++) if (c[k] >= c[iH]) iH = k;
+    let sh = NaN; for (let p = t - 3; p > iH; p--) if ([1, 2].every(u => l[p] < l[p - u] && l[p] < l[p + u])) { sh = l[p]; break; }
+    if (!isFinite(sh) && t - 3 >= iH) sh = Math.min(...l.slice(iH, t - 2));
+    const lo = Math.min(l[t], l[t - 1], l[t - 2]), uc = isFinite(sh) && sh - lo >= 0.05 * D;
+    const tag = !isFinite(sh) ? "" : uc ? (c[t] > sh ? "UR" : "UN") : (Math.abs(sh - e9) <= 0.5 * D || Math.abs(sh - e21) <= 0.5 * D) && c[t] >= sh && c[t] - sh <= 0.5 * D ? "UP" : loc === "9" || loc === "21" ? "T" : "";
+    const w = (f.list === "O" || f.list === "W") && loc === "UNDER" && tag === "UN" && sh - c[t] <= D && [1, 2, 3, 5, 6, 10, 11].every(k => f.ck[k].ok === true) && fpUcStOk(f.ck[4]);
+    const u = fpUcOf(f);
+    out.push({sym: f.r.sym, what: "First Pullback undercut tag + shelf", ok: !!u && (u.tag || "") === tag && (isFinite(sh) ? Math.abs(u.shelf - sh) <= 1e-6 * Math.max(1, sh) : !fin(u.shelf)), board: u ? `${u.tag || "—"} ${p2(u.shelf)}` : "—", mine: `${tag || "—"} ${isFinite(sh) ? sh.toFixed(2) : "—"}`});
+    out.push({sym: f.r.sym, what: "First Pullback Undercut watch", ok: (f.list === "W") === w, board: FP_L[f.list].n, mine: w ? "Undercut watch" : "not Undercut watch"});
+  }
+  return out;
+}
+if (typeof SC_X !== "undefined") SC_X.push(fpUcSelf);
+document.head.insertAdjacentHTML("beforeend", `<style>
+.fpuc{font-size:11px;font-weight:600;padding:0 4px;border-radius:3px;background:var(--chip);color:var(--ink-2);white-space:nowrap;cursor:help}
+.fpuc-UR{color:var(--up)} .fpuc-UN{color:var(--down)} .fpuc-UP{color:#ff9800}
+.fpucl{padding:3px 6px;border-left:3px solid #7e57c2;background:var(--chip)} .fpuct{color:var(--ink-2)}
+</style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   SPEED PASS 3 (8 Nov 2026). SPEED / STRUCTURE ONLY — every number, list, state, text and file the board produces is the
+   same: the same code works on the same inputs, and every sum is added up in the same order as before (the regression
+   test shows 0 diffs; selfCheck() and pbSelf() stay byte-identical — tools/board-speed-test.js).
+   Eugene, 8 Nov 2026: "optimise overall code as well for the board" → "speed optimisation and tidy up. Don't remove dead
+   features." (This pass is the speed part; nothing is removed.)
+   What it touches (helpers only; no rule, list, check, size, feed column, Board-log field or storage key changes):
+   - PZ.sma (simple moving average): the window-validity test ("is any bar in the window not a number?") is read off a
+     running count of bad bars instead of re-testing every bar of every window, and four neighbouring windows are added up
+     side by side. Each window is still summed on its own, first bar to last, starting from 0 — the same additions in the
+     same order, so the same bits. Arrays that are not Float64Array, or odd periods, take the old code unchanged.
+   - PZ.hl (highest / lowest): the same monotonic queue, its scratch index list is reused instead of made per call.
+   - dssBars (one symbol's daily bars): built once per stored-history state + today's bar + split list (the speed-pass
+     key spdKey, plus a check of the symbol's and the benchmark's today's-bar fields) and each caller gets its own fresh
+     copy of the arrays, so no caller can change another's bars. ~7,000 calls per sweep of the pages built the same
+     arrays again each time.
+   - In place elsewhere (dated comments there): addDays / isWkday / nextSess / prevSess remembered per date (pure);
+     etMin / etParts make their New York clock formatter once; spdKey carries a short name for the rows fingerprint
+     instead of the 30 kB string; the Training page's own records don't count as a "setting changed" for the self-check
+     reuse; the jump list is built once per page switch instead of twice; pbSelf's checks without arithmetic changes
+     (window tests, "any later close above") are written as plain loops — its sums are untouched.
+   Never changes: any trading rule, the feed / Decision-log CSV headers, storage keys, URL keys, the self-check's lines.
+   Storage: none. Hooks: none (no new function overrides; no MutationObserver).
+   ===================================================================== */
+const SP3 = {q: new Int32Array(512), bad: new Int32Array(512), bars: {key: null, map: new Map()}, stats: {barsHit: 0, barsMiss: 0}};
+const sp3Buf = (k, n) => { if (SP3[k].length < n) SP3[k] = new Int32Array(Math.max(n, SP3[k].length * 2)); return SP3[k]; };
+// the original PZ.sma, kept word for word for inputs the fast path doesn't take
+const sp3SmaOld = (a, p) => { const n = a.length, o = new Float64Array(n).fill(NaN); for (let t = p - 1; t < n; t++) { let s = 0, ok = true; for (let k = t - p + 1; k <= t; k++) { const x = a[k]; if (!isFinite(x)) { ok = false; break; } s += x; } if (ok) o[t] = s / p; } return o; };
+function sp3SmaCalc(a, p){
+  const n = a.length, o = new Float64Array(n).fill(NaN), bad = sp3Buf("bad", n + 1);
+  bad[0] = 0; for (let k = 0; k < n; k++) bad[k + 1] = bad[k] + (isFinite(a[k]) ? 0 : 1);
+  let t = p - 1;
+  for (; t + 3 < n; t += 4) {   // windows t … t+3, each summed from 0, its own first bar to its last
+    let s0 = 0, s1 = 0, s2 = 0, s3 = 0;
+    for (let k = t - p + 1; k <= t; k++) { s0 += a[k]; s1 += a[k + 1]; s2 += a[k + 2]; s3 += a[k + 3]; }
+    if (bad[t + 1] === bad[t + 1 - p]) o[t] = s0 / p;
+    if (bad[t + 2] === bad[t + 2 - p]) o[t + 1] = s1 / p;
+    if (bad[t + 3] === bad[t + 3 - p]) o[t + 2] = s2 / p;
+    if (bad[t + 4] === bad[t + 4 - p]) o[t + 3] = s3 / p;
+  }
+  for (; t < n; t++) { if (bad[t + 1] !== bad[t + 1 - p]) continue; let s = 0; for (let k = t - p + 1; k <= t; k++) s += a[k]; o[t] = s / p; }
+  return o;
+}
+PZ.sma = function(a, p){ return a instanceof Float64Array && p >= 1 && p === Math.floor(p) && p <= a.length ? sp3SmaCalc(a, p) : sp3SmaOld(a, p); };
+PZ.hl = function(a, p, mx){
+  const n = a.length, o = new Float64Array(n).fill(NaN); if (!(p >= 1)) return o;
+  const q = sp3Buf("q", n); let h = 0, t = 0;
+  for (let k = 0; k < n; k++) {
+    const x = a[k];
+    if (isFinite(x)) { while (t > h && (mx ? a[q[t - 1]] <= x : a[q[t - 1]] >= x)) t--; q[t++] = k; }
+    while (t > h && q[h] <= k - p) h++;
+    if (k >= p - 1) o[k] = t > h ? a[q[h]] : NaN;
+  }
+  return o;
+};
+// ---- dssBars: one build per state, a fresh copy for every caller
+// the today's-bar fields dssBars / todaySource read from a row (the symbol's and the benchmark's)
+const sp3RowSig = s => { const r = S.rowBySym && S.rowBySym.get(s); return r ? [r, r.last, r.hi1d, r.lo1d, r.vol, r.op1d, r.cfo1d] : null; };
+const sp3SigSame = (a, b) => a === b || (!!a && !!b && a.length === b.length && a.every((x, i) => Object.is(x, b[i])));
+function sp3BarsCopy(m){
+  return {...m, c: m.c.slice(), o: m.o.slice(), h: m.h.slice(), l: m.l.slice(), v: m.v.slice(), bc: m.bc.slice(), bi: m.bi.slice(), bcAll: m.bcAll.slice(), dates: m.dates.slice()};
+}
+function sp3BarsGet(sym, build){
+  if (!HIST.nD || !HIST.idx || typeof spdKey !== "function") return build(sym);
+  const key = spdKey(), B = SP3.bars;
+  if (B.key !== key || B.sb !== (typeof SB !== "undefined" ? SB.splits : null) || B.ts !== todaySource) { B.key = key; B.sb = typeof SB !== "undefined" ? SB.splits : null; B.ts = todaySource; B.map = new Map(); }
+  const sig = [sp3RowSig(sym), sp3RowSig(DSSC.bench), DSSC.bench], e = B.map.get(sym);
+  let m;
+  if (e && sp3SigSame(e.sig[0], sig[0]) && sp3SigSame(e.sig[1], sig[1]) && e.sig[2] === sig[2]) { m = e.m; SP3.stats.barsHit++; }
+  else { m = build(sym); B.map.set(sym, {m, sig}); SP3.stats.barsMiss++; }
+  return m ? sp3BarsCopy(m) : m;
+}
 </script>
