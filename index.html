@@ -12619,7 +12619,7 @@ function pbChipPaint(){
   c.innerHTML = `<span class="lbl">Playbook</span>` + pbSegHTML("pbSw");
 }
 function pbDefaultGF(k){
-  const p = k === "fp" ? GF_PRESETS["Playbook 2 · First Pullback"] : k === 2 ? GF_PRESETS["Playbook 2 · Shakeout Reclaim"] : k === 3 ? GF_PRESETS["Playbook 3 · Floor Bounce"] : null;
+  const p = typeof PB_PRESET !== "undefined" && PB_PRESET[k] ? GF_PRESETS[PB_PRESET[k]] || null : k === "fls" ? GF_PRESETS["Playbook S · Former Leader Short"] || null : k === "fp" ? GF_PRESETS["Playbook 2 · First Pullback"] : k === 2 ? GF_PRESETS["Playbook 2 · Shakeout Reclaim"] : k === 3 ? GF_PRESETS["Playbook 3 · Floor Bounce"] : null;
   return {...structuredClone(GF_DEF), on: true, gates: {...GF_DEF.gates, ...((p && p.gates) || {})}, crit: structuredClone((p && p.crit) || {})};
 }
 function pbSet(k){
@@ -20483,4 +20483,79 @@ function popLayoutSet(l){
   else if (POP.sym) { POP.chartSym = null; popChart(POP.sym, true); }
 }
 hookOn("popWin", "layout", d => popLayoutPaint(d));
+</script>
+<script>
+/* =====================================================================
+   FORMER LEADER SHORT · FILTER PRESET (9 Nov 2026). DISPLAY ONLY — which names the filter bar shows; never a check, a
+   list, a rank, a state, a size, the Former Leader Short card, an export or a feed value.
+   Eugene, 9 Nov 2026: "under former leader short playbook. there is no preset for the filters for this one. can you build
+   one and save it under presets for selection."
+   Rules: Notion "🩳 Short · Former leader, lower high — v1.0 (paper, from 7 Nov 2026)" (page last edited 8 Nov 2026) with its
+   7 Nov rebuild callout (two routes; Context only gate by default; weak group as context). The filter bar can't express
+   most of those checks (former leader, falling 50 SMA, bounce stage, stop / room, the 5-day test band), and a hand-rolled
+   approximation would hide names the card lists (the early route may fire above the 50 SMA). So the preset reads the
+   card's own result instead of re-deriving it:
+   - NEW filter criterion (category "Playbooks") "Former Leader Short list is" (flsList), options:
+       early  = passes the Early failed retest checks (stocks and ETFs — flsRun().by.get(sym).e.pass)
+       daily  = passes the Daily failed rally checklist (v1, checks 2–10 — .x.pass)
+       near   = Daily failed rally near miss (exactly one of checks 2–10 fails — .x.fails.length === 1)
+     Each only while the lists are open (run.open — always in Context only; in Legacy hard gate, closed = nothing passes,
+     as the card). Needs the stored price history (pbHH), like the card. flsRun is computed on the whole file and never
+     reads the filter bar, so there is no loop.
+   - NEW built-in preset "Playbook S · Former Leader Short" = flsList on, early + daily (every name passing either route,
+     not only the card's top 3). No dollar-volume / price gates: Notion's own liquidity check (tradeable liquidity not OUT)
+     and earnings check are already inside both routes.
+   - It is also the first-visit filter set for the S playbook (pbDefaultGF, one guarded in-place read in PLAYBOOKS 2 + 3) —
+     only when adrb.pbGF has no "fls" set yet; a saved set is never overwritten. Pick it from Presets to load it.
+   The cards on the S page (former leader card, short watch, inverse ETFs) still ignore the filter bar, as before (Notion:
+   the list is the whole file). The preset narrows every other view (Stocks, Map, Today, Screens, charts) to the short's
+   names. Storage: none new (built-in presets aren't stored). Hooks: none. Test: tools/board-fls-preset-test.js.
+   ===================================================================== */
+const FLSF_OPT = [["early", "Early failed retest — passing"], ["daily", "Daily failed rally — passing"], ["near", "Daily failed rally — near miss (one check off)"]];
+function flsfOf(r, p){
+  const R = typeof flsRun === "function" ? flsRun() : null; if (!R) return null;
+  if (!R.open) return false;
+  const o = R.by.get(r.sym); if (!o) return false;
+  return (p.includes("early") && !!(o.e && o.e.pass)) || (p.includes("daily") && !!(o.x && o.x.pass)) || (p.includes("near") && !!(o.x && !o.x.pass && o.x.fails.length === 1));
+}
+{ const c = {k: "flsList", cat: "Playbooks", l: "Former Leader Short list is", type: "multi", p: ["early", "daily"], need: () => typeof pbHH === "function" && pbHH(), opts: () => FLSF_OPT, t: (r, p) => flsfOf(r, p || [])};
+  CRIT.push(c); CRIT_BY[c.k] = c; }
+GF_PRESETS["Playbook S · Former Leader Short"] = {crit: {flsList: {on: 1, p: ["early", "daily"]}}};
+</script>
+<script>
+/* =====================================================================
+   PLAYBOOK FILTER PRESETS (9 Nov 2026). DISPLAY ONLY — which names the filter bar shows; never a check, a list rule, a
+   rank, a state, a size, an export or a feed value.
+   Eugene, 9 Nov 2026, on Claude's list of gaps in the presets ("1 First Pullback's preset only sets the minimums … 2 Leader
+   Pullback: Entry Check view isn't the starting set … 3 Shakeout Reclaim and Floor Bounce still labelled Playbook 2 / 3"):
+   "yes do 1 to 3".
+   1 "Playbook 2 · First Pullback" keeps its minimums ($100M a day, market cap ≥ $1B, price ≥ $10) and now also narrows to
+     the First Pullback lists — Ready, On deck, Undercut watch and Not yet (fpList R / D / W / N; Notion "Playbook 2 · First
+     Pullback — v1.0" + its 8 Nov undercut callout): every name except Out. Not yet is in because the First Pullback card
+     follows the filter bar and its Not yet fold would otherwise go empty; with the preset on, the card's "Out but close"
+     fold is empty (tick Out on the same filter to see it). fpOf is worked out per row and never reads the filter bar, so
+     there is no loop.
+   2 "Entry Check view (rules v6.1)" is renamed "Playbook 1 · Leader Pullback (Entry Check view)" — same content (Spec 6.1
+     check 1 + RS ≥ 75, the only parts the filter bar can express; every other check stays with Entry Check, so the lists
+     show what MAP may list) — and becomes Playbook 1's first-visit filter set. It can't narrow to the Entry Check lists
+     themselves: those lists are built from the names the filter bar shows, so a list filter would feed on itself.
+   3 "Playbook 2 · Shakeout Reclaim" → "Research · Shakeout Reclaim (R1)" and "Playbook 3 · Floor Bounce" → "Research ·
+     Floor Bounce (OB)" (off the switch since 7 Nov; "Playbook 2" clashed with First Pullback). Same content.
+   Order in Presets → Built in: the general presets, then Playbook 1, 2, S, then the two Research presets.
+   First-visit sets: PB_PRESET (read by pbDefaultGF, one guarded in-place read in PLAYBOOKS 2 + 3) — only when adrb.pbGF has
+   no set saved for that playbook; saved sets and the user's own presets (adrb.gfPresets) are never touched. Built-in
+   presets aren't stored, so the renames lose nothing. Storage: none new. Hooks: none.
+   Test: tools/board-pb-presets-test.js.
+   ===================================================================== */
+const PB_PRESET = {1: "Playbook 1 · Leader Pullback (Entry Check view)", fp: "Playbook 2 · First Pullback", fls: "Playbook S · Former Leader Short", 2: "Research · Shakeout Reclaim (R1)", 3: "Research · Floor Bounce (OB)"};
+{
+  const P = GF_PRESETS, take = k => { const v = P[k]; delete P[k]; return v; };
+  const ec = take("Entry Check view (rules v6.1)"), fp = take("Playbook 2 · First Pullback"), fls = take("Playbook S · Former Leader Short"),
+        r1 = take("Playbook 2 · Shakeout Reclaim"), ob = take("Playbook 3 · Floor Bounce");
+  if (ec) P[PB_PRESET[1]] = ec;
+  if (fp) P[PB_PRESET.fp] = {...fp, crit: {...(fp.crit || {}), fpList: {on: 1, p: ["R", "D", "W", "N"]}}};
+  if (fls) P[PB_PRESET.fls] = fls;
+  if (r1) P[PB_PRESET[2]] = r1;
+  if (ob) P[PB_PRESET[3]] = ob;
+}
 </script>
