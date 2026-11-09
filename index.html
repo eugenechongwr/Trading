@@ -1368,7 +1368,7 @@ for (const m of ["setItem", "removeItem", "clear"]) { const f = Storage.prototyp
 window.addEventListener("storage", () => { store._c.clear(); store._g++; });
 // Hook points (BOARD HOOKS script, 28 Oct; moved up here 31 Oct so every section can use them — the installers that call
 // hookRun stay in BOARD HOOKS). Hooks run in the order they were added (= file order), each in its own try/catch.
-const HOOK = {panel: [], tab: [], chart: [], map: [], panelBuild: [], all: [], flags: [], snap: [], tabBefore: [], drawerBlocks: [], drawerShown: [], hist: [], settings: [], cols: [], s61Card: [], watchPage: [], envLine: []};   // 7 Nov 2026: "map" = MAP import (phase "parse" | "apply" | "html"; called in place in mapParse / mapApply / mapImpHTML — MAP · FP / FS PAPER LINES)
+const HOOK = {panel: [], tab: [], chart: [], map: [], panelBuild: [], all: [], flags: [], snap: [], tabBefore: [], drawerBlocks: [], drawerShown: [], hist: [], settings: [], cols: [], s61Card: [], watchPage: [], envLine: [], popWin: []};   // 7 Nov 2026: "map" = MAP import (phase "parse" | "apply" | "html"; called in place in mapParse / mapApply / mapImpHTML — MAP · FP / FS PAPER LINES); 9 Nov 2026: "popWin" (d, view) = the chart window after every data write (end of popAfter, hookRun) — CHART WINDOW LAYOUT + DATA ONLY
 // 8 Nov 2026 (TIDY-UP, structure only): in-place points that replace chains of function wrappers, run with hookEach (below):
 //   "panelBuild" (r, want) — steps of the ticker panel build, at the end of tpBuild (were 6 tpBuild wrappers)
 //   "all" (phase "before" | "after") — around the redraw in renderAll (were 8 renderAll wrappers)
@@ -8705,7 +8705,8 @@ function popWire(w){
   if (typeof tv1Wire === "function") tv1Wire(d);   // 8 Nov 2026 (TRADINGVIEW IN ONE TAB, display only): its button reuses the one tab
 }
 function popOpen(sym){
-  const feats = "popup=yes,width=1280,height=960", reach = x => { try { void x.document.body; return true; } catch (e) { return false; } };
+  // 9 Nov 2026 (CHART WINDOW LAYOUT + DATA ONLY, display only): a fresh window set to "Data only" opens narrower
+  const feats = typeof popDataOnly === "function" && popDataOnly() ? "popup=yes,width=720,height=960" : "popup=yes,width=1280,height=960", reach = x => { try { void x.document.body; return true; } catch (e) { return false; } };
   let name = store.get("adrb.popName", "dsbChart") || "dsbChart", w = null; try { w = window.open("", name, feats); } catch (e) {}
   // a board opened as a local file gets a new "null" origin on every load, so the window it opened before can't be
   // reached any more: close it and open a fresh one (on https — GitHub Pages — the window re-links by itself)
@@ -8771,7 +8772,7 @@ function popShow(sym){
   const L = WSI.list || [], i = L.indexOf(sym);
   d.getElementById("pPrev").disabled = !(i > 0); d.getElementById("pNext").disabled = !(i >= 0 && i < L.length - 1);
   d.getElementById("pPos").textContent = i >= 0 && L.length > 1 ? `${i + 1} / ${L.length}` : "";
-  popChart(sym);
+  if (!(typeof popDataOnly === "function" && popDataOnly())) popChart(sym);   // 9 Nov 2026 (CHART WINDOW LAYOUT + DATA ONLY): "Data only" never loads the chart
   const h = popGrab(sym); if (h != null) d.getElementById("pData").innerHTML = h;
 }
 function popStep(k){ const L = WSI.list || [], i = L.indexOf(POP.sym), n = L[i + k]; if (i >= 0 && n) openDrawer(n); }
@@ -13142,6 +13143,7 @@ function popAfter(){
   panes.forEach(p => p.classList.toggle("on", p.dataset.p === want));
   const f = pd.querySelector(".pnums"); if (f) f.ontoggle = () => store.set("adrb.popNums", f.open);
   pgMark();
+  hookRun("popWin", d, v);   // 9 Nov 2026: hook point (BOARD HOOKS registry) — CHART WINDOW LAYOUT + DATA ONLY
 }
 function popRefresh(){ if (!popLive() || !POP.sym) return; const h = popGrab(POP.sym); if (h != null) POP.w.document.getElementById("pData").innerHTML = h; popAfter(); }
 const _popWirePG = popWire;
@@ -20402,4 +20404,83 @@ function lsSettingsWire(){
   on("lvFlash", e => { LV.cfg.flash = !!e.target.checked; saveLiveCfg(); });
 }
 setInterval(() => { const e = $("lsStat"); if (e && $("settings").classList.contains("open")) e.innerHTML = lsStatusHTML(); }, 2000);
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   CHART WINDOW LAYOUT + DATA ONLY (9 Nov 2026). DISPLAY ONLY — no number, list, check, state, zone, stop, size, feed,
+   Decision-log or MAP-import change. Only the separate chart window's layout and whether it shows its chart.
+   Eugene, 9 Nov 2026: "when i open a separate chartwindow. under panel tabs, they disappear or the margins cant be seen
+   unless i zoom out to 75% or less. at 100%, it goes missing. the scroll bars also eat into the data panel so i cant read
+   some of the text at the side. is it possible to pop out chart window but instead of chart and the data panel. only have
+   the data panel open? Panel tabs/ one page/ summary still as options. optimise the UI please."
+   Why the tabs vanished: #pTabs (overflow-x:auto) is a flex item of the #pSide column, so its automatic minimum height
+   is 0 and a tall #pData squeezed it to a sliver (35 px at 1700 px wide → 9 px at 900 px). And #pData, #pSide and .pbody
+   each scrolled, so up to three scroll bars sat on the data's right edge.
+   Fix (CSS injected into the window as #plCss, every rule under #popRoot so it wins over POP_CSS / PG_CSS):
+   - The tab row never shrinks and wraps onto a second line instead of scrolling sideways — every tab always shows.
+   - One scroll bar: window ≥ 1000 px wide with the chart = two columns, only the data column scrolls; narrower, or Data
+     only = the whole page scrolls (chart on top at 58% of the height) with the tab row stuck to the top.
+   - The numbers grid, the Market · Sector · Group · Stock strip and the RS boxes wrap to the column instead of running
+     past its edge; long words break rather than overflow.
+   - "Chart + data · Data only" switch in the window's top bar (localStorage NEW adrb.popLayout = "both" default |
+     "data"). Data only hides the chart and never loads it (base popShow skips popChart; switching on clears a chart
+     already there, switching back draws it); the 5m · 30m · Daily · Weekly buttons hide with it; a fresh window opens
+     720 px wide instead of 1280 (popOpen). Panel tabs · One page · Summary work the same in both.
+   Plugs in through the "popWin" hook point (end of popAfter, BOARD HOOKS registry). No function reassigned.
+   Never changes: the window's copied content (popGrab / popTakeFull / popTakeSum), the board's own panel and chart,
+   rows, feeds, logs, snapshots. Not on the phone edition (no chart window there). Test: tools/board-popwin-test.js.
+   On trial (docs/trials.md): the Data only switch. The layout fix is a fix, not a feature.
+   ===================================================================== */
+const popDataOnly = () => store.get("adrb.popLayout", "both") === "data";
+const POPL_CSS = `#popRoot .pbar{gap:6px 8px;padding:6px 10px}
+#popRoot .pbar #pDesc{flex:0 1 auto;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#popRoot #pwLay button,#popRoot #pwView button{white-space:nowrap}
+#popRoot .pbody{scrollbar-width:thin;scrollbar-gutter:stable}
+#popRoot #pSide{min-width:0;overflow:visible;gap:4px}
+#popRoot #pTabs{flex:none;flex-wrap:wrap;overflow:visible;row-gap:0;margin:0 0 4px;top:-10px;padding-top:4px;background:var(--page)}
+#popRoot #pTabs button{padding:6px 10px}
+#popRoot #pData{flex:none;min-width:0;overflow:visible;overflow-wrap:break-word}
+#popRoot #pData .kv{grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr))}
+#popRoot #pData .kv > div{min-width:0} #popRoot #pData .kv > div > :last-child{min-width:0;text-align:right}
+#popRoot #pData .tp-ctx .cx{flex:1 1 120px}
+#popRoot #pData .tp-ctx .cx b,#popRoot #pData .tp-ctx .cx small{white-space:normal}
+#popRoot #pData .rsbars{grid-template-columns:repeat(auto-fit,minmax(44px,1fr))}
+#popRoot #pData img,#popRoot #pData table{max-width:100%}
+#popRoot .pbody{display:block}
+#popRoot #pTvBox{height:58vh;min-height:300px;margin-bottom:10px}
+@media (min-width:1000px){
+  #popRoot:not(.pdonly) .pbody{display:grid;grid-template-columns:minmax(0,1fr) clamp(400px,40vw,620px);grid-template-rows:minmax(0,1fr);overflow:hidden}
+  #popRoot:not(.pdonly) #pTvBox{height:auto;margin:0}
+  #popRoot:not(.pdonly) #pTabs{top:0;padding-top:0}
+  #popRoot:not(.pdonly) #pSide{overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-gutter:stable;padding-right:2px}
+}
+#popRoot.pdonly #pTvBox,#popRoot.pdonly #pInt{display:none}
+#popRoot.pdonly #pSide{max-width:1100px;margin:0 auto}`;
+function popLayoutPaint(d){
+  const root = d.getElementById("popRoot"); if (!root) return;
+  if (!d.getElementById("plCss")) { const st = d.createElement("style"); st.id = "plCss"; st.textContent = POPL_CSS; d.head.appendChild(st); }
+  else if (d.head.lastElementChild !== d.getElementById("plCss")) d.head.appendChild(d.getElementById("plCss"));   // stays last (wins ties)
+  if (!d.getElementById("pwLay")) d.getElementById("pInt").insertAdjacentHTML("beforebegin", `<span class="seg" id="pwLay" title="Chart + data = the chart beside its numbers. Data only = no chart, just the ticker panel's data (the chart isn't loaded)."><button data-l="both">Chart + data</button><button data-l="data">Data only</button></span>`);
+  const on = popDataOnly();
+  root.classList.toggle("pdonly", on);
+  d.querySelectorAll("#pwLay button").forEach(b => b.classList.toggle("on", (b.dataset.l === "data") === on));
+  d.getElementById("pwLay").onclick = e => { const b = e.target.closest("[data-l]"); if (b) popLayoutSet(b.dataset.l); };
+}
+// stop and clear the window's chart (TradingView or board chart): pending loads see a new token and give up
+function popChartOff(d){
+  const box = d.getElementById("pTvBox"); if (!box) return;
+  box._bcTok = -1; box._tvTok = (box._tvTok || 0) + 1; box._ehc = null;
+  if (BC.pop) { try { BC.pop.remove(); } catch (e) {} BC.pop = null; }
+  if (typeof LS !== "undefined" && LS.ch) delete LS.ch.pop;
+  box.innerHTML = ""; POP.chartSym = null;
+}
+function popLayoutSet(l){
+  store.set("adrb.popLayout", l === "data" ? "data" : "both");
+  if (!popLive()) return;
+  const d = POP.w.document; popLayoutPaint(d);
+  if (popDataOnly()) popChartOff(d);
+  else if (POP.sym) { POP.chartSym = null; popChart(POP.sym, true); }
+}
+hookOn("popWin", "layout", d => popLayoutPaint(d));
 </script>
