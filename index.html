@@ -19640,12 +19640,26 @@ function sp3BarsGet(sym, build){
    Settings → TradingView: "Open TradingView links in one reused tab" (on by default) — off = a new tab per click, as before.
    Never changes: tvURL / the link addresses, any trading number. Storage NEW: adrb.tvOneTab (true | false; default true).
    Hooks: "settings" (one row). In place: popWire calls tv1Wire(d) (typeof-guarded) so the chart window's button follows it.
+   9 Nov 2026 (display only) — Eugene, 8 Nov: "this isnt working, it keeps opening a new tab" → "yes, build the extension".
+   TradingView's pages cut the link back to the page that opened them (tested: a page sending Cross-Origin-Opener-Policy
+   gets a new tab on every click, whatever the board does), so the reliable route is a small Chrome helper,
+   tools/chrome-tv-one-tab (not part of the board). It marks the board page (data-dsb-tv-ext="1"), takes plain chart-link
+   clicks on the page itself and loads them into one TradingView tab — the one it used last, else any open TradingView
+   chart tab, else a new one. The board's part: tv1Ext(); tv1Open hands chart-window clicks to the helper with
+   window.postMessage({type: "dsb-tv-open", url}) (Chrome doesn't run the helper inside the chart window); the Settings row
+   says whether the helper was found. The helper respects the same switch (adrb.tvOneTab).
    ===================================================================== */
 const TV1 = {name: "dsbTradingView", key: "adrb.tvOneTab"};
 // the phone edition keeps the old behaviour (a tap hands the link to the phone, which may open the TradingView app)
 const tv1On = () => { if (document.documentElement.classList.contains("mob")) return false; let v = true; try { v = store.get(TV1.key, true); } catch (e) { v = true; } return v !== false; };
+const tv1Ext = () => { try { return document.documentElement.dataset.dsbTvExt === "1"; } catch (e) { return false; } };
 const tv1Link = a => !!(a && a.href && /^https:\/\/(www\.)?tradingview\.com\/chart\b/i.test(a.href));
 function tv1Open(url, win){
+  // 9 Nov 2026 (display only): with the Chrome helper installed (tools/chrome-tv-one-tab — it marks the page with
+  // data-dsb-tv-ext) the helper opens the link in its one TradingView tab. TradingView cuts the link back to the page that
+  // opened it, so the board alone can't reuse the tab (Eugene, 8 Nov: "it keeps opening a new tab"). Clicks on the board
+  // page reach the helper directly; this hand-off is for the chart window, where Chrome doesn't run the helper.
+  if (tv1Ext()) { try { window.postMessage({type: "dsb-tv-open", url}, "*"); return true; } catch (e) {} }
   const W = win || window; let w = null;
   try { w = W.open(url, TV1.name); } catch (e) { w = null; }
   if (!w) return false;
@@ -19668,7 +19682,7 @@ function tv1Wire(doc){
 tv1Wire(document);
 hookOn("settings", "tvOneTab", () => {
   const sel = document.querySelector('#settings select[data-s="tvInterval"]'), row = sel && sel.closest(".row"); if (!row) return;
-  row.insertAdjacentHTML("afterend", `<div class="row"><div>Open TradingView links in one reused tab<div class="d">On: every "Open in TradingView" click loads the ticker into the same browser tab (the first click opens it). Off: a new tab per click.</div></div><div><input type="checkbox" id="tv1Sw" ${tv1On() ? "checked" : ""}></div></div>`);
+  row.insertAdjacentHTML("afterend", `<div class="row"><div>Open TradingView links in one reused tab<div class="d">On: every "Open in TradingView" click loads the ticker into the same Chrome tab. Needs the Deep Space TradingView helper in Chrome (TradingView blocks this for web pages) — ${tv1Ext() ? "<b>helper found</b>" : "<b>helper not found</b>: install tools/chrome-tv-one-tab (see its README)"}. Off: a new tab per click.</div></div><div><input type="checkbox" id="tv1Sw" ${tv1On() ? "checked" : ""}></div></div>`);
   $("tv1Sw").onchange = e => { try { store.set(TV1.key, !!e.target.checked); } catch (x) {} };
 });
 </script>
