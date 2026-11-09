@@ -4028,7 +4028,10 @@ async function liveRefresh(){
     if (HIST.nD) { (async () => { if (HIST.dates[HIST.nD - 1] < lastDoneSession()) await histUpdate(false, true); if (phase === "rth") await histLive(true); })(); }
     // 3 · 30-min bars (regular session only)
     if (phase === "rth" && LV.cfg.bars !== "off") {
-      const bs = barSyms(); LV.barsWanted = bs.length; LV.barsFail = 0;
+      const bsAll = barSyms(); LV.barsWanted = bsAll.length; LV.barsFail = 0;
+      // 9 Nov 2026 LIVE STREAM: names the stream fully covers skip their bar calls; polling at 1–2 min fetches today's bars
+      // only after a new 30-min bar or every 5 min (5 / 15 / 30 min: every refresh, as before)
+      const bs = typeof lsBarPick === "function" ? lsBarPick(bsAll, date, dataMs) : bsAll;
       const needHist = bs.filter(s => { const h = LV.hist.get(s); return !h || h.d !== date; });
       const total = needHist.length + bs.length; let done = 0;
       const tick = () => { done++; LV.prog = {done, total}; if (done % 25 === 0 || done === total) liveUI(); };
@@ -4051,6 +4054,7 @@ async function liveRefresh(){
         finally { tick(); }
       });
       LV.prog = null; liveApply(false);
+      if (typeof lsAfterRest === "function") lsAfterRest();   // 9 Nov 2026 LIVE STREAM: re-apply the stream on top of the fresh REST data
     }
   } catch (e) {
     LV.err = (e && e.msg) || "live update failed";
@@ -4064,7 +4068,9 @@ async function liveRefresh(){
 // refresh times line up with the clock: every 5 / 15 min, or :15 and :45 for 30 min (when a 30-min bar
 // has just closed and cleared the 15-minute delay), 40 seconds past to let the bar land
 function nextSlot(){
-  const ev = LV.cfg.every, per = ev * 60e3, ph = ev === 30 ? 15 * 60e3 : 0, now = Date.now();
+  // 9 Nov 2026 LIVE STREAM: while streaming, this REST refresh is the 30-min full check (the stream recomputes in between);
+  // the :15 / :45 offset waits out the 15-minute delay, so a real-time (Advanced) key refreshes at :00 / :30
+  const ev = typeof lsHealthy === "function" && lsHealthy() ? 30 : LV.cfg.every, per = ev * 60e3, ph = ev === 30 && LV.cfg.feed !== "rt" ? 15 * 60e3 : 0, now = Date.now();
   return Math.floor((now - ph) / per) * per + per + ph + 40e3;
 }
 function inHours(ms = Date.now()){ const wd = NYW.format(new Date(ms)), m = etMin(ms); return wd !== "Sat" && wd !== "Sun" && m >= 4 * 60 + 15 && m <= 16 * 60 + 25; }
@@ -4112,36 +4118,39 @@ function liveUI(){
   else if (!F) html = `<span class="ldot"></span>Live · waiting for data`;
   else if (!inHours()) html = `<span class="ldot"></span>Live · market closed · showing ${esc(F.date)} to ${t} ET`;
   else html = `<span class="ldot"></span>Live${F.phase === "pm" ? " premarket" : ""} · data to <b>${t} ET</b>${nx ? ` · next ${nx}` : ""}`;
+  if (typeof lsChipTxt === "function" && !LV.busy && newsKey()) html += lsChipTxt();   // 9 Nov 2026 LIVE STREAM
   chip.className = cls; chip.innerHTML = html;
-  chip.title = "Massive Stocks Starter data is 15 minutes behind the market. " + (LV.lastOk ? `Last fetched ${new Date(LV.lastOk).toLocaleTimeString()} (your clock).` : "") + " Auto-refresh runs 04:15–16:25 New York time on weekdays.";
+  chip.title = (LV.cfg.feed === "rt" ? "Massive Stocks Advanced data is real-time. " : "Massive Stocks Starter data is 15 minutes behind the market. ") + (LV.lastOk ? `Last fetched ${new Date(LV.lastOk).toLocaleTimeString()} (your clock).` : "") + " Auto-refresh runs 04:15–16:25 New York time on weekdays.";
 }
 function liveDataHTML(){
   if (!LV.cfg.on || !LV.stats || !LV.frame) return "";
   const s = LV.stats, F = LV.frame;
   const chk = s.chk.length >= 5 ? `<br>Check against your CSV (${s.chk.length} names where the CSV and Massive cover the same session): price differs by a median ${median(s.chk.map(x => x.p)).toFixed(2)}%, 30-min 21 EMA by a median ${median(s.chk.map(x => x.e)).toFixed(3)} ADR.` : "";
-  return `<div class="note" style="margin-top:10px"><span class="flag good">Live</span> <b>Massive · ${F.phase === "pm" ? "premarket" : "regular session"} · data to ${hhmm(etMin(F.dataMs - 1) + 1)} ET on ${esc(F.date)}</b> (15-minute delayed)<br>
+  return `<div class="note" style="margin-top:10px"><span class="flag good">Live</span> <b>Massive · ${F.phase === "pm" ? "premarket" : "regular session"} · data to ${hhmm(etMin(F.dataMs - 1) + 1)} ET on ${esc(F.date)}</b> (${typeof lvDelayTxt === "function" ? lvDelayTxt() : "15 min delayed"})${typeof lsStatusHTML === "function" ? ` · ${lsStatusHTML().split("<br>")[0]}` : ""}<br>
     ${s.n.toLocaleString()} names priced${s.miss ? ` · <b>${s.miss} not found on Massive</b> — kept at their CSV values, so their ranks are stale` : ""}${s.noPrice ? ` · ${s.noPrice} with no trade yet today (CSV values kept)` : ""}.<br>
     Your CSV rows: ${s.same} from today's session (averages updated exactly), ${s.prev + s.prevQ} from the last session (rolled forward one day)${s.old ? `, <b>${s.old} older than that — load a fresh export</b>; their averages are approximate` : ""}.
     ${F.phase === "rth" ? `<br>50 SMA rolled to today: ${s.smaRolled + s.same}${s.smaFrozen ? ` · left at the CSV value: ${s.smaFrozen}` : ""}. 30-min bars (30-min 9/21 EMA, trigger bar, reclaim check): ${s.bars} of ${s.barsWanted} names${s.barsFail ? ` · ${s.barsFail} calls failed` : ""}${LV.cfg.bars === "off" ? " (turned off in Settings)" : ""}. Names without bars have no 30-min values and an estimated at-time volume.` : `<br>Premarket: ${s.pmOk} names have a premarket print. Daily averages stay at yesterday's close until 9:30.`}${chk}</div>`;
 }
 function liveSettingsHTML(row){
   return `<h4>Live data (Massive)</h4>
-    <div class="small" style="margin-bottom:6px">Uses the same Massive key as News. Stocks Starter covers ETFs too — they trade as stocks. Data is 15 minutes behind the market.</div>
+    <div class="small" style="margin-bottom:6px">Uses the same Massive key as News. Stocks Starter covers ETFs too — they trade as stocks. ${LV.cfg.feed === "rt" ? "Advanced data is real-time." : "Data is 15 minutes behind the market."}</div>
     ${row("Data source", `<span class="seg" id="lvSeg"><button data-lv="0" class="${LV.cfg.on ? "" : "on"}">Frozen CSV</button><button data-lv="1" class="${LV.cfg.on ? "on" : ""}">Live · Massive</button></span>`, "Remembered in this browser")}
-    ${row("Refresh every", `<select id="lvEvery">${[5, 15, 30].map(v => `<option value="${v}" ${LV.cfg.every === v ? "selected" : ""}>${v} min</option>`).join("")}</select>`, "Lined up with the clock. 30 min refreshes at :15 and :45 — just after each 30-min bar clears the delay.")}
+    ${row("Board recompute every", `<select id="lvEvery">${(typeof LS_EVERY !== "undefined" ? LS_EVERY : [5, 15, 30]).map(v => `<option value="${v}" ${LV.cfg.every === v ? "selected" : ""}>${v} min</option>`).join("")}</select>`, "States, zones, lists and ranks, lined up with the clock. Streaming: no extra Massive calls, and a full check against Massive's snapshot still runs every 30 min (:15 / :45 delayed, :00 / :30 real-time). Polling: one round of Massive calls each time; 30 min = :15 and :45 on the delayed feed.")}
+    ${typeof lsSettingsRows === "function" ? lsSettingsRows(row) : ""}
     ${row("30-min bars for", `<select id="lvBars"><option value="liquid" ${LV.cfg.bars === "liquid" ? "selected" : ""}>Liquid stocks, ETFs and your lists</option><option value="lists" ${LV.cfg.bars === "lists" ? "selected" : ""}>ETFs and your lists only (reclaim card goes blank)</option><option value="all" ${LV.cfg.bars === "all" ? "selected" : ""}>Every name</option><option value="off" ${LV.cfg.bars === "off" ? "selected" : ""}>Off</option></select>`, "One call per name each refresh. Feeds the 30-min 21 EMA trigger, the trigger bar and the reclaim check.")}
     <div style="display:flex;gap:8px;margin:4px 0 8px"><button class="btn sm" id="lvRun">Refresh now</button><span class="small" id="lvMsg">${LV.err ? "Last error: " + esc(LV.err) : LV.lastOk ? "Last update " + new Date(LV.lastOk).toLocaleTimeString() : ""}</span></div>`;
 }
 function liveSettingsWire(){
   const sg = $("lvSeg"); if (!sg) return;
   sg.onclick = e => { const b = e.target.closest("button[data-lv]"); if (!b) return; liveSet(b.dataset.lv === "1"); sg.querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); };
-  $("lvEvery").onchange = e => { LV.cfg.every = +e.target.value || 15; saveLiveCfg(); LV.next = nextSlot(); liveUI(); };
+  $("lvEvery").onchange = e => { LV.cfg.every = +e.target.value || 15; saveLiveCfg(); LV.next = nextSlot(); if (typeof LS !== "undefined") LS.nextCommit = lsNextCommit(); liveUI(); };
+  if (typeof lsSettingsWire === "function") lsSettingsWire();   // 9 Nov 2026 LIVE STREAM
   $("lvBars").onchange = e => { LV.cfg.bars = e.target.value; saveLiveCfg(); if (LV.cfg.on) liveRefresh(); };
   $("lvRun").onclick = () => { if (!LV.cfg.on) liveSet(true); else liveRefresh(); };
 }
 function liveFoot(){
   if (!(S.snap && S.snap.live)) return " This is a snapshot — it's only as current as the CSV.";
-  return ` <b>Live mode.</b> Price, open, high, low, VWAP (true volume-weighted, from Massive), volume, relative volume and the 30-min bars are Massive data, 15 minutes behind the market. Daily 9/21 EMAs and the 10/20/50/200 SMAs are rolled forward from the CSV to today's price. Sector, market cap base, ADR%, average volume, earnings dates and the breadth file still come from your CSVs — load fresh exports each morning.`;
+  return ` <b>Live mode.</b> Price, open, high, low, VWAP (true volume-weighted, from Massive), volume, relative volume and the 30-min bars are Massive data, ${LV.cfg.feed === "rt" ? "real-time" : "15 minutes behind the market"}. Daily 9/21 EMAs and the 10/20/50/200 SMAs are rolled forward from the CSV to today's price. Sector, market cap base, ADR%, average volume, earnings dates and the breadth file still come from your CSVs — load fresh exports each morning.`;
 }
 liveUI();
 </script>
@@ -20335,4 +20344,477 @@ function flsChartLines(r, L){
     if (pbCur() !== "fls" && typeof bcRemount === "function") setTimeout(() => { try { bcRemount(); } catch (x) { console.warn("chart redraw", x); } }, 0);
   });
 }
+</script>
+<style>
+/* LIVE STREAM (9 Nov 2026) — price-cell flash (two names per colour so a second change restarts the fade) */
+@keyframes lsUpA{from{background:rgba(8,153,129,.30)}to{background:transparent}}
+@keyframes lsUpB{from{background:rgba(8,153,129,.30)}to{background:transparent}}
+@keyframes lsDnA{from{background:rgba(242,54,69,.28)}to{background:transparent}}
+@keyframes lsDnB{from{background:rgba(242,54,69,.28)}to{background:transparent}}
+td.lsUa{animation:lsUpA .9s ease-out}td.lsUb{animation:lsUpB .9s ease-out}
+td.lsDa{animation:lsDnA .9s ease-out}td.lsDb{animation:lsDnB .9s ease-out}
+.lsst{font-weight:600}.lsst.ok{color:var(--pos,#089981)}.lsst.warn{color:var(--neg,#f23645)}
+@media (prefers-reduced-motion: reduce){td.lsUa,td.lsUb,td.lsDa,td.lsDb{animation:none}}
+</style>
+<script>
+"use strict";
+/* =====================================================================
+   LIVE STREAM (9 Nov 2026). DATA PLUMBING + DISPLAY ONLY — no trading rule, threshold, check, state, list, zone, stop or
+   sizing rule changes. The board's numbers are still made by the LIVE MODE maths (liveRow / barsCalc / computeAll) untouched;
+   this section only changes WHEN fresh Massive data reaches them and how prices tick on screen in between.
+   Eugene, 9 Nov 2026: "I am going to get a massive advanced subscription, but before i start that, i need you to redo the
+   coding for the board so it has the ability to update live while still not lagging due to the constant price updates.
+   determine how to make the page work in a reliable and efficient manner like how all the charting platforms,
+   Deepvue/tradingview/tc2000 can have live datafeed refreshing constantly while still not having any lag. set the ability
+   to put how frequently the refreshes land. the current functionality is already useful in having different sections update."
+   How (the charting-platform pattern — data, maths and paint run on separate clocks):
+   1 · STREAM. One Massive WebSocket (wss://delayed.massive.com/stocks on Starter / Developer, wss://socket.massive.com/stocks
+       on Advanced; the polygon.io twins as fallback hosts), held in a background Worker built from this file (no new file, no
+       new host) so parsing never blocks the page. Every name once a minute (AM.*), plus every second (A.<sym>) for MAP's
+       focus + held lists, the ticker in the panel / chart window and the rows on screen (≤ LS_PER_MAX). The worker keeps
+       the latest price, today's regular-session high / low / close, Massive's day volume (av) and VWAP (a), the latest
+       minute bar, and builds each name's regular-session 30-minute bars from the minute bars (checked 9 Nov against
+       Massive's own 30-minute aggregates, AAPL + NVDA 6 Nov 2026: o / h / l / c / v identical on every bar).
+   2 · PRICES ON SCREEN (Settings → "Prices on screen every", default 2 s). The worker hands over only the names that
+       changed; one animation-frame paint patches, for rows actually on screen, the price-type cells: Last, Chg %, Day,
+       From open, Above LOD, Close range, vs VWAP, Day range (Table columns, through each column's own formatter on an
+       overlay row lsRow — the computeAll formulas, recomputed from the new price), the Last cell of the other live tables
+       (table[data-eh], only where it still shows the board's own last) and today's candle on the daily board chart.
+       Nothing is recomputed and S.rows is never written — a display overlay that the next recompute replaces.
+   3 · RECOMPUTE (Settings → "Board recompute every", the old "Refresh every" key adrb.liveCfg.every; 1 and 2 min added).
+       Streaming: the worker's state is committed into LV.snaps / LV.today / HIST.live and LIVE MODE's liveApply runs —
+       no Massive calls; skipped when no newer minute has arrived; held while you scroll / click / type (up to 15 s) and
+       run in idle time; held while the tab is hidden and run when you come back. Polling: the REST refresh as before.
+   4 · FULL CHECK. While streaming, the REST refresh (snapshot, daily closes, history top-up) still runs every 30 min,
+       just after each 30-min bar clears (:15 / :45 delayed, :00 / :30 real-time); per-name 30-min bar calls are skipped
+       for names the stream fully covers (lsBarPick). Session change (premarket → open, new day) → the REST refresh.
+   5 · FALLBACKS. No WebSocket / refused / "max_connections" (Massive allows one stream per key — a second board, e.g. the
+       phone, gets refused) → this board polls the snapshot for the per-second set every max(5 s, tick) and retries the
+       stream after 5 min. Real-time refused on a delayed key → switches to the delayed stream and says so.
+   Δ columns: a stream recompute keeps S.prev = the board as of the last full check (liveApply(false)), so "Δ vs last file"
+   compares with ≤ 30 min ago instead of 1 min ago.
+   Settings (adrb.liveCfg — keys ADDED, never renamed; an older saved copy gets the defaults): tick (0 off · 1 · 2 · 5 · 10
+   · 30 s; default 2), via ("ws" stream | "poll"; default ws), feed ("delayed" | "rt"; default delayed — Advanced = real-time;
+   every "15 min delayed" label on screen reads "real-time" when it's rt), flash (true). every: + 1, 2.
+   In place (typeof-guarded, marked "9 Nov 2026 LIVE STREAM"): LIVE MODE nextSlot (30-min slots while streaming; the :15 / :45
+   offset only on the delayed feed), liveRefresh (lsBarPick on the 30-min bar calls, lsAfterRest after them), liveUI (chip
+   + delay wording), liveDataHTML / liveSettingsHTML / liveSettingsWire / liveFoot (rows and wording).
+   Hooks: "all" (after: repaint prices, relabel delays), "chart" (today's daily candle), "drawerShown" (relabel).
+   Never: writes S.rows, changes liveRow / barsCalc / computeAll, logs anything (Live mode never logs), stores a price.
+   Storage: adrb.liveCfg (new keys above). Keys stay in this browser (sent to the worker in memory only).
+   ===================================================================== */
+const LS_HOSTS = {delayed: ["wss://delayed.massive.com/stocks", "wss://delayed.polygon.io/stocks"], rt: ["wss://socket.massive.com/stocks", "wss://socket.polygon.io/stocks"]};
+const LS_TICKS = [0, 1, 2, 5, 10, 30];
+const LS_EVERY = [1, 2, 5, 15, 30];
+const LS_PER_MAX = 300;          // names streamed second by second
+const LS_QCOLS = ["last", "dayPct", "dayU", "openU", "lodU", "dcr", "vwapU", "rangeU"];
+const LS_CALM = 1200, LS_CALM_MAX = 15000;
+for (const [k, v] of Object.entries({tick: 2, via: "ws", feed: "delayed", flash: true})) if (LV.cfg[k] === undefined) LV.cfg[k] = v;
+if (!LS_TICKS.includes(+LV.cfg.tick)) LV.cfg.tick = 2;
+if (!LS_EVERY.includes(+LV.cfg.every)) LV.cfg.every = 15;
+const LS = {
+  post: null, inPage: false, on: false, st: "off", msg: "", url: "", feed: "", start: null,
+  q: new Map(),                 // sym → {p, t, h, l, v, vw, op} — the price lane only; the board's maths never read it
+  dataMs: 0, since: 0,          // newest stream minute (end ms) · first fully streamed minute (start ms)
+  rest: new Map(),              // sym → today's 30-min bars as the last REST fetch left them (the base the stream adds to)
+  per: new Set(), perAt: 0, vis: new Set(),
+  nextCommit: 0, due: false, committing: 0, dumpId: 0, dumpCb: new Map(),
+  calmAt: -1e9, pollAt: -1e9, pollBusy: false, blockUntil: 0, uiAt: -1e9, ch: {},
+  stats: {q: 0, commits: 0, skipped: 0, paints: 0, cells: 0, paintMs: 0, commitMs: 0}
+};
+const lvDelayTxt = () => LV.cfg.feed === "rt" ? "real-time" : "15 min delayed";
+const lsTickMs = () => (+LV.cfg.tick || 5) * 1e3;
+const lsHealthy = () => LS.on && LS.st === "live";
+const lsNow = () => performance.now();          // pauses and intervals: the monotonic clock (a wall-clock jump can't stall them)
+const lsCf = () => LS.since ? Math.ceil(LS.since / 18e5) * 18e5 : Infinity;   // first 30-min bar the stream saw from its start
+
+/* ---------- the stream core: runs inside the Worker (its source is this function's text) or, if no Worker, in the page ---------- */
+function lsCore(post){
+  const ETF = new Intl.DateTimeFormat("en-US", {timeZone: "America/New_York", hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit"});
+  const offC = new Map();
+  const off = ms => { const h = Math.floor(ms / 36e5); let o = offC.get(h); if (o === undefined) { const p = {}; for (const x of ETF.formatToParts(new Date(h * 36e5))) p[x.type] = x.value; o = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute) - h * 36e5; if (offC.size > 500) offC.clear(); offC.set(h, o); } return o; };
+  const etM = ms => Math.floor((ms + off(ms)) / 6e4) % 1440;
+  const etD = ms => new Date(ms + off(ms)).toISOString().slice(0, 10);
+  const rth = ms => { const m = etM(ms); return m >= 570 && m < 960; };
+  let ws = null, want = false, urls = [], ui = 0, key = "", tick = 2000, timer = null, retry = 0, rtm = null, day = "", since = 0, dataMs = 0, authed = false, wdog = null;
+  let D = new Map(), per = new Set(); const chg = new Set();
+  const send = o => { try { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); } catch (e) {} };
+  const status = (s, msg) => post({t: "st", s, msg: msg || "", url: urls.length ? urls[ui % urls.length] : ""});
+  const reset = d => { D = new Map(); chg.clear(); day = d || ""; since = 0; dataMs = 0; };
+  function onBar(m){
+    if (!m || typeof m.sym !== "string" || m.otc || !(m.c > 0) || !(m.s > 0)) return;
+    const d0 = etD(m.s); if (d0 !== day) { if (day && d0 < day) return; reset(d0); }
+    let d = D.get(m.sym); if (!d) D.set(m.sym, d = {c: 0, t: 0, h: null, l: null, rc: null, rt: 0, av: 0, a: null, op: null, m: null, b: null});
+    const am = m.ev === "AM", e = m.e > m.s ? m.e : m.s + (am ? 6e4 : 1e3), inR = rth(m.s);
+    if (e >= d.t) { d.c = m.c; d.t = e; if (m.a > 0) d.a = m.a; }
+    if (m.av > d.av) d.av = m.av;
+    if (m.op > 0) d.op = m.op;
+    if (inR) {
+      if (m.h > 0) d.h = d.h == null ? m.h : Math.max(d.h, m.h);
+      if (m.l > 0) d.l = d.l == null ? m.l : Math.min(d.l, m.l);
+      if (e >= d.rt) { d.rc = m.c; d.rt = e; }
+    }
+    if (am) {
+      if (!since) since = m.s + 6e4;          // the first minute may have been half-delivered when we joined: count from the next
+      if (e > dataMs) dataMs = e;
+      if (!d.m || m.s >= d.m[0]) d.m = [m.s, m.o, m.h, m.l, m.c, m.v || 0, m.vw > 0 ? m.vw : m.c];
+      if (inR) {
+        const k = m.s - m.s % 18e5, bit = 1 << Math.floor((m.s - k) / 6e4), v = m.v || 0, vw = m.vw > 0 ? m.vw : m.c;
+        if (!d.b) d.b = new Map();
+        const b = d.b.get(k);
+        // [o, h, l, c, v, first minute, last minute, minutes seen, Σ v·vw]
+        if (!b) d.b.set(k, [m.o, m.h, m.l, m.c, v, m.s, m.s, bit, v * vw]);
+        else {
+          if (m.s < b[5]) { b[0] = m.o; b[5] = m.s; }
+          if (m.s >= b[6]) { b[3] = m.c; b[6] = m.s; }
+          if (m.h > b[1]) b[1] = m.h; if (m.l < b[2]) b[2] = m.l;
+          if (!(b[7] & bit)) { b[4] += v; b[8] += v * vw; b[7] |= bit; }   // a repeated minute never counts its volume twice
+        }
+      }
+    }
+    chg.add(m.sym);
+  }
+  function flushQ(){
+    if (!chg.size) return;
+    const q = []; for (const s of chg) { const d = D.get(s); if (d) q.push([s, d.c, d.t, d.h, d.l, d.av, d.a, d.op]); }
+    chg.clear(); post({t: "q", q, dataMs, since});
+  }
+  function dump(id, bars){
+    const B = new Set(bars || []), rows = [];
+    for (const [s, d] of D) rows.push([s, d.c, d.t, d.h, d.l, d.av, d.a, d.op, d.rc, d.rt, d.m, B.has(s) && d.b ? [...d.b].map(([k, b]) => [k, b[0], b[1], b[2], b[3], b[4], b[4] > 0 ? b[8] / b[4] : b[3]]) : null]);
+    post({t: "dump", id, day, dataMs, since, rows});
+  }
+  function later(why){
+    if (!want) return; retry++; const s = Math.min(60, 2 ** Math.min(retry, 6)); if (retry % 3 === 0) ui++;
+    status("retry", `${why ? why + " — " : ""}reconnecting in ${s} s`); clearTimeout(rtm); rtm = setTimeout(connect, s * 1e3);
+  }
+  function onStatus(m){
+    const s = m.status, msg = m.message || "";
+    if (s === "auth_success") { authed = true; clearTimeout(wdog); retry = 0; since = 0; send({action: "subscribe", params: "AM.*"}); if (per.size) send({action: "subscribe", params: [...per].map(x => "A." + x).join(",")}); status("live", msg); }
+    else if (s === "auth_failed") { want = false; status("auth", msg); try { ws.close(); } catch (e) {} }
+    else if (s === "max_connections") { want = false; status("maxconn", msg); try { ws.close(); } catch (e) {} }
+    else if (s === "error" && /real-?time/i.test(msg)) { want = false; status("rtdenied", msg); try { ws.close(); } catch (e) {} }
+    else if (s === "error") status("warn", msg);
+  }
+  function connect(){
+    if (!want) return; clearTimeout(rtm);
+    const url = urls[ui % urls.length]; status("connecting");
+    let w; try { w = new WebSocket(url); } catch (e) { later("couldn't open the stream"); return; }
+    ws = w; authed = false;
+    // a connection that never opens, or never logs in, would leave the board on "connecting" for good: drop it and try again
+    clearTimeout(wdog); wdog = setTimeout(() => { if (w !== ws || authed || !want) return; ws = null; try { w.onclose = null; w.close(); } catch (e) {} later("no answer from Massive"); }, 15e3);
+    w.onopen = () => { if (w === ws) send({action: "auth", params: key}); };
+    w.onmessage = ev => {
+      if (w !== ws) return; let a; try { a = JSON.parse(ev.data); } catch (e) { return; }
+      if (!Array.isArray(a)) a = [a];
+      for (const m of a) { if (!m) continue; if (m.ev === "AM" || m.ev === "A") onBar(m); else if (m.ev === "status") onStatus(m); }
+    };
+    w.onerror = () => {};
+    w.onclose = () => { if (w !== ws) return; ws = null; since = 0; if (want) later("stream closed"); else status("off"); };
+  }
+  function setTick(){ clearInterval(timer); timer = setInterval(flushQ, Math.max(250, tick)); }
+  function stop(){ want = false; clearTimeout(rtm); clearTimeout(wdog); clearInterval(timer); const w = ws; ws = null; if (w) { try { w.onclose = null; w.close(); } catch (e) {} } reset(""); status("off"); }
+  return function cmd(c){
+    if (!c) return;
+    if (c.cmd === "start") { stop(); key = c.key || ""; urls = c.urls || []; ui = 0; retry = 0; tick = c.tick || 2000; per = new Set(c.per || []); want = true; connect(); setTick(); }
+    else if (c.cmd === "stop") stop();
+    else if (c.cmd === "tick") { tick = c.ms || 2000; if (want) setTick(); }
+    else if (c.cmd === "per") {
+      const nw = new Set(c.syms || []), add = [...nw].filter(s => !per.has(s)), del = [...per].filter(s => !nw.has(s)); per = nw;
+      if (del.length) send({action: "unsubscribe", params: del.map(x => "A." + x).join(",")});
+      if (add.length) send({action: "subscribe", params: add.map(x => "A." + x).join(",")});
+    }
+    else if (c.cmd === "dump") dump(c.id, c.bars);
+    else if (c.cmd === "feed") { for (const m of c.msgs || []) { if (m && (m.ev === "AM" || m.ev === "A")) onBar(m); } }   // tests only: messages without a socket
+  };
+}
+const LS_WORKER_SRC = `"use strict";\n${lsCore.toString()}\nconst cmd = lsCore(m => postMessage(m));\nonmessage = e => cmd(e.data);`;
+function lsInPage(){ LS.inPage = true; const cmd = lsCore(m => setTimeout(() => lsOn(m), 0)); LS.post = m => cmd(m); }
+function lsMakeCore(){
+  let force = false; try { force = store.get("adrb.lsInPage", false) === true; } catch (e) {}
+  if (force || typeof Worker !== "function") { lsInPage(); return; }
+  try {
+    const w = new Worker(URL.createObjectURL(new Blob([LS_WORKER_SRC], {type: "text/javascript"})));
+    let heard = false;
+    w.onmessage = e => { heard = true; lsOn(e.data); };
+    w.onerror = e => { console.warn("live stream worker", e && e.message); if (!heard) { try { w.terminate(); } catch (x) {} lsInPage(); if (LS.start) LS.post(LS.start); } };
+    LS.post = m => w.postMessage(m); LS.inPage = false;
+  } catch (e) { lsInPage(); }
+}
+
+/* ---------- start / stop ---------- */
+function lsWanted(){
+  return !!(LV.cfg.on && LV.cfg.via !== "poll" && newsKey() && inHours() && (LV.base.snap || LV.base.etf) && Date.now() >= LS.blockUntil);
+}
+function lsStart(){
+  if (!LS.post) lsMakeCore();
+  LS.feed = LV.cfg.feed === "rt" ? "rt" : "delayed";
+  LS.per = lsPerSet(); LS.perAt = lsNow();
+  LS.start = {cmd: "start", key: newsKey(), urls: LS_HOSTS[LS.feed], tick: lsTickMs(), per: [...LS.per]};
+  LS.on = true; LS.st = "connecting"; LS.msg = ""; LS.q.clear(); LS.dataMs = 0; LS.since = 0;
+  LS.post(LS.start);
+  if (!LS.nextCommit) LS.nextCommit = lsNextCommit();
+}
+function lsStop(){
+  if (LS.post && LS.on) LS.post({cmd: "stop"});
+  LS.on = false; LS.st = "off"; LS.q.clear(); LS.dataMs = 0; LS.since = 0; LS.start = null;
+}
+function lsRestart(){ if (LS.on) lsStop(); LS.blockUntil = 0; lsLoop(); liveUI(); }
+function lsOn(m){
+  if (!m) return;
+  if (m.t === "q") {
+    LS.stats.q += m.q.length;
+    for (const a of m.q) LS.q.set(a[0], {p: a[1], t: a[2], h: a[3], l: a[4], v: a[5], vw: a[6], op: a[7]});
+    if (m.dataMs > LS.dataMs) LS.dataMs = m.dataMs;
+    LS.since = m.since || 0;
+    lsPaintSoon();
+  } else if (m.t === "st") {
+    LS.st = m.s; if (m.s !== "off") { LS.msg = m.msg || ""; LS.url = m.url || ""; }
+    if (["rtdenied", "maxconn", "auth"].includes(m.s)) LS.why = m.msg || m.s;
+    if (m.s === "rtdenied") { LV.cfg.feed = "delayed"; saveLiveCfg(); toast("Massive refused the real-time stream for this key (a delayed plan?). Switched to the 15-minute delayed stream — change it back in Settings after upgrading."); LS.on = false; setTimeout(lsRestart, 50); }
+    else if (m.s === "maxconn") { LS.on = false; LS.blockUntil = Date.now() + 5 * 60e3; toast("Massive allows one live stream per key and another board (your phone?) has it. This board polls prices instead and tries the stream again in 5 minutes."); }
+    else if (m.s === "auth") { LS.on = false; LS.blockUntil = Date.now() + 10 * 60e3; toast("Massive refused the stream login: " + (m.msg || "check your key") + ". Polling instead."); }
+    else if (m.s === "off" && LS.on && !LS.start) LS.on = false;
+    liveUI();
+  } else if (m.t === "dump") { const cb = LS.dumpCb.get(m.id); if (cb) { LS.dumpCb.delete(m.id); cb(m); } }
+}
+// which names stream every second: MAP's focus + held, the ticker in the panel / chart window, the rows on screen
+function lsPerSet(){
+  const s = new Set(), add = x => { if (x && s.size < LS_PER_MAX && /^[A-Z0-9.\-]+$/.test(x)) s.add(x); };
+  try { if ($("drawer").classList.contains("open") && typeof WSI !== "undefined") add(WSI.cur); } catch (e) {}
+  try { if (typeof popLive === "function" && popLive()) add(POP.sym); } catch (e) {}
+  LISTS.held.forEach(add); LISTS.focus.forEach(add); LS.vis.forEach(add);
+  return s;
+}
+const lsSame = (a, b) => a.size === b.size && [...a].every(x => b.has(x));
+
+/* ---------- the clock: one loop, every second ---------- */
+function lsNextCommit(now = Date.now()){ const per = (+LV.cfg.every || 15) * 60e3; return Math.floor(now / per) * per + per + 3e3; }
+function lsLoop(){
+  try {
+    const want = lsWanted();
+    if (want && !LS.on) lsStart();
+    else if (!want && LS.on) lsStop();
+    else if (LS.on && LS.feed !== (LV.cfg.feed === "rt" ? "rt" : "delayed")) { lsStop(); lsStart(); }
+    if (!LV.cfg.on) return;
+    if (LS.on && lsNow() - LS.perAt >= 3e3) { LS.perAt = lsNow(); const s = lsPerSet(); if (!lsSame(s, LS.per)) { LS.per = s; LS.post({cmd: "per", syms: [...s]}); } }
+    if (lsHealthy() && LS.dataMs > 0 && inHours() && !LV.busy && !LS.committing && Date.now() >= LS.nextCommit) { if (document.hidden) LS.due = true; else lsCommit(); }
+    if (LS.committing && lsNow() - LS.committing > 20e3) LS.committing = 0;   // a dump that never came back
+    if (!lsHealthy() && LV.cfg.tick && inHours() && !document.hidden && lsLive()) lsPoll();
+    if (lsNow() - LS.uiAt >= 5e3) { LS.uiAt = lsNow(); liveUI(); }
+  } catch (e) { console.warn("live stream", e); }
+}
+setInterval(lsLoop, 1000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { if (LS.due) LS.nextCommit = 0; lsLoop(); lsPaintSoon(); } });
+for (const ev of ["pointerdown", "wheel", "keydown", "touchstart", "input", "scroll"]) addEventListener(ev, () => { LS.calmAt = lsNow(); }, {capture: true, passive: true});
+// run fn once the page is calm (no scroll / click / typing for LS_CALM ms; at most LS_CALM_MAX late), in idle time
+function lsWhenCalm(fn, t0 = lsNow()){
+  const now = lsNow(), late = now - t0 >= LS_CALM_MAX;
+  if (!late && now - LS.calmAt < LS_CALM) { setTimeout(() => lsWhenCalm(fn, t0), 400); return; }
+  const go = () => { try { fn(); } catch (e) { console.warn("live stream", e); } };
+  if (late || typeof requestIdleCallback !== "function") setTimeout(go, 0); else requestIdleCallback(go, {timeout: 1500});
+}
+
+/* ---------- recompute from the stream (no Massive calls) ---------- */
+function lsDump(bars, cb){ const id = ++LS.dumpId; LS.dumpCb.set(id, cb); LS.post({cmd: "dump", id, bars}); }
+function lsCommit(){
+  LS.committing = lsNow(); LS.due = false; LS.nextCommit = lsNextCommit();
+  const bs = LV.frame && LV.frame.phase === "rth" && LV.cfg.bars !== "off" ? barSyms() : [];
+  lsDump(bs, m => lsWhenCalm(() => { try { const t0 = performance.now(); if (lsApply(m)) LS.stats.commitMs = Math.round(performance.now() - t0); else LS.stats.skipped++; } finally { LS.committing = 0; } }));
+}
+// one name's Massive snapshot object, brought up to the stream (same shape the REST refresh stores; liveRow reads it)
+function lsMerge(s, x){
+  const seen = s.min && s.min.t ? s.min.t + 6e4 : 0;
+  if (x.rc > 0) {                                    // a regular-session bar arrived: today's day bar moves
+    const day = s.day || (s.day = {});
+    if (x.rt >= seen) day.c = x.rc;
+    if (x.h > 0) day.h = Math.max(day.h > 0 ? day.h : 0, x.h);
+    if (x.l > 0) day.l = day.l > 0 ? Math.min(day.l, x.l) : x.l;
+    if (x.op > 0 && !(day.o > 0)) day.o = x.op;
+    if (x.av > (day.v || 0)) day.v = x.av;
+    if (x.vw > 0 && x.t >= seen) day.vw = x.vw;
+  }
+  if (x.mn && (!s.min || !s.min.t || x.mn[0] >= s.min.t)) s.min = {t: x.mn[0], o: x.mn[1], h: x.mn[2], l: x.mn[3], c: x.mn[4], v: x.mn[5], vw: x.mn[6], av: x.av || undefined};
+}
+// today's 30-min bars: the REST bars before the stream's first full bar + the streamed bars from there. Only when the two
+// meet without a gap (the stream started before the bar the REST fetch was in the middle of); otherwise left as fetched.
+function lsBarsOk(R, cf, date){ return !!(R && R.d === date && Array.isArray(R.bars) && isFinite(cf) && cf <= R.asOf - R.asOf % 18e5); }
+function lsBars(sym, bars, cf, dataMs, date){
+  const T = LV.today.get(sym);
+  if (T && !T._ls) LS.rest.set(sym, T);
+  const R = LS.rest.get(sym); if (!lsBarsOk(R, cf, date)) return;
+  const st = bars.filter(b => b[0] >= cf && b[0] < dataMs).sort((a, b) => a[0] - b[0]).map(b => ({t: b[0], o: b[1], h: b[2], l: b[3], c: b[4], v: b[5], vw: b[6]}));
+  LV.today.set(sym, {d: date, asOf: dataMs, bars: R.bars.filter(b => b.t < cf).concat(st), _ls: true});
+}
+function lsApply(m){
+  if (!LV.cfg.on || !LV.snaps || !LV.frame || LV.busy || !m || !m.dataMs) return false;
+  const F = LV.frame;
+  if (m.dataMs <= F.dataMs) return false;                       // nothing newer than what's on the board
+  const date = dET(m.dataMs - 1), mm = etMin(m.dataMs - 1) + 1, phase = mm <= 570 ? "pm" : "rth";
+  if (date !== F.date || phase !== F.phase) { liveRefresh(); return false; }   // the open / a new day: the REST refresh sets closes, calendar, drop-offs
+  const cf = m.since ? Math.ceil(m.since / 18e5) * 18e5 : Infinity;
+  const HL = phase === "rth" && typeof HIST !== "undefined" && HIST.live && HIST.live.date === date && HIST.live.map ? HIST.live : null;
+  for (const a of m.rows) {
+    const [sym, c, t, h, l, av, vw, op, rc, rt, mn, bars] = a, x = {c, t, h, l, av, vw, op, rc, rt, mn};
+    const s = LV.snaps.get(sym); if (s) lsMerge(s, x);
+    if (bars) lsBars(sym, bars, cf, m.dataMs, date);
+    if (HL && rc > 0) { const e = HL.map.get(sym); if (e) { if (rt >= HL.at) e.c = rc; if (h > e.h) e.h = h; if (l > 0 && l < e.l) e.l = l; if (av > e.v) e.v = av; } }
+  }
+  if (HL) { HL.at = m.dataMs; try { HL.hm = etParts(m.dataMs).hm; } catch (e) {} HIST.hl = null; }
+  LV.frame = {...F, dataMs: m.dataMs, tIn: phase === "rth" ? clamp(mm - 570, 0, 390) : 0};
+  LV.lastOk = Date.now(); LS.stats.commits++;
+  liveApply(false);
+  LV.next = nextSlot(); liveUI();
+  return true;
+}
+// in liveRefresh: which names need their 30-min bars fetched (9 Nov 2026 LIVE STREAM)
+function lsBarPick(all, date, dataMs){
+  if (lsHealthy()) { const cf = lsCf(); return all.filter(s => !lsBarsOk(LS.rest.get(s) || (LV.today.get(s) && !LV.today.get(s)._ls ? LV.today.get(s) : null), cf, date)); }
+  // polling at 1 or 2 min: today's bars again only once a new 30-min bar has closed, or every 5 min (5 / 15 / 30 min: every time, as before)
+  if ((+LV.cfg.every || 15) < 5 && LV.barsAt && LV.barsAt.d === date && Math.floor(dataMs / 18e5) === Math.floor(LV.barsAt.ms / 18e5) && dataMs - LV.barsAt.ms < 5 * 60e3) return [];
+  LV.barsAt = {d: date, ms: dataMs};
+  return all;
+}
+function lsAfterRest(){ if (lsHealthy()) LS.nextCommit = Date.now() + 1500; }
+
+/* ---------- polling: the price lane when there's no stream ---------- */
+async function lsPoll(){
+  if (LS.pollBusy || LV.busy || !LV.frame || !newsKey() || lsNow() - LS.pollAt < Math.max(5, +LV.cfg.tick || 5) * 1e3) return;
+  const syms = [...lsPerSet()].slice(0, 400); if (!syms.length) return;
+  LS.pollBusy = true; LS.pollAt = lsNow(); const wall = Date.now();
+  try {
+    for (let i = 0; i < syms.length; i += 200) {
+      const j = await mGet("/v2/snapshot/locale/us/markets/stocks/tickers", {tickers: syms.slice(i, i + 200).join(",")});
+      for (const x of (j.tickers || [])) {
+        const d = x.day || {}, mn = x.min || {}, p = posN(d.c) || posN(mn.c); if (!p) continue;
+        const t = Math.max(mn.t ? mn.t + 6e4 : 0, x.updated ? x.updated / 1e6 : 0, LV.lastOk < wall && LV.frame ? LV.frame.dataMs + 1 : 0);
+        LS.q.set(x.ticker, {p, t, h: posN(d.h), l: posN(d.l), v: d.v || null, vw: posN(d.vw), op: posN(d.o)});
+      }
+    }
+    lsPaintSoon();
+  } catch (e) { /* the REST refresh reports Massive errors; the price lane just waits for the next round */ }
+  finally { LS.pollBusy = false; }
+}
+
+/* ---------- prices on screen ---------- */
+// a row as computeAll would make it at price q.p (same formulas, regular session) — a display overlay, never stored
+function lsRow(r, q){
+  const o = Object.create(r), P = q.p, adr = r.adr && r.adr > 0 ? r.adr : null, U = x => (x == null || adr == null) ? null : x / adr;
+  o.last = P; o.price = P;
+  o.chg1d = o.dayPct = r.prevClose ? (P / r.prevClose - 1) * 100 : r.dayPct;
+  const op = r.open ?? posN(q.op); o.cfo1d = o.openPct = op ? (P / op - 1) * 100 : r.openPct;
+  o.adrD = adr ? P * adr / 100 : null;
+  o.dayU = U(o.dayPct); o.openU = U(o.openPct);
+  if (r.hi1d != null) o.hi1d = Math.max(r.hi1d, q.h > 0 ? q.h : -Infinity, P);
+  if (r.lo1d != null) o.lo1d = Math.min(r.lo1d, q.l > 0 ? q.l : Infinity, P);
+  if (o.hi1d != null && o.lo1d != null && o.hi1d > o.lo1d) { o.dcr = (P - o.lo1d) / (o.hi1d - o.lo1d); o.rangeU = o.adrD ? (o.hi1d - o.lo1d) / o.adrD : null; }
+  else if (r.hi1d != null && r.lo1d != null) { o.dcr = null; o.rangeU = null; }
+  o.lodU = o.lo1d != null && o.adrD ? (P - o.lo1d) / o.adrD : null;
+  if (r.vwap != null) { o.vwap = q.vw > 0 ? q.vw : r.vwap; o.vwapU = o.adrD ? (P - o.vwap) / o.adrD : null; }
+  return o;
+}
+let lsRaf = 0;
+function lsPaintSoon(){ if (lsRaf || document.hidden) return; lsRaf = requestAnimationFrame(() => { lsRaf = 0; try { lsPaint(); } catch (e) { console.warn("live prices", e); } }); }
+const lsLive = () => !!(LV.cfg.on && +LV.cfg.tick && S.snap && S.snap.live && S.mode === "rth" && LV.frame && LV.frame.phase === "rth");
+// the rows of a tbody that are on screen (binary search on the row boxes — one layout read, no writes in between)
+function lsOnScreen(tb){
+  const sc = tb.closest(".tscroll"), vb = sc ? sc.getBoundingClientRect() : null;
+  const top = Math.max(0, vb ? vb.top : 0), bot = Math.min(innerHeight, vb ? vb.bottom : innerHeight);
+  const R = tb.rows, n = R.length; if (!n || bot <= top) return [];
+  const tr = tb.getBoundingClientRect(); if (tr.bottom <= top || tr.top >= bot) return [];
+  let lo = 0, hi = n - 1;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (R[mid].getBoundingClientRect().bottom <= top) lo = mid + 1; else hi = mid; }
+  const out = []; for (let i = lo; i < n && out.length < 250; i++) { const b = R[i].getBoundingClientRect(); if (b.top >= bot) break; out.push(R[i]); }
+  return out;
+}
+function lsPaint(){
+  LS.vis = new Set();
+  if (!lsLive()) return;
+  const t0 = performance.now(), F = LV.frame, rb = S.rowBySym || new Map(S.rows.map(r => [r.sym, r])), jobs = [];
+  // read: every visible live table, its rows on screen
+  for (const tb of document.querySelectorAll("tbody")) {
+    if (!tb.offsetParent || !tb.rows.length) continue;
+    const table = tb.parentElement, sc = tb.closest(".tscroll"), host = sc && sc.parentElement;
+    const own = host && host._tblOwner && host._tblFirst === host.firstElementChild && host._tblOwner.cols ? host._tblOwner : null;
+    let cols = null, lastI = -1;
+    if (own) { cols = []; own.cols.forEach((c, i) => { if (LS_QCOLS.includes(c.k)) cols.push([i, c]); }); if (!cols.length) continue; }
+    else if (table && table.hasAttribute("data-eh")) { const hs = [...table.querySelectorAll(":scope > thead > tr > th")]; lastI = hs.findIndex(h => h.dataset.k === "last" || /^Last\b/.test(h.textContent.trim())); if (lastI < 0) continue; }
+    else continue;
+    for (const tr of lsOnScreen(tb)) { const sym = tr.dataset.sym; if (!sym) continue; LS.vis.add(sym); const q = LS.q.get(sym), r = rb.get(sym); if (q && r && q.p > 0 && q.t > F.dataMs) jobs.push([tr, r, q, cols, lastI]); }
+  }
+  // write
+  let cells = 0; const flash = LV.cfg.flash !== false;
+  const fl = (td, P, prev) => { if (!flash || !(prev > 0) || P === prev) return; const up = P > prev, a = td.classList.contains(up ? "lsUa" : "lsDa"); td.classList.remove("lsUa", "lsUb", "lsDa", "lsDb"); td.classList.add(up ? (a ? "lsUb" : "lsUa") : (a ? "lsDb" : "lsDa")); };
+  for (const [tr, r, q, cols, lastI] of jobs) {
+    if (cols) {
+      const ov = lsRow(r, q);
+      for (const [i, c] of cols) {
+        const td = tr.children[i]; if (!td) continue;
+        const h = tblCell(c, ov), was = td._lsH !== undefined ? td._lsH : td.innerHTML;
+        if (h !== was) { td.innerHTML = h; cells++; }
+        td._lsH = h;
+        if (c.k === "last") { fl(td, q.p, td._lsP ?? r.last); td._lsP = q.p; }
+      }
+    } else {
+      const td = tr.children[lastI]; if (!td) continue;
+      const exp = td._lsT ?? f2(r.last), nw = f2(q.p); if (exp === nw || td.textContent.trim() !== exp) continue;
+      const w = document.createTreeWalker(td, NodeFilter.SHOW_TEXT); let n;
+      while ((n = w.nextNode())) if (n.nodeValue.trim() === exp) { n.nodeValue = n.nodeValue.replace(exp, nw); td._lsT = nw; cells++; fl(td, q.p, td._lsP ?? r.last); td._lsP = q.p; break; }
+    }
+  }
+  // today's candle on the daily board chart (panel + chart window)
+  for (const own of Object.keys(LS.ch)) {
+    const c = LS.ch[own], q = c && LS.q.get(c.sym); if (!q || !(q.t > F.dataMs) || !(q.p > 0)) continue;
+    const b = c.last; if (!b || b.time !== F.date) continue;
+    const nb = {time: b.time, open: b.open, high: Math.max(b.high, q.p, q.h > 0 ? q.h : 0), low: Math.min(b.low, q.p, q.l > 0 ? q.l : Infinity), close: q.p};
+    try { c.cs.update(c.w.JSON.parse(JSON.stringify(nb))); } catch (e) { delete LS.ch[own]; }
+  }
+  LS.stats.paints++; LS.stats.cells += cells; LS.stats.paintMs = +(performance.now() - t0).toFixed(1);
+}
+hookOn("chart", "liveStream", x => { if (!x || !x.M || !x.cs) return; LS.ch[x.own] = x.M.iv === "D" && x.M.bars && x.M.bars.length ? {cs: x.cs, w: x.w || window, sym: x.r && x.r.sym, last: x.M.bars[x.M.bars.length - 1]} : null; if (!LS.ch[x.own]) delete LS.ch[x.own]; });
+hookOn("all", "liveStream", ph => { if (ph !== "after") return; lsPaintSoon(); lsRelabel(); });
+hookOn("drawerShown", "liveStream", () => { lsRelabel(); LS.perAt = 0; });
+
+/* ---------- words: "15 min delayed" reads "real-time" on an Advanced key ---------- */
+const lsRT = s => String(s).replace(/\(15[- ]min(?:ute)?s?[- ]delayed\)/gi, "(real-time)").replace(/15[- ]min(?:ute)?s?[- ]delayed/gi, "real-time").replace(/15 minutes behind the market/gi, "real-time");
+function lsRelabel(){
+  if (LV.cfg.feed !== "rt" || !LV.cfg.on) return;
+  const re = /15[- ]min(?:ute)?s?[- ]delayed|15 minutes behind/i;
+  const w = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {acceptNode: n => n.nodeType === 1 ? (/^(TBODY|SCRIPT|STYLE|TEXTAREA|INPUT|SELECT)$/.test(n.tagName) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_SKIP) : (re.test(n.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP)});
+  const hit = []; let n; while ((n = w.nextNode())) hit.push(n);
+  for (const t of hit) t.nodeValue = lsRT(t.nodeValue);
+  for (const e of document.querySelectorAll("[title*='15']")) if (re.test(e.title)) e.title = lsRT(e.title);
+}
+
+/* ---------- status + settings (drawn by LIVE MODE's liveUI / liveSettingsHTML) ---------- */
+function lsChipTxt(){
+  if (!LV.cfg.on) return "";
+  if (lsHealthy() && !LS.dataMs) return ` · <span class="lsst ok">● stream connected${LV.cfg.feed === "rt" ? " (real-time)" : ""}, waiting for the next minute bar</span>`;
+  if (lsHealthy()) { const m = etMin(LS.dataMs - 1) + 1; return ` · <span class="lsst ok" title="Streaming from Massive (${lvDelayTxt()}). Prices on screen every ${LV.cfg.tick ? LV.cfg.tick + " s" : "recompute only"}; board recompute every ${LV.cfg.every} min.">● streaming${LV.cfg.feed === "rt" ? " real-time" : ""} to ${hhmm(m)}</span>`; }
+  if (LS.on && (LS.st === "connecting" || LS.st === "retry")) return ` · <span class="lsst">stream ${LS.st === "retry" ? "reconnecting" : "connecting"}…</span>`;
+  if (LV.cfg.via === "poll") return ` · <span class="lsst">polling</span>`;
+  if (Date.now() < LS.blockUntil) return ` · <span class="lsst warn" title="${esc(LS.why || "")}">polling (stream refused)</span>`;
+  return "";
+}
+function lsStatusHTML(){
+  const s = LS.stats, st = lsHealthy() ? `<span class="lsst ok">streaming</span> from ${esc(LS.url.replace(/^wss:\/\//, ""))}${LS.inPage ? " (in the page — this browser has no background worker)" : ""} · ${LS.dataMs ? `data to ${hhmm(etMin(LS.dataMs - 1) + 1)} ET` : "waiting for the next minute bar"}`
+    : LS.on ? `stream ${esc(LS.st)}${LS.msg ? " — " + esc(LS.msg) : ""}` : LV.cfg.via === "poll" ? "polling (stream off)" : Date.now() < LS.blockUntil ? `polling — stream refused (${esc(LS.why || LS.st)}), trying again at ${new Date(LS.blockUntil).toLocaleTimeString()}` : !inHours() ? "stream sleeps outside 04:15–16:25 New York" : "stream off";
+  return `${st}<br><span class="dim">Recomputes from the stream: ${s.commits}${s.commitMs ? ` (last took ${s.commitMs} ms)` : ""} · price paints: ${s.paints} (last ${s.paintMs} ms, ${s.cells.toLocaleString()} cells so far)</span>`;
+}
+function lsSettingsRows(row){
+  const sel = (id, opts, cur) => `<select id="${id}">${opts.map(([v, l]) => `<option value="${v}" ${String(cur) === String(v) ? "selected" : ""}>${l}</option>`).join("")}</select>`;
+  return row("Connection", sel("lvVia", [["ws", "Stream (WebSocket)"], ["poll", "Polling only"]], LV.cfg.via), "Stream: one connection keeps every price current without extra calls. Massive allows one stream per key — a second board (your phone) falls back to polling by itself.")
+    + row("Massive plan", sel("lvFeed", [["delayed", "Starter / Developer — 15 min delayed"], ["rt", "Advanced — real-time"]], LV.cfg.feed), "Picks the stream address and the wording on screen. A real-time request on a delayed key is refused — the board switches back and says so.")
+    + row("Prices on screen every", sel("lvTick", LS_TICKS.map(v => [v, v ? v + " s" : "Off — at each recompute only"]), LV.cfg.tick), "Only the price cells you can see (Last, Chg %, day / open / LOD / VWAP / range moves) and today's daily candle. No recompute, so no lag.")
+    + row("Flash price changes", `<input type="checkbox" id="lvFlash" ${LV.cfg.flash !== false ? "checked" : ""}>`, "Green / red fade on a changed Last.")
+    + `<div class="small" id="lsStat" style="margin:-2px 0 8px">${lsStatusHTML()}</div>`;
+}
+function lsSettingsWire(){
+  const on = (id, f) => { const e = $(id); if (e) e.onchange = f; };
+  on("lvVia", e => { LV.cfg.via = e.target.value === "poll" ? "poll" : "ws"; saveLiveCfg(); LV.next = nextSlot(); lsRestart(); });
+  on("lvFeed", e => { LV.cfg.feed = e.target.value === "rt" ? "rt" : "delayed"; saveLiveCfg(); LV.next = nextSlot(); lsRestart(); if (S.snap) renderAll(); });
+  on("lvTick", e => { LV.cfg.tick = +e.target.value; if (!LS_TICKS.includes(LV.cfg.tick)) LV.cfg.tick = 2; saveLiveCfg(); if (LS.on) LS.post({cmd: "tick", ms: lsTickMs()}); });
+  on("lvFlash", e => { LV.cfg.flash = !!e.target.checked; saveLiveCfg(); });
+}
+setInterval(() => { const e = $("lsStat"); if (e && $("settings").classList.contains("open")) e.innerHTML = lsStatusHTML(); }, 2000);
 </script>
