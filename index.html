@@ -1010,7 +1010,7 @@ function tierAt(t){
 function ipRule(){
   const bn = S.ipBench === "the list median" ? "the median" : S.ipBench;
   const c = fileClock(), t = S.ipMin;
-  const when = c ? `${hhmm(c.m)} ET${t != null ? ` (${t >= 390 ? "after the close" : t + " min in"})` : ""}${c.src === "typed" ? " · time you typed" : c.src === "live" ? " · Massive data time (15-min delayed)" : " · time from the file"}` : "file time unknown — type it on Today";
+  const when = c ? `${hhmm(c.m)} ET${t != null ? ` (${t >= 390 ? "after the close" : t + " min in"})` : ""}${c.src === "typed" ? " · time you typed" : c.src === "live" ? ` · Massive data time (${lvDT()})` : " · time from the file"}` : "file time unknown — type it on Today";
   const vol = S.ipUsing === "rvat" ? `relative volume at time ≥ ${CFG.ipRvol}x` : S.ipUsing === "tier" ? `today's volume ≥ ${f2(S.ipNeed.v)}x a normal full day` : `today's volume ≥ ${f2(S.ipNeed.v)}x a normal day or relative volume at time ≥ ${CFG.ipRvol}x`;
   const str = `≥ ${f2(S.ipNeed ? S.ipNeed.s : CFG.ipRS)} ADR ahead of ${bn}`;
   return {when, vol, str};
@@ -2385,7 +2385,7 @@ function renderAll0(){
   if (S.etfSnap) { ec.classList.remove("hidden"); ec.innerHTML = `ETF file: <b>${esc(S.etfSnap.files.map(f => f.name).join(" + "))}</b> · ${S.etfSnap.map.size}`; } else ec.classList.add("hidden");
   const mc = $("modeChip"); mc.classList.remove("hidden"); mc.className = "chip" + (pm ? " blue" : "");
   const fc = fileClock();
-  mc.innerHTML = S.snap.live ? (pm ? `<b>Premarket</b> · live · moves vs yesterday's close` : `<b>Regular session</b> · live${fc ? ` · data to ${hhmm(fc.m)} ET (15-min delayed)` : ""}`)
+  mc.innerHTML = S.snap.live ? (pm ? `<b>Premarket</b> · live · moves vs yesterday's close` : `<b>Regular session</b> · live${fc ? ` · data to ${hhmm(fc.m)} ET (${lvDT()})` : ""}`)
     : pm ? `<b>Premarket</b> export · moves vs yesterday's close` : `<b>Regular session</b> export${fc ? ` · ${hhmm(fc.m)} ET` : ""}`;
   const bc = $("benchChip"); bc.classList.remove("hidden");
   bc.innerHTML = `Bench: <b>${S.bench.sym === "median" ? "list median" : esc(S.bench.sym)}</b> ${sg(S.bMove)} ADR`;
@@ -3043,7 +3043,7 @@ async function histLive(quiet){
     HIST.live = {date: p.d, at: at || Date.now(), hm: p.hm, map}; HIST.hl = null;
     if (S.snap) { computeAll(); renderAll(); }
     histStatusPaint();
-    if (!quiet) toast(`Live bar: ${map.size.toLocaleString()} symbols as of ${p.hm} New York (15-min delayed)`);
+    if (!quiet) toast(`Live bar: ${map.size.toLocaleString()} symbols as of ${p.hm} New York (${lvDT()})`);
   } catch (e) { if (!quiet) toast("Massive snapshot failed: " + (e.msg || "error")); }
   finally { HIST.liveBusy = false; }
 }
@@ -3058,7 +3058,7 @@ function histStatusText(){
   if (!HIST.nD) return newsKey() ? "No price history yet — load it once (about 320 sessions, a few minutes), then it tops itself up." : "Needs your Massive key (Settings → News) before the price history can load.";
   const t = HIST.today;
   return `${HIST.nD} sessions of daily bars, ${HIST.dates[0]} to ${HIST.dates[HIST.nD - 1]} · RS line vs ${HIST.bSym || CFG.bench}` +
-    ` · today's bar: ${t ? (t.src === "live" ? `whole-market snapshot ${HIST.live.hm} NY, 15-min delayed` : t.src === "board" ? "the board's live Massive prices" : `your CSV (${t.date})`) : "none — signals are as of the last close"}` +
+    ` · today's bar: ${t ? (t.src === "live" ? `whole-market snapshot ${HIST.live.hm} NY, ${lvDT()}` : t.src === "board" ? "the board's live Massive prices" : `your CSV (${t.date})`) : "none — signals are as of the last close"}` +
     (HIST.nD < RS_MINBARS ? ` · needs ${RS_MINBARS}+ sessions for 52-week tests — load the full history` : "") + (HIST.msg ? ` · ${HIST.msg}` : "");
 }
 function histStatusPaint(){
@@ -3180,7 +3180,7 @@ function computeHL(){
     if (h >= mh) hi.push({sym, r: S.rowBySym.get(sym)});
     else if (l <= ml) lo.push({sym, r: S.rowBySym.get(sym)});
   }
-  HIST.hl = {key, src, asOf: useLive ? `${HIST.live.date} ${HIST.live.hm} NY (15-min delayed)` : HIST.dates[nD - 1] + " close", n, hi, lo};
+  HIST.hl = {key, src, asOf: useLive ? `${HIST.live.date} ${HIST.live.hm} NY (${lvDT()})` : HIST.dates[nD - 1] + " close", n, hi, lo};
   return HIST.hl;
 }
 function renderHL(){
@@ -3202,7 +3202,7 @@ function renderHL(){
   const col = (list, side) => { const G = group(list); return G.length ? G.map(([g, a]) => `<div class="hlg"><div class="gh"><span>${esc(g)}</span><span class="n">${a.length}</span></div>${a.map(x => chip(x, side)).join("")}</div>`).join("") : `<div class="empty">None.</div>`; };
   const srcSel = `<div class="seg" id="hlSrc"><button data-k="market" class="${H.src === "market" ? "on" : ""}" ${S.has.hist ? "" : "disabled title='Load the price history first'"}>Whole market</button><button data-k="file" class="${H.src === "file" ? "on" : ""}">Your file</button></div>`;
   el.innerHTML = `<div class="hd"><h2>New highs / new lows</h2><span class="sub">${H.src === "market" ? `whole market · ${H.n.toLocaleString()} names with $${CFG.hlDvM}M+ daily $ volume and price ≥ $${CFG.hlPx} · as of ${esc(H.asOf)}` : `your file · ${H.n} stocks · as of ${esc(H.asOf)}`} · number = RS in your file · green ring = RS line at a new high today</span><span class="spacer"></span>${srcSel}
-    ${S.has.hist ? `<button class="btn sm" data-hist="live" title="Pull Massive's whole-market snapshot (15-min delayed). In live mode this happens on every refresh.">Market snapshot</button>` : ""}<button class="btn sm" id="hlCopyH">Copy highs</button><button class="btn sm" id="hlCopyL">Copy lows</button></div>
+    ${S.has.hist ? `<button class="btn sm" data-hist="live" title="Pull Massive's whole-market snapshot (${lvDT()}). In live mode this happens on every refresh.">Market snapshot</button>` : ""}<button class="btn sm" id="hlCopyH">Copy highs</button><button class="btn sm" id="hlCopyL">Copy lows</button></div>
     <div class="bd"><div style="display:flex;justify-content:space-between;font-size:12px;font-weight:600"><span style="color:var(--st1)">New highs ${pct0(ph)} (${nh})</span><span style="color:var(--st5)">New lows ${tot ? pct0(1 - ph) : "0%"} (${nl})</span></div>
     <div class="hlbar"><span class="h" style="width:${tot ? ph * 100 : 50}%"></span><span class="l" style="width:${tot ? (1 - ph) * 100 : 50}%"></span></div>
     ${H.loMissing ? `<div class="note small">Add "Low, 52 weeks" to your export to fill the lows side in file mode${S.has.hist ? "" : ", or load the price history for the whole market"}.</div>` : ""}
@@ -3881,6 +3881,12 @@ function nextSlot(){
   return Math.floor((now - ph) / per) * per + per + ph + 40e3;
 }
 function inHours(ms = Date.now()){ const wd = NYW.format(new Date(ms)), m = etMin(ms); return wd !== "Sat" && wd !== "Sun" && m >= 4 * 60 + 15 && m <= 16 * 60 + 25; }
+// 10 Nov 2026 (MASSIVE ADVANCED — display only; Eugene: "I got the massive advanced subscription. Make full use of it"):
+// the word for Massive's delay, from Settings → Live data → Massive plan (adrb.liveCfg.feed). Used IN PLACE (marked by the
+// call itself) wherever a "15 min delayed" label was typed into code that the LIVE STREAM relabel can't reach — table
+// bodies, CSV exports (MAP tracker / First Pullback tracker "now_from"), the Claude connector's live.source, toasts,
+// the timestamp strip's tooltip and the First Pullback trigger wording (10:15 → 10:00 ET on real-time). Changes words only.
+function lvDT(){ return typeof LV !== "undefined" && LV.cfg && LV.cfg.feed === "rt" ? "real-time" : "15 min delayed"; }
 function liveTick(){
   if (!LV.cfg.on) return;
   if (!LV.busy && inHours() && LV.next && Date.now() >= LV.next) liveRefresh();
@@ -8870,7 +8876,7 @@ async function bcModel(r, iv){
     if (!newsKey()) return {err: `30m and 5m charts need your Massive key (Settings). Daily and weekly work from the stored price history.`};
     try { bars = await bcIntra(sym, +iv); } catch (e) { return {err: `Couldn't load ${iv}-min bars from Massive: ${(e && e.msg) || "error"}.`}; }
     if (!bars.length) return {err: `Massive returned no ${iv}-min bars for ${sym}.`};
-    M.note = `${iv}-min bars from Massive · 15-min delayed · regular session · times ET`;
+    M.note = `${iv}-min bars from Massive · ${lvDT()} · regular session · times ET`;
   } else {
     const d = bcDaily(sym); if (!d) return {err: S.has.hist ? `No stored daily bars for ${sym}.` : `The board chart draws daily and weekly from the stored price history (Data check → Load price history).`};
     bars = iv === "W" ? bcWeekly(d) : d;
@@ -8987,7 +8993,7 @@ openDrawer = function(sym){
 // the caption under the chart follows the engine
 function bcCaption(){
   const el = [...document.querySelectorAll("#drawer .small")].find(x => /^(Embedded chart shows|Board chart:)/.test(x.textContent.trim())); if (!el) return;
-  el.textContent = bcEng() === "board" ? "Board chart: drawn from the board's own numbers (stored daily bars + today; 30m / 5m from Massive, 15-min delayed). Use the buttons on the chart to hide layers. Your TradingView layout, drawings and Pine scripts are behind \"Open in TradingView\"; confirm a live trigger on a real-time chart."
+  el.textContent = bcEng() === "board" ? "Board chart: drawn from the board's own numbers (stored daily bars + today; 30m / 5m from Massive, " + lvDT() + "). Use the buttons on the chart to hide layers. Your TradingView layout, drawings and Pine scripts are behind \"Open in TradingView\"; confirm a live trigger on a real-time chart."
     : "Embedded chart shows 9/21 EMA + 50/200 SMA but not your saved layout or indicators. The button above opens your account.";
 }
 // the chart window
@@ -9018,7 +9024,7 @@ hookOn("settings", "boardChart", () => {
   const reset = $("sReset"); if (!reset) return;
   const box = document.createElement("div");
   box.innerHTML = `<h4>Chart in the ticker panel and the chart window</h4>
-    <div class="row"><div>Board chart (Lightweight Charts)<div class="d">On: candles from the stored daily bars (daily / weekly) or Massive (30m / 5m, 15-min delayed), with your 9/21 EMA, 50/200 SMA, zone, stops, 2R, Entry Check entry / first resistance / day low, swing pivots and the RS line drawn by the board. Off: the TradingView embed. "Open in TradingView" works either way. Charts by TradingView Lightweight Charts™ — Copyright (c) 2026 TradingView, Inc., <a href="https://www.tradingview.com/" target="_blank" rel="noopener">tradingview.com</a> (Apache License 2.0).</div></div><div><input type="checkbox" id="bcEngSw" ${bcEng() === "board" ? "checked" : ""}></div></div>`;
+    <div class="row"><div>Board chart (Lightweight Charts)<div class="d">On: candles from the stored daily bars (daily / weekly) or Massive (30m / 5m, ${lvDT()}), with your 9/21 EMA, 50/200 SMA, zone, stops, 2R, Entry Check entry / first resistance / day low, swing pivots and the RS line drawn by the board. Off: the TradingView embed. "Open in TradingView" works either way. Charts by TradingView Lightweight Charts™ — Copyright (c) 2026 TradingView, Inc., <a href="https://www.tradingview.com/" target="_blank" rel="noopener">tradingview.com</a> (Apache License 2.0).</div></div><div><input type="checkbox" id="bcEngSw" ${bcEng() === "board" ? "checked" : ""}></div></div>`;
   reset.parentElement.before(box);
   $("bcEngSw").onchange = e => { store.set("adrb.chartEng", e.target.checked ? "board" : "tv"); bcRemount(); };
 });
@@ -9365,7 +9371,7 @@ function tsStrip(){
   const fc = fileClock(), mr = store.get("adrb.mapRegime", null), lv = S.snap.live;
   const parts = [`<span title="The stock file's date and the time it was exported (New York)">File <b>${esc(S.snap.asOf)}</b>${fc && fc.src !== "live" ? ` ${hhmm(fc.m)} ET` : ""}${S.mode === "pm" ? " · premarket" : ""}</span>`,
     `<span title="The last stored daily bar (Massive)">History <b>${S.has.hist && HIST.nD ? esc(HIST.dates[HIST.nD - 1]) : "not loaded"}</b></span>`,
-    lv ? `<span title="Massive Stocks Starter is 15 minutes delayed — never a real-time trigger">Live prices <b>${fc ? hhmm(fc.m) + " ET" : "—"}</b> · 15-min delayed</span>` : `<span class="dim">Live prices off</span>`,
+    lv ? `<span title="${lvDT() === "real-time" ? "Massive Stocks Advanced is real-time — the board still never calls a trigger by itself; confirm it on the chart" : "Massive Stocks Starter is 15 minutes delayed — never a real-time trigger"}">Live prices <b>${fc ? hhmm(fc.m) + " ET" : "—"}</b> · ${lvDT()}</span>` : `<span class="dim">Live prices off</span>`,
     `<span title="When MAP's call was set on this board">MAP call <b>${mr && mr.v && mr.key === mapKey() ? esc(mr.v) : "not set"}</b>${mr && mr.at && mr.key === mapKey() ? " · set " + esc(fmtWhen(mr.at)) : ""}</span>`];
   return `<div class="tsx">${parts.join("")}</div>`;
 }
@@ -9398,7 +9404,7 @@ function dpCardHTML(compact){
     <div class="small" style="margin:4px 0 8px"><b>Plan for ${jnDay(p)}</b> · v${R.n} of ${pl.revs.length} · ${lockTxt} · data to the ${jnDay(R.d0)} close${typeof dpViewHTML === "function" ? dpViewHTML() : ""}${pl.revs.length > 1 || R.ed ? `<details class="tp-fold" style="display:inline-block;margin-left:8px"><summary>revisions</summary><div class="small">${revTxt}</div></details>` : ""}</div>
     ${order.map(k => `<h4 style="margin:8px 0 2px">${esc(DP_L[k])} <span class="small dim">${groups[k].length}</span></h4><div class="tscroll" style="max-height:none"><table class="mini dpt"><thead><tr><th>#</th><th class="l">Ticker</th><th class="l">Why · why now / what could fail (frozen)</th><th>At plan</th><th>Now</th><th class="l">Live status</th></tr></thead><tbody>${groups[k].map(row).join("")}</tbody></table></div>`).join("") || `<div class="empty">The plan is empty — nothing qualified and no MAP lists typed. That's a valid plan.</div>`}
     ${disc}
-    <div class="small dim" style="margin-top:6px">${S.has.hist ? "" : "The board's lists need the price history — until it's loaded only MAP's lists are in the plan. "}Live status uses the data on screen (Massive is 15 minutes delayed). "In the zone" is a location, not a trigger: the trigger is a 30-min close over the 30-min 21 EMA, from 10:00 ET, checked on the chart.</div></div>`;
+    <div class="small dim" style="margin-top:6px">${S.has.hist ? "" : "The board's lists need the price history — until it's loaded only MAP's lists are in the plan. "}Live status uses the data on screen (Massive is ${lvDT()}). "In the zone" is a location, not a trigger: the trigger is a 30-min close over the 30-min 21 EMA, from 10:00 ET, checked on the chart.</div></div>`;
 }
 function dpPaint(){ const b = $("dpBox"); if (b) { b.innerHTML = dpCardHTML(); if (typeof lpPaint === "function") try { lpPaint(b); } catch (e) {} /* 4 Nov: stage age badges */ b.querySelectorAll("tbody").forEach(tb => tb.addEventListener("click", e => { const t = e.target.closest("tr[data-sym]"); if (t && S.rowBySym && S.rowBySym.has(t.dataset.sym)) openDrawer(t.dataset.sym); })); } }
 // 31 Oct (structure only): was a renderTab override; now a "tab" hook — same code, same order (BOARD HOOKS, block 1)
@@ -9825,7 +9831,7 @@ function dpanelHTML(r){
   const s = S.has.hist ? s61Of(r) : null, x = s ? s.x : null, st = dpnGet(r.sym), n = jnET(), sess = isSess(n.d), pm = !sess || n.m < 570, early = sess && n.m < 600, closed = !sess || n.m >= 960;
   const D = x ? x.D : r.adrD || (r.adr && r.last ? r.adr / 100 * r.last : null), cap = S61.lod;
   const p = typeof dpCur === "function" ? dpCur() : null, rec = p ? JN.recs[p] : null, inPlan = rec && rec.plan && rec.plan.revs.length ? rec.plan.revs[rec.plan.revs.length - 1].names.find(e => e.s === r.sym) : null;
-  const when = closed ? "Market closed — plan only." : early ? "Before 10:00 ET — no entry yet (the earliest trigger is the close of the 10:00 30-min candle)." : "Enter only on the 30-min trigger — confirm it on the chart (Massive is 15 minutes delayed).";
+  const when = closed ? "Market closed — plan only." : early ? "Before 10:00 ET — no entry yet (the earliest trigger is the close of the 10:00 30-min candle)." : "Enter only on the 30-min trigger — confirm it on the chart (Massive is " + lvDT() + ").";
   const fill = st.fill ?? (S.snap && S.snap.live && !pm ? r.last : x && fin(x.entry) ? +x.entry.toFixed(2) : null), stop = st.stop ?? (!pm && r.lo1d != null ? r.lo1d : null);
   const R1 = fill != null && stop != null && fill > stop ? fill - stop : null, adrU = R1 != null && D ? R1 / D : null;
   const auto = x && fill != null ? x.resAbove(fill) : null, res = st.res ?? (auto && fin(auto.fr) ? +auto.fr.toFixed(2) : null), resFrom = st.res != null ? "yours" : auto ? (fin(auto.fr) ? "board estimate" : "nothing above (NH)") : null;
@@ -10369,7 +10375,7 @@ nextAction = function(r, held){
 function lcCell(sym){
   const r = S.rowBySym && S.rowBySym.get(sym); if (!r || r.last == null) return {last: "—", entry: "—"};
   const s = !r.etf && S.has.hist ? s61Of(r) : null, x = s && s.x, live = !!(S.snap && S.snap.live);
-  const tip = live ? "Last price from Massive (15 minutes delayed)" : "Last price in the stock file";
+  const tip = live ? "Last price from Massive (" + lvDT() + ")" : "Last price in the stock file";
   let gap = "";
   if (x && fin(x.entry) && fin(x.D) && x.D > 0) { const g = (r.last - x.entry) / x.D; gap = `<div class="small dim" title="Last minus the planned entry, in ADR">${g >= 0 ? "+" : "−"}${Math.abs(g).toFixed(2)} ADR vs entry</div>`; }
   return {last: `<span title="${tip}">${f2(r.last)}</span>${gap}`, entry: x && fin(x.entry) ? f2(x.entry) : "—"};
@@ -10377,12 +10383,12 @@ function lcCell(sym){
 function lcPaint(root = document){
   root.querySelectorAll("table.s61t:not([data-lc])").forEach(t => {
     const hs = [...t.querySelectorAll("thead th")], i = hs.findIndex(h => h.getAttribute("title") === "Planned entry"); t.dataset.lc = 1; if (i < 0) return;
-    hs[i].insertAdjacentHTML("beforebegin", `<th title="Last price — the file's, or Massive's in Live mode (15 minutes delayed)">Last</th>`);
+    hs[i].insertAdjacentHTML("beforebegin", `<th title="Last price — the file's, or Massive's in Live mode (${lvDT()})">Last</th>`);
     t.querySelectorAll("tbody tr[data-sym]").forEach(tr => { if (tr.children.length !== hs.length || tr.querySelector("td[colspan]")) return; tr.children[i].insertAdjacentHTML("beforebegin", `<td class="lc">${lcCell(tr.dataset.sym).last}</td>`); });
   });
   root.querySelectorAll("table.wlt:not([data-lc])").forEach(t => {
     const hs = [...t.querySelectorAll("thead th")], i = hs.findIndex(h => h.textContent.trim() === "Status"); t.dataset.lc = 1; if (i < 0) return;
-    hs[i].insertAdjacentHTML("afterend", `<th title="Last price — the file's, or Massive's in Live mode (15 minutes delayed)">Last</th><th title="Entry Check's planned entry">Entry</th>`);
+    hs[i].insertAdjacentHTML("afterend", `<th title="Last price — the file's, or Massive's in Live mode (${lvDT()})">Last</th><th title="Entry Check's planned entry">Entry</th>`);
     t.querySelectorAll("tbody tr[data-sym]").forEach(tr => {
       const cs = tr.querySelector("td[colspan]"); if (cs) { cs.colSpan = cs.colSpan + 2; return; }
       if (tr.children.length !== hs.length) return;
@@ -13339,7 +13345,7 @@ async function unpack(d){
   return await new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream("gzip"))).text();
 }
 const PROTO = ["2025-06-18", "2025-03-26", "2024-11-05"];
-const INSTR = "Read-only view of Eugene's Deep Space Board (his US swing-trading scanner) as it was last shown on one of his devices. The board shares what it shows while it is open; nothing here is fetched live. Always say which device and how long ago (shared_at, data_to) when you quote it. Prices are Massive (15 minutes delayed) in Live mode, else the CSV. The board never overrides MAP's call or lists.";
+const INSTR = "Read-only view of Eugene's Deep Space Board (his US swing-trading scanner) as it was last shown on one of his devices. The board shares what it shows while it is open; nothing here is fetched live. Always say which device and how long ago (shared_at, data_to) when you quote it. Prices are Massive in Live mode (when.live.source says 15 minutes delayed or real-time), else the CSV. The board never overrides MAP's call or lists.";
 const BOARD = {type: "string", description: "Which board: us (default), or asia-hk / asia-jp / asia-kr"};
 const DEVICE = {type: "string", description: "Optional: a device name such as Desktop or Phone. Default: the device whose data is newest."};
 const TOOLS = [
@@ -13966,7 +13972,7 @@ function ncHTML(m){
       <td class="l small${mark(i.grp, bG)}">${i.grp ? `${ncNth(i.grp)} of ${i.grpOf}` : "—"} <span class="dim">${esc(i.gname)}</span></td>
       <td class="${fin(i.ext) && i.ext > m.cap ? "ncx" : ""}">${fin(i.ext) ? i.ext.toFixed(1) : "—"}</td></tr>`).join("")}</tbody></table></div>${rows.length > shown.length ? `<div class="small dim">+${rows.length - shown.length} more on ${srcL} (the ranks above count all ${n})</div>` : ""}`;
   const seg = m.canHere ? `<span class="seg ncseg"><button data-ncc="lists" class="${m.here ? "" : "on"}">Your lists</button><button data-ncc="here" class="${m.here ? "on" : ""}">This list</button></span>` : "";
-  const when = m.asOf ? `<span class="small dim">${m.live ? "Live mode · 15-min delayed · " : ""}data ${esc(m.asOf)}${ixd}</span>` : "";
+  const when = m.asOf ? `<span class="small dim">${m.live ? "Live mode · " + lvDT() + " · " : ""}data ${esc(m.asOf)}${ixd}</span>` : "";
   return `<details class="nc" data-nc="${esc(m.sym)}" ${store.get("adrb.ncOpen", false) ? "open" : ""}><summary><div class="ncrow">
       <span class="nct1"><i>Today's map</i>${ncMapTile(m)}</span>
       <span class="nct1"><i>Index today</i><b>${ix}</b><small>${esc(m.sym)} vs ${esc(m.bench || "index")}: <span class="${ncCls(m.vs)}">${ncAdr(m.vs)}</span>${m.map ? ` · MAP ${esc(m.map)}` : ""}</small></span>
@@ -14054,7 +14060,7 @@ function ehCell(sym){
   if (!e) return `<span class="dim" title="${LV.cfg.on ? "No premarket or after-hours trade from Massive for this name yet" : "Premarket / after-hours prices come from Live mode (Massive) or a premarket file"}">—</span>`;
   if (e.rth) return `<span class="dim" title="Regular hours — the Last column is the price">—</span>`;
   const when = e.t ? `${hhmm(etMin(e.t - 1) + 1)} ET${e.day ? " · " + NYW.format(new Date(e.t)) : ""}` : "file";
-  const tip = `${e.tag === "PM" ? "Premarket" : e.tag === "AH" ? "After-hours" : "After-hours close (8 pm New York; no overnight trades on Massive)"} price · ${e.src === "live" ? "Massive, 15 minutes delayed" : "from the premarket file"}${e.ref ? ` · vs ${e.tag === "PM" ? "the previous close" : "today's regular close"} ${f2(e.ref)}` : ""}`;
+  const tip = `${e.tag === "PM" ? "Premarket" : e.tag === "AH" ? "After-hours" : "After-hours close (8 pm New York; no overnight trades on Massive)"} price · ${e.src === "live" ? "Massive, " + lvDT() : "from the premarket file"}${e.ref ? ` · vs ${e.tag === "PM" ? "the previous close" : "today's regular close"} ${f2(e.ref)}` : ""}`;
   return `<span title="${esc(tip)}"><b>${f2(e.p)}</b>${e.chg != null ? ` <span class="${e.chg >= 0 ? "pos" : "neg"}">${e.chg >= 0 ? "+" : "−"}${Math.abs(e.chg).toFixed(1)}%</span>` : ""}<div class="small dim">${esc(e.tag)} · ${esc(when)}</div></span>`;
 }
 const ehLastIdx = hs => hs.findIndex(h => h.dataset.k === "last" || (h.firstChild && h.firstChild.nodeType === 3 ? h.firstChild.textContent.trim() : h.textContent.trim()) === "Last");
@@ -14189,7 +14195,7 @@ function dvBuild(){
   const tp = S.tape, rg = (() => { try { return s61Reg(); } catch (e) { return {}; } })();
   return {kind: "deep-space-view", v: 1, at: Date.now(), device: syName(), board: sySlot(),
     when: {new_york_now: `${ny.d} ${hhmm(ny.m)} ET`, files: rawNames(curFiles()), file_data_to: S.snap.asOf || null, session_mode: S.mode === "pm" ? "premarket" : "regular session",
-      live: live ? {data_to: `${live.date} ${hhmm(etMin(live.dataMs - 1) + 1)} ET`, phase: live.mode === "pm" ? "premarket" : "regular session", source: "Massive, 15 minutes delayed"} : null,
+      live: live ? {data_to: `${live.date} ${hhmm(etMin(live.dataMs - 1) + 1)} ET`, phase: live.mode === "pm" ? "premarket" : "regular session", source: "Massive, " + lvDT()} : null,
       price_history_to: S.has.hist && HIST.nD ? HIST.dates[HIST.nD - 1] : null, entry_check: L ? "on" : "needs the price history (Data check → Load price history)"},
     market: {map_call: mapRegime().v || null, board_tape_read: tp ? {read: tp.bucket, score: tp.score} : null, size_regime: rg.v ? `${rg.v} (${rg.src === "map" ? "MAP" : rg.src === "tape" ? "tape read" : "default"})` : null,
       macro_checklist: (() => { try { return typeof mcSummary === "function" ? mcSummary() : null; } catch (e) { return null; } })()},   // 31 Oct: MACRO CHECKLIST (display only)
@@ -14579,7 +14585,7 @@ const TVL_PERM_TXT = {held: "your position", p1: "Entry Check list — rules v6.
 function tvlCSV(B, L, scope){
   const q = csvCell;   // 8 Nov 2026 (TIDY-UP): the shared copy (block 1), same text
   const sst = new Map(B.secs.map(s => [s.k, s.st === "ok" ? "complete" : s.st === "partial" ? "partial: " + s.why.join("; ") : "unavailable: " + s.why.join("; ")]));
-  const gen = new Date().toISOString(), built = new Date(B.at).toISOString(), mode = B.live ? "live (Massive, 15 min delayed)" : B.mode === "pm" ? "premarket file" : "regular-session file";
+  const gen = new Date().toISOString(), built = new Date(B.at).toISOString(), mode = B.live ? "live (Massive, " + lvDT() + ")" : B.mode === "pm" ? "premarket file" : "regular-session file";
   const dataTo = B.live ? new Date(B.live).toISOString() : B.session || "";
   const rows = L.map((e, i) => [B.session, gen, built, mode, dataTo, B.files.join(" + "), scope, B.label, i + 1, e.s, e.tv || "", e.tvSrc, e.unres, e.name, e.exch, e.etf ? "ETF" : "stock", e.h,
     e.tags.join("; "), e.sts.join("; "), e.whys.join("; "), e.held ? "yes" : "", e.camp, e.inMap == null ? "" : e.inMap ? "yes" : "no", e.f == null ? "" : e.f ? "yes" : "no", e.data, sst.get(e.sec) || "",
@@ -14621,7 +14627,7 @@ function tvlCardHTML(){
   const d = tvlDiff({label}, Ls), nOk = Ls.filter(e => e.tv).length, nUn = Ls.length - nOk;
   const partial = M.secs.filter(s => s.items.some(i => i.on) && s.st !== "ok");
   const bLine = !B ? `Not built yet — Copy / Download build first.` : fresh ? `Built ${esc(tvlWhen(B.at))} · session ${esc(B.session || "—")}` : `Last build ${esc(tvlWhen(B.at))} (session ${esc(B.session || "—")}, ${esc(B.label)}) is out of date — the data or your ticks changed; Copy / Download build again.`;
-  const sum = `<div class="tvl-sum"><b>${esc(label)}</b> · session <b>${esc(sess || "—")}</b>${S.snap && S.snap.live ? " (Live, Massive 15 min delayed)" : ""} · <b>${nOk}</b> symbol${nOk === 1 ? "" : "s"} to TradingView${nUn ? ` · <b class="neg">${nUn} unresolved</b> left out` : ""} · ${M.hits} list hits, ${M.hits - L.length} overlaps removed · ${LISTS.held.size} held · ${tvlCampOpen().length} open campaign${tvlCampOpen().length === 1 ? "" : "s"}${partial.length ? ` · <b class="neg">partial</b>` : ""}<br><span class="small">${bLine}</span>${d ? `<br><span class="small">Since your last ${esc(label)} export (${esc(tvlWhen(d.p.at))}): ${d.add.length ? `<b>+${d.add.length} new</b> ${esc(d.add.slice(0, 15).join(" "))}${d.add.length > 15 ? " …" : ""}` : "no new names"} · ${d.drop.length ? `<b>−${d.drop.length} dropped</b> ${esc(d.drop.slice(0, 15).join(" "))}${d.drop.length > 15 ? " …" : ""}` : "none dropped"}</span>` : ""}</div>`;
+  const sum = `<div class="tvl-sum"><b>${esc(label)}</b> · session <b>${esc(sess || "—")}</b>${S.snap && S.snap.live ? " (Live, Massive " + lvDT() + ")" : ""} · <b>${nOk}</b> symbol${nOk === 1 ? "" : "s"} to TradingView${nUn ? ` · <b class="neg">${nUn} unresolved</b> left out` : ""} · ${M.hits} list hits, ${M.hits - L.length} overlaps removed · ${LISTS.held.size} held · ${tvlCampOpen().length} open campaign${tvlCampOpen().length === 1 ? "" : "s"}${partial.length ? ` · <b class="neg">partial</b>` : ""}<br><span class="small">${bLine}</span>${d ? `<br><span class="small">Since your last ${esc(label)} export (${esc(tvlWhen(d.p.at))}): ${d.add.length ? `<b>+${d.add.length} new</b> ${esc(d.add.slice(0, 15).join(" "))}${d.add.length > 15 ? " …" : ""}` : "no new names"} · ${d.drop.length ? `<b>−${d.drop.length} dropped</b> ${esc(d.drop.slice(0, 15).join(" "))}${d.drop.length > 15 ? " …" : ""}` : "none dropped"}</span>` : ""}</div>`;
   const btns = `<div class="tvl-btns"><button class="btn sm" data-tvlact="refresh" ${TVL.busy ? "disabled" : ""} title="The board's price-history Update (and Live refresh when Live mode is on). Keeps the last data if it fails.">Refresh data</button><button class="btn sm" data-tvlact="build" title="Freeze today's combined list with its session and data time">Build daily lists</button><button class="btn sm" data-tvlact="rb" ${TVL.busy ? "disabled" : ""}>Refresh &amp; build</button>
     <span class="tvl-gap"></span><button class="btn sm primary" data-tvlact="copy">Copy for TradingView</button><button class="btn sm primary" data-tvlact="txt">Download TradingView TXT</button><button class="btn sm" data-tvlact="csv" title="Every name with why it's there, its tags and data status — research / audit, not the TradingView import">Download CSV</button></div>`;
   const warn = [];
@@ -15870,7 +15876,7 @@ const TD_BASIS = {pm: "premarket price vs yesterday's close", yday: "yesterday's
 function tdAsOf(){
   if (!S.snap) return "";
   const c = fileClock(), t = c ? hhmm(c.m) + " ET" : "";
-  if (c && c.src === "live") return `prices: Massive to ${t}, 15 minutes delayed`;
+  if (c && c.src === "live") return `prices: Massive to ${t}, ${lvDT()}`;
   const late = S.mode !== "pm" && c && c.m >= 16 * 60 ? " (after the close, so the full session)" : "";
   return `prices: ${S.mode === "pm" ? "premarket file" : "file"} for ${S.snap.asOf}${t ? (c.src === "typed" ? ` at ${t} (time you set)` : ` saved ${t}`) : ""}${late}`;
 }
@@ -16846,7 +16852,7 @@ function itHeadHTML(){
   let st = "";
   if (IT.prog) st = `Fetching 5 years of daily bars from Massive… ${IT.prog.done} of ${IT.prog.n}`;
   else if (!newsKey() && !recs.length) st = `Add your Massive key in Settings to fetch the 5-year history (one call per ETF, once).`;
-  else if (recs.length) st = `Massive daily bars (15 min delayed), stored in this browser from ${itDt(first)} · new sessions copied from the board's own price history`;
+  else if (recs.length) st = `Massive daily bars (${lvDT()}), stored in this browser from ${itDt(first)} · new sessions copied from the board's own price history`;
   else if (HIST.nD) st = `Using the board's own price history (${HIST.nD} sessions) until the 5-year pull runs — stretch scores are against that shorter history.`;
   return `<div class="hd"><h2>Index trend</h2><span class="sub">price vs the 21-day and the 10-week line · extended past ±${IT_SIG}σ of its own history</span></div>
     <div class="bd"><span><b>MAP says:</b> <span class="${v === "Supportive" ? "pos" : v === "Defensive" ? "neg" : ""}">${esc(v || "not set")}</span> <span class="small">— this page is a second opinion and never changes the call</span></span>${seg}
@@ -17219,7 +17225,7 @@ function mlCsv(){
   const q = csvCell;   // 8 Nov 2026 (TIDY-UP): the shared copy (block 1), same text
   const n4 = v => v == null || !isFinite(v) ? "" : +v.toFixed(4);
   const KL = {A: "A list", B: "B list", S: "Stalk"};
-  const src = S.snap.live && S.snap.live.dataMs ? `Live (Massive, 15 min delayed) ${new Date(S.snap.live.dataMs).toISOString()}` : `File ${S.snap.asOf || ""}`;
+  const src = S.snap.live && S.snap.live.dataMs ? `Live (Massive, ${lvDT()}) ${new Date(S.snap.live.dataMs).toISOString()}` : `File ${S.snap.asOf || ""}`;
   const H = ["listed", "last_listed", "list", "ticker", "price_then", "adr_pct_then", "price_now", "now_from", "move_pct", "move_adr", "best_since_adr", "worst_since_adr", "sessions", "entry_check_list_now", "location_now", "in_current_file"];
   const rows = mlCsvRows(), L = [H.join(",")];
   for (const o of rows) L.push([o.d, o.last, KL[o.k], o.s, n4(o.px), n4(o.adrPct), n4(o.now), o.now == null ? "" : src, n4(o.pct), n4(o.u), n4(o.best), n4(o.worst), o.sess, o.list, o.loc, o.inFile ? "yes" : "no"].map(q).join(","));
@@ -17776,7 +17782,7 @@ function fpGeo(f, q){
 const fpHM = ms => hhmm(etMin(ms));
 function fpTrigTxt(f, q){
   if (!q) return "Buy over the 09:30–10:00 ET high; stop = its low (from 10:00 ET; watch TradingView's live chart)";
-  if (q.wait) return "Buy over the 09:30–10:00 ET high; stop = its low — the candle isn't finished yet (Massive is 15 min behind)";
+  if (q.wait) return "Buy over the 09:30–10:00 ET high; stop = its low — the candle isn't finished yet" + (lvDT() === "real-time" ? "" : " (Massive is 15 min behind)");
   if (q.none) return "Buy over the 09:30–10:00 ET high; stop = its low — no 30-min bars for this name in Live mode";
   const g = fpGeo(f, q);
   return `Buy over ${p2(q.hi)} (09:30–10:00 high); stop ${p2(q.lo)} = its low · 1R ${p2(q.R)}${g ? ` = ${g.rA.toFixed(2)} ADR` : ""}${g && g.flag ? ` — ${g.flag}` : ""}${q.trig ? ` · TRIGGERED ${fpHM(q.trigAt)} ET` : " · not triggered yet"}`;
@@ -17830,7 +17836,7 @@ function fpCardHTML(){
   const fl = shown < tot ? ` <span class="small">(filters on: ${shown} shown of ${tot})</span>` : "";
   const ro = L.O.filter(f => f.x.legOk || f.x.loc === "9" || f.x.loc === "21");
   return hd(`paper / watch only · never sized · every stock in the file, filter bar applied · daily close ${esc(to)}`) + `<div class="bd">
-    <div class="small" style="margin-bottom:6px">A stock fresh off a strong leg (often early Stage 2) pulls back quietly to its daily <b>9 or 21 EMA</b> (±0.5 ADR) on <b>drying volume</b> with <b>tight ranges</b>. <b>Trigger</b>: over the 09:30–10:00 ET candle's high, from 10:00 ET · <b>stop</b> = that candle's low · exits as Playbook 1. Watch the trigger on TradingView's live chart — the board is 15 minutes behind.</div>
+    <div class="small" style="margin-bottom:6px">A stock fresh off a strong leg (often early Stage 2) pulls back quietly to its daily <b>9 or 21 EMA</b> (±0.5 ADR) on <b>drying volume</b> with <b>tight ranges</b>. <b>Trigger</b>: over the 09:30–10:00 ET candle's high, from 10:00 ET · <b>stop</b> = that candle's low · exits as Playbook 1. Watch the trigger on TradingView's live chart — ${lvDT() === "real-time" ? "the board's Live prices are real-time, but the trigger is still yours to confirm on the chart" : "the board is 15 minutes behind"}.</div>
     <div class="kpis" style="margin:8px 0"><div class="kpi card"><div class="k">Ready</div><div class="v">${n("R")}</div><div class="n">checks 1–12 pass · at the 9 first</div></div>
       <div class="kpi card"><div class="k">On deck</div><div class="v">${n("D")}</div><div class="n">one of stage 1 · volume · ranges · earnings missing</div></div>
       <div class="kpi card"><div class="k">Not yet</div><div class="v">${n("N")}</div><div class="n">more than 0.5 ADR above both lines</div></div>
@@ -17848,10 +17854,10 @@ function fpPaneHTML(r){
   const f = fpOf(r);
   if (!f) return `<div class="fpp"><div class="small">${pbHH() ? "Not enough stored bars for First Pullback." : "First Pullback needs the price history (Data check → Load price history)."}</div></div>`;
   const q = fpLive(r.sym), g = fpGeo(f, q);
-  const live = !q ? `<b>Trigger</b>: buy over the 09:30–10:00 ET candle's high, from 10:00 ET · stop = its low · 1R = high − low. In Live mode the board fills in the numbers after about 10:15 ET (Massive is 15 minutes behind); watch the real trigger on TradingView.`
+  const live = !q ? `<b>Trigger</b>: buy over the 09:30–10:00 ET candle's high, from 10:00 ET · stop = its low · 1R = high − low. In Live mode the board fills in the numbers after ${lvDT() === "real-time" ? "10:00 ET (Massive real-time)" : "about 10:15 ET (Massive is 15 minutes behind)"}; watch the real trigger on TradingView.`
     : q.wait ? `<b>Trigger</b>: buy over the 09:30–10:00 ET high; stop = its low — the first candle isn't finished in the delayed data yet.`
     : q.none ? `<b>Trigger</b>: no 30-min bars for this name in Live mode (Live → "30-min bars for" covers liquid names and your lists).`
-    : `<b>First candle</b> (09:30–10:00 ET): high <b>${p2(q.hi)}</b> · low <b>${p2(q.lo)}</b> · 1R ${p2(q.R)}${g ? ` = <b>${g.rA.toFixed(2)} ADR</b>` : ""}${g && g.flag ? ` <span class="neg">${esc(g.flag)}</span>` : ""}${g && fin(g.room) ? ` · room to the leg high ${g.room.toFixed(1)}R` : ""} · ${q.trig ? `<b class="pos">triggered ${fpHM(q.trigAt)} ET</b>` : "not triggered yet"} <span class="dim">(Massive, 15 min delayed)</span>`;
+    : `<b>First candle</b> (09:30–10:00 ET): high <b>${p2(q.hi)}</b> · low <b>${p2(q.lo)}</b> · 1R ${p2(q.R)}${g ? ` = <b>${g.rA.toFixed(2)} ADR</b>` : ""}${g && g.flag ? ` <span class="neg">${esc(g.flag)}</span>` : ""}${g && fin(g.room) ? ` · room to the leg high ${g.room.toFixed(1)}R` : ""} · ${q.trig ? `<b class="pos">triggered ${fpHM(q.trigAt)} ET</b>` : "not triggered yet"} <span class="dim">(Massive, ${lvDT()})</span>`;
   const rows = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].map(n => s61RowHTML(f.ck[n])).join("");
   return `<div class="fpp"><div class="pbh"><b>First Pullback · ${esc(r.sym)}</b> <span class="small dim">Playbook 2 · v1.0 · paper / watch only</span><span class="spacer"></span>${fpPill(f)} ${fpLocPill(f)}</div>
     <div class="small" style="margin:4px 0"><b>Next:</b> ${esc(fpNext(f))}</div>
@@ -18055,7 +18061,7 @@ const FP_CSV_H = ["first_seen", "last_seen", "list_then", "ticker", "location_th
   "fp_list_now", "fp_location_now", "trade_session", "first_candle_high", "first_candle_low", "first_candle_seen_at", "triggered_at", "one_r_adr", "triggered", "result", "result_on", "in_current_file"];
 function fpTrackCsvText(rows){
   const n4 = v => v == null || !fin(v) ? "" : +v.toFixed(4);
-  const src = S.snap && S.snap.live && S.snap.live.dataMs ? `Live (Massive, 15 min delayed) ${new Date(S.snap.live.dataMs).toISOString()}` : `File ${S.snap ? S.snap.asOf || "" : ""}`;
+  const src = S.snap && S.snap.live && S.snap.live.dataMs ? `Live (Massive, ${lvDT()}) ${new Date(S.snap.live.dataMs).toISOString()}` : `File ${S.snap ? S.snap.asOf || "" : ""}`;
   const L = [FP_CSV_H.join(",")];
   for (const o of rows) L.push([o.d, o.last, FP_L[o.k].n, o.s, FP_LOCF[o.loc] || "", n4(o.px), n4(o.adr), n4(o.legHi), n4(o.pbLow), n4(o.now), o.now == null ? "" : src, n4(o.pct), n4(o.u), n4(o.best), n4(o.worst), o.sess,
     o.f ? FP_L[o.f.list].n : "", o.f && o.f.x.loc ? FP_LOCF[o.f.x.loc] : "", o.s1, o.fc ? n4(o.fc[0]) : "", o.fc ? n4(o.fc[1]) : "", o.fc ? o.fc[2] || "" : "", o.fc ? o.fc[3] || "" : "", n4(o.rA),
@@ -18567,7 +18573,7 @@ function flsCardHTML(){
 // 7 Nov 2026 rebuild: both routes, either gate mode
 function flsBody(R, rt){
   const g = R.gate, sp = g.spy, ctx = R.mode === "ctx", E = R.early;
-  const lvT = R.lvOn ? ` · Live 30-min bars to ${hhmm(etMin(LV.frame.dataMs - 1) + 1)} ET (Massive, 15 min delayed)` : " · daily view (a green needs Live mode's 30-min bars)";
+  const lvT = R.lvOn ? ` · Live 30-min bars to ${hhmm(etMin(LV.frame.dataMs - 1) + 1)} ET (Massive, ${lvDT()})` : " · daily view (a green needs Live mode's 30-min bars)";
   const gl = ctx ? `<div class="small" style="margin-bottom:6px">Market context — shown, never blocks (context only): <b>${esc(R.mapTxt)}</b> · ${esc(R.spy.t)} · ${R.rows.filter(o => o.x).length} stocks + ${R.erows.filter(o => o.e).length} ETFs checked${lvT}</div>`
     : `<div class="small" style="margin-bottom:6px">Market gate (legacy): MAP <b>${esc(g.mapV || "not set")}</b> · ${sp ? `SPY ${p2(sp.c)} vs 50 SMA ${p2(sp.s50)} · 9 EMA ${p2(sp.e9)} vs 21 EMA ${p2(sp.e21)} (${esc(sp.to)})` : "SPY: no stored bars"} · ${R.rows.filter(o => o.x).length} stocks + ${R.erows.filter(o => o.e).length} ETFs checked${lvT}</div>`;
   const closed = R.open ? "" : `<div class="flsclosed"><b>Short side closed today — ${esc(g.why.join("; "))}</b></div>`;
@@ -19447,8 +19453,8 @@ function fpUcLive(sym, shelf){
 function fpUcLiveTxt(q, shelf){
   if (!q) return "";
   if (q.none) return "no 30-min bars for this name in Live mode";
-  if (q.rec) return `reclaimed ${fpHM(q.at)} ET (30-min close ${p2(q.c)} over the shelf ${p2(shelf)}; Massive, 15 min delayed)`;
-  return q.n ? "no 30-min close back above the shelf yet (Massive, 15 min delayed)" : "no completed 30-min bar yet (Massive, 15 min delayed)";
+  if (q.rec) return `reclaimed ${fpHM(q.at)} ET (30-min close ${p2(q.c)} over the shelf ${p2(shelf)}; Massive, ${lvDT()})`;
+  return q.n ? "no 30-min close back above the shelf yet (Massive, " + lvDT() + ")" : "no completed 30-min bar yet (Massive, " + lvDT() + ")";
 }
 function fpUcNext(f){
   const u = fpUcOf(f); if (!u) return "Undercut watch — watch for a close back above the shelf";
@@ -20558,4 +20564,248 @@ const PB_PRESET = {1: "Playbook 1 · Leader Pullback (Entry Check view)", fp: "P
   if (r1) P[PB_PRESET[2]] = r1;
   if (ob) P[PB_PRESET[3]] = ob;
 }
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   SHORT INTEREST + FLOAT (10 Nov 2026). DISPLAY ONLY — information beside a name. Never a check, a list, a rank, a state,
+   a zone, a stop, a size, the Former Leader Short card's checks, the feeds, the Decision log, snapshots or MAP import.
+   Eugene, 10 Nov 2026, on Claude's list of what Massive Advanced adds ("Short interest, days to cover and float on the
+   Former Leader Short card. A crowded short (say 5+ days to cover) is squeeze risk … The same number on long breakouts
+   shows how much squeeze fuel there is"): "all #3".
+   Data (Massive, read in this browser with the same key as News / Live; nothing stored outside it):
+   - /stocks/v1/short-interest — FINRA short interest, settled twice a month and published about a week after. One call
+     finds the newest settlement date, one more reads every ticker for that date (limit 50,000).
+   - /stocks/vX/float — Massive's free float (shares, and % of shares outstanding), up to 5,000 a page.
+   Read once per page load (and again on "Refresh" on Data check); the stored copy shows meanwhile. A refused key / plan
+   is said on Data check.
+   Per name (siOf): short interest (shares), FINRA's average daily volume and days to cover (as FINRA / Massive publish
+   them), free float (Massive; else the stock file's "Float shares outstanding"), short interest as % of float, and
+   "crowded" = days to cover ≥ SI_T.dtc (5) or short interest ≥ SI_T.pct (20) % of the float. The two lines are Claude's
+   estimate of a common rule of thumb — not a Notion rule — and block nothing.
+   On screen:
+   - Former Leader Short card (Setups, S playbook): every row gets a chip after the ticker — "SI 4% · 2.1d" (dim), or
+     red "CROWDED SI 23% · 6.1d" (squeeze risk for a short).
+   - Every other ticker table on the page that's showing: only crowded names get an amber "SI 23% · 6.1d" chip (on a
+     long, short fuel).
+   - Ticker panel: one line under Entry Check (and in the Former Leader Short tab) with the numbers and the dates.
+   - Table columns (Info & flags): "Short % float", "Days to cover" — off until picked.
+   - Data check → Files: a status line + Refresh.
+   Storage NEW: adrb.siData {at, sd, m: {SYM: [si, adv, dtc, freeFloat, freeFloatPct]}} — only the loaded files' names +
+   MAP's and held names (keeps the store small); the whole market stays in memory for the page's life.
+   Hooks: "tab" (load + chips + Data check line), "panel" (line), "cols" (two columns). No override.
+   Self-check: siSelf (SC_X) — % of float and crowded recomputed from the raw numbers. Test:
+   tools/board-massive-advanced-test.js (B). On trial (docs/trials.md).
+   ===================================================================== */
+const SI_T = {dtc: 5, pct: 20};
+const SI = {busy: false, loaded: false, msg: "", at: 0, sd: "", m: new Map(), nFloat: 0};
+(function(){ try { const o = store.get("adrb.siData", null); if (o && o.m) { SI.at = o.at || 0; SI.sd = o.sd || ""; for (const [k, v] of Object.entries(o.m)) SI.m.set(k, v); } } catch (e) {} })();
+function siSave(){
+  try {
+    const keep = {}, want = new Set([...(S.stocks || []), ...(S.etfs || [])].map(r => r.sym)); LISTS.held.forEach(s => want.add(s)); LISTS.focus.forEach(s => want.add(s));
+    for (const s of want) { const v = SI.m.get(s); if (v) keep[s] = v; }
+    store.set("adrb.siData", {at: SI.at, sd: SI.sd, m: keep});
+  } catch (e) {}
+}
+async function siLoad(force){
+  if (SI.busy || !newsKey() || (SI.loaded && !force)) return;
+  SI.busy = true; SI.loaded = true; SI.msg = "";
+  try {
+    const top = await mget("/stocks/v1/short-interest", {sort: "settlement_date.desc", limit: 1});
+    const sd = top && top.results && top.results[0] ? top.results[0].settlement_date : "";
+    if (!sd) throw {msg: "Massive returned no short-interest data"};
+    const rows = await mgetAll("/stocks/v1/short-interest", {settlement_date: sd, limit: 50000}, 4);
+    let fl = []; try { fl = await mgetAll("/stocks/vX/float", {limit: 5000}, 12); } catch (e) { SI.msg = `free float not read (${e.msg || "error"}) — the stock file's float is used`; }
+    const nn = v => v == null || !isFinite(+v) ? null : +v, F = new Map(fl.filter(x => x && x.ticker).map(x => [x.ticker, x])), m = new Map();
+    for (const x of rows) { if (!x || !x.ticker) continue; const f = F.get(x.ticker); m.set(x.ticker, [nn(x.short_interest), nn(x.avg_daily_volume), nn(x.days_to_cover), f ? nn(f.free_float) : null, f ? nn(f.free_float_percent) : null]); }
+    for (const [t, f] of F) if (!m.has(t)) m.set(t, [null, null, null, nn(f.free_float), nn(f.free_float_percent)]);
+    SI.m = m; SI.sd = sd; SI.at = Date.now(); SI.nFloat = F.size; siSave();
+  } catch (e) { SI.msg = e.msg || "error"; }
+  finally { SI.busy = false; }
+  if (S.snap) renderAll();
+}
+function siOf(sym){
+  const v = SI.m.get(sym), r = S.rowBySym && S.rowBySym.get(sym), csvF = r && r.float > 0 ? r.float : null;
+  if (!v && !csvF) return null;
+  const [si, adv, dtc, ff, ffp] = v || [null, null, null, null, null];
+  const fl = ff > 0 ? ff : csvF, flSrc = ff > 0 ? "Massive free float" : csvF ? "stock file float" : "";
+  const pct = si != null && fl > 0 ? si / fl * 100 : null;
+  const crowded = (dtc != null && dtc >= SI_T.dtc) || (pct != null && pct >= SI_T.pct);
+  return {si, adv, dtc, fl, flSrc, ffp, pct, crowded, sd: SI.sd};
+}
+const siSh = n => n == null ? "—" : n >= 1e9 ? (n / 1e9).toFixed(2) + "B" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? (n / 1e3).toFixed(0) + "K" : String(Math.round(n));
+const siD = d => { if (!d) return "—"; const [y, m, dd] = d.split("-"); return `${+dd} ${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][+m - 1]}`; };
+// one decimal, rounded DOWN so a name just under a crowded line never reads as on it (19.96% → 19.9%, 4.99 → 4.9)
+const siF1 = v => (Math.floor(v * 10 + 1e-9) / 10).toFixed(1);
+const siPctTxt = q => q.pct == null ? "" : siF1(q.pct) + "%";
+const siChipTxt = q => [q.pct != null ? siPctTxt(q) : "", q.dtc != null ? siF1(q.dtc) + "d" : ""].filter(Boolean).join(" · ");
+function siTxt(q){
+  if (!q) return "no short-interest data";
+  if (q.si == null) return `float ${siSh(q.fl)} shares (${q.flSrc}) · no FINRA short interest for this name`;
+  return `${siSh(q.si)} shares short${q.pct != null ? ` = ${siPctTxt(q)} of the float (${siSh(q.fl)}, ${q.flSrc}${q.ffp != null ? `, ${q.ffp.toFixed(0)}% of shares` : ""})` : ""}${q.dtc != null ? ` · ${siF1(q.dtc)} days to cover` : ""} · FINRA, settled ${siD(q.sd)} (twice a month, about a week late)`;
+}
+function siBadge(sym, side){
+  const q = siOf(sym); if (!q || q.si == null) return "";
+  const t = esc(`Short interest: ${siTxt(q)}.${q.crowded ? ` Crowded (≥ ${SI_T.dtc} days to cover or ≥ ${SI_T.pct}% of the float — a rule of thumb, not a board rule): ${side === "short" ? "squeeze risk for a short" : "short-squeeze fuel on a long"}.` : ""}`);
+  if (q.crowded) return `<span class="sib ${side === "short" ? "sicr" : "sicl"}" title="${t}">${side === "short" ? "CROWDED " : ""}SI ${siChipTxt(q)}</span>`;
+  return side === "short" ? `<span class="sib sid" title="${t}">SI ${siChipTxt(q)}</span>` : "";
+}
+function siPaint(root, side){ if (!root) return; root.querySelectorAll("tr[data-sym] td.sym").forEach(td => { if (td.querySelector(".sib")) return; const h = siBadge(td.closest("tr").dataset.sym, side); if (h) td.insertAdjacentHTML("beforeend", " " + h); }); }
+function siPaintAll(){
+  try { siPaint($("flsBox"), "short"); } catch (e) {}
+  for (const id of ["s61Box", "dpBox", "homeHeld", "watchBody", "listsBox", "focusBox", "mapTrack"]) try { siPaint($(id), "long"); } catch (e) {}
+  try { siPaint(document.querySelector("#app .tab.on"), "long"); } catch (e) {}
+}
+function siStatusHTML(){
+  const n = [...SI.m.values()].filter(v => v[0] != null).length;
+  return `Short interest + float (Massive): ${SI.busy ? "reading…" : SI.sd ? `FINRA settled ${siD(SI.sd)} · ${n.toLocaleString()} names with short interest${SI.nFloat ? ` · free float for ${SI.nFloat.toLocaleString()}` : ""} · read ${new Date(SI.at).toLocaleString()}` : newsKey() ? "not read yet" : "needs your Massive key (Settings)"}${SI.msg ? ` · <span class="neg">${esc(SI.msg)}</span>` : ""}${newsKey() ? ` <button class="btn sm" data-sire ${SI.busy ? "disabled" : ""}>Refresh</button>` : ""}`;
+}
+hookOn("tab", "shortInterest", t => {
+  siPaintAll();
+  if (t === "data") { const host = $("dataFiles"); if (host) { const e = host.querySelector(".sist"); if (e) e.innerHTML = siStatusHTML(); else host.insertAdjacentHTML("beforeend", `<div class="small sist" style="margin-top:6px">${siStatusHTML()}</div>`); } }
+  siLoad(false).catch(() => {});
+});
+document.addEventListener("click", e => { const b = e.target && e.target.closest ? e.target.closest("[data-sire]") : null; if (!b) return; b.disabled = true; siLoad(true).catch(() => {}); });
+// the Former Leader Short card redraws on its own selects — put the chips back
+document.addEventListener("change", e => { if (e.target && e.target.closest && e.target.closest("#flsBox")) setTimeout(() => siPaint($("flsBox"), "short"), 0); });
+hookOn("panel", "shortInterest", (r, dr) => {
+  if (!r || !dr) return; const q = siOf(r.sym); if (!q) return;
+  const line = side => `<div class="sipl small">${siBadge(r.sym, side)} Short interest: ${esc(siTxt(q))}</div>`;
+  const box = dr.querySelector(".s61p") || dr.querySelector(".hx"); if (box && !box.querySelector(".sipl")) box.insertAdjacentHTML("beforeend", line("long"));
+  const fl = dr.querySelector('.tp-pane[data-p="fls"]'); if (fl && !fl.querySelector(".sipl")) fl.insertAdjacentHTML("beforeend", line("short"));
+});
+hookOn("cols", "shortInterest", hx => {
+  hx.C.push({k: "siPct", l: "Short % float", h: "FINRA short interest ÷ free float (Massive; else the stock file's float)", g: "info", v: r => { const q = siOf(r.sym); return q ? q.pct : null; }, f: r => { const q = siOf(r.sym); return q && q.pct != null ? `<span class="${q.pct >= SI_T.pct ? "neg" : ""}">${siPctTxt(q)}</span>` : "—"; }},
+    {k: "siDtc", l: "Days to cover", h: "FINRA short interest ÷ average daily volume", g: "info", v: r => { const q = siOf(r.sym); return q ? q.dtc : null; }, f: r => { const q = siOf(r.sym); return q && q.dtc != null ? `<span class="${q.dtc >= SI_T.dtc ? "neg" : ""}">${siF1(q.dtc)}</span>` : "—"; }});
+});
+// self-check: % of float and crowded from the raw numbers, a separate short copy
+function siSelf(){
+  const out = []; if (!SI.m.size) return out;
+  for (const r of (S.stocks || []).slice(0, 400)) {
+    const v = SI.m.get(r.sym); if (!v || v[0] == null) continue; const q = siOf(r.sym);
+    const fl = v[3] > 0 ? v[3] : r.float > 0 ? r.float : null, pct = fl ? v[0] / fl * 100 : null, cr = (v[2] != null && v[2] >= 5) || (pct != null && pct >= 20);
+    out.push({sym: r.sym, what: "Short % float", ok: pct == null ? q.pct == null : q.pct != null && Math.abs(q.pct - pct) < 1e-9 * Math.max(1, pct), board: q.pct == null ? "none" : q.pct.toFixed(3), mine: pct == null ? "none" : pct.toFixed(3)});
+    out.push({sym: r.sym, what: "Short crowded", ok: q.crowded === cr, board: String(q.crowded), mine: String(cr)});
+  }
+  return out;
+}
+if (typeof SC_X !== "undefined") SC_X.push(siSelf);
+document.head.insertAdjacentHTML("beforeend", `<style>
+.sib{display:inline-block;font-size:10.5px;line-height:1.35;padding:0 5px;border-radius:8px;font-weight:700;white-space:nowrap;vertical-align:1px}
+.sib.sicr{background:var(--crit);color:#fff}.sib.sicl{background:var(--warn);color:#1a1a1a}.sib.sid{background:transparent;color:var(--ink-2);border:1px solid var(--line);font-weight:600}
+.sipl{margin-top:6px;line-height:1.5}
+</style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   BID / ASK SPREAD AT THE TRIGGER (10 Nov 2026). DISPLAY ONLY — information beside a name. Never a check, a list, a rank,
+   a state, a zone, a stop, a size, the liquidity check (1b), the feeds, the Decision log, snapshots or MAP import.
+   Eugene, 10 Nov 2026, on Claude's list of what Massive Advanced adds ("Bid/ask spread at the trigger. A live spread next
+   to the liquidity check, flagged when the spread eats a big piece of your risk … mainly helps on thinner First Pullback
+   names"): "all #3".
+   Data: Massive's snapshot for a short list of names (/v2/snapshot/locale/us/markets/stocks/tickers?tickers=…, one call),
+   its lastQuote (bid p, ask P) — quotes come with Stocks Advanced. Every SP_T.every (15 s) while Live mode is on, the
+   regular session runs (09:30–16:00 ET), the tab is visible and a Massive key is set; also right after a ticker panel
+   opens. Names (≤ SP_T.max): the ticker in the panel / chart window, held, MAP's focus + B lists, Entry Check Ready +
+   On deck (L2), First Pullback Ready + On deck. Quotes are kept in memory only, for the last SP_T.win (10 min); a
+   locked / crossed / empty quote is skipped; the same quote (same timestamp) is counted once.
+   Per name (spOf): spread now ($ and bps of the mid) and the median over the window (from SP_T.minN = 3 quotes), as % of
+   the stop distance — First Pullback Ready / On deck in Live mode: the first 30-min candle's range (1R); else the
+   planned stop the liquidity check uses (liqOf stopBps: Entry Check's stop, or half an ADR); else half an ADR — and as
+   % of ADR. Flag: ≥ SP_T.amber (5) % of the stop amber, ≥ SP_T.red (10) % red. Those lines are Claude's estimate (a
+   stop-out crosses the spread twice, so 10% of the stop ≈ 0.1R per losing trade) — not a Notion rule; they block
+   nothing.
+   On screen: ticker panel line under Entry Check (Live mode only); an amber / red "SPRD n% stop" chip on flagged names in
+   every ticker table on the page that's showing (the liquidity check's list of boxes + the open tab), redrawn after
+   each poll and each board redraw. Nothing outside Live mode.
+   Storage: none. Hooks: "tab", "all" (after), "panel", "drawerShown". No override. Not in the self-check: no number
+   the plan, lists or feed use. Test: tools/board-massive-advanced-test.js (C). On trial (docs/trials.md).
+   ===================================================================== */
+const SP_T = {every: 15e3, win: 10 * 60e3, max: 40, minN: 3, amber: 5, red: 10};
+const SP = {q: new Map(), busy: false, at: 0, msg: "", noQuotes: false, set: []};   // q: sym → [[received ms, bid, ask, quote ms]]
+const spRth = (ms = Date.now()) => { const wd = NYW.format(new Date(ms)), m = etMin(ms); return wd !== "Sat" && wd !== "Sun" && m >= 570 && m < 960; };
+function spWanted(){ return typeof LV !== "undefined" && LV.cfg && !!LV.cfg.on && !!newsKey() && spRth() && !document.hidden; }
+function spSet(){
+  const s = [], add = x => { if (x && s.length < SP_T.max && /^[A-Z0-9.\-]+$/.test(x) && !s.includes(x)) s.push(x); };
+  try { if ($("drawer").classList.contains("open")) add(WSI.cur); } catch (e) {}
+  try { if (typeof popLive === "function" && popLive()) add(POP.sym); } catch (e) {}
+  LISTS.held.forEach(add); LISTS.focus.forEach(add);
+  try { if (typeof MAPL !== "undefined") MAPL.b.forEach(add); } catch (e) {}
+  try { if (typeof s61Lists === "function" && S.has && S.has.hist) { const L = s61Lists(true); for (const k of ["A-eligible", "OnDeck-L2"]) (L[k] || []).forEach(o => add(o.r.sym)); } } catch (e) {}
+  try { if (typeof fpOf === "function") for (const r of S.stocks || []) { const f = fpOf(r); if (f && (f.list === "R" || f.list === "D")) add(r.sym); } } catch (e) {}
+  return s;
+}
+async function spPoll(){
+  if (SP.busy || !spWanted()) return;
+  const set = spSet(); SP.set = set; if (!set.length) return;
+  SP.busy = true;
+  try {
+    const j = await mget("/v2/snapshot/locale/us/markets/stocks/tickers", {tickers: set.join(",")}), now = Date.now(), T = (j && j.tickers) || [];
+    let got = 0;
+    for (const x of T) {
+      const lq = x && x.lastQuote; if (!lq || !x.ticker) continue; got++;
+      const b = +lq.p, a = +lq.P; if (!(b > 0 && a > b)) continue;
+      const qt = lq.t ? Math.floor(+lq.t / 1e6) : now, L = SP.q.get(x.ticker) || [];
+      if (!L.length || L[L.length - 1][3] !== qt) L.push([now, b, a, qt]);
+      while (L.length && L[0][0] < now - SP_T.win) L.shift();
+      SP.q.set(x.ticker, L);
+    }
+    SP.noQuotes = !got && T.length > 0; SP.at = now; SP.msg = "";
+  } catch (e) { SP.msg = e.msg || "error"; }
+  finally { SP.busy = false; }
+  spPaintAll();
+}
+setInterval(() => { spPoll().catch(() => {}); }, SP_T.every);
+// the stop distance the spread is compared with
+function spStop(sym, px){
+  const r = S.rowBySym && S.rowBySym.get(sym);
+  try { const f = r && typeof fpOf === "function" ? fpOf(r) : null; if (f && (f.list === "R" || f.list === "D") && typeof fpLive === "function") { const q = fpLive(sym); if (q && q.R > 0 && px > 0) return {bps: q.R / px * 1e4, src: "First Pullback 1R (first 30-min candle)"}; } } catch (e) {}
+  try { const q = typeof liqOf === "function" ? liqOf(sym) : null; if (q && q.stopBps > 0) return {bps: q.stopBps, src: "the planned stop (Entry Check, else half an ADR)"}; } catch (e) {}
+  if (r && r.adr > 0) return {bps: 0.5 * r.adr * 100, src: "half an ADR"};
+  return null;
+}
+const spMed = v => { const s = v.slice().sort((x, y) => x - y), n = s.length; return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2; };
+function spOf(sym){
+  const L = (SP.q.get(sym) || []).filter(s => s[0] >= Date.now() - SP_T.win); if (!L.length) return null;
+  const one = ([, b, a]) => ({c: a - b, bps: (a - b) / ((a + b) / 2) * 1e4}), all = L.map(one), last = L[L.length - 1], now = one(last);
+  const med = L.length >= SP_T.minN, use = med ? {c: spMed(all.map(x => x.c)), bps: spMed(all.map(x => x.bps))} : now;
+  const st = spStop(sym, (last[1] + last[2]) / 2), r = S.rowBySym && S.rowBySym.get(sym);
+  const pctStop = st ? use.bps / st.bps * 100 : null, pctAdr = r && r.adr > 0 ? use.bps / (r.adr * 100) * 100 : null;
+  return {n: L.length, now, use, med, st, pctStop, pctAdr, lv: pctStop == null ? 0 : pctStop >= SP_T.red ? 2 : pctStop >= SP_T.amber ? 1 : 0, at: last[0]};
+}
+const spC = c => c >= 1 ? "$" + c.toFixed(2) : +(c * 100).toFixed(1) + "¢";
+function spTxt(q){
+  return `${spC(q.now.c)} now${q.med ? ` · median ${spC(q.use.c)} (${q.use.bps.toFixed(1)} bps) over the last ${SP_T.win / 60e3} min (${q.n} quotes)` : ` (${q.now.bps.toFixed(1)} bps; median from ${SP_T.minN} quotes)`}`
+    + `${q.pctStop != null ? ` = ${q.pctStop.toFixed(1)}% of ${q.st.src}` : ""}${q.pctAdr != null ? ` · ${q.pctAdr.toFixed(1)}% of ADR` : ""} · Massive quotes, ${lvDT()}`;
+}
+function spBadge(sym){
+  const q = spOf(sym); if (!q || !q.lv) return "";
+  return `<span class="spb ${q.lv === 2 ? "spr" : "spa"}" title="${esc(`Bid/ask spread: ${spTxt(q)}. Flag at ${SP_T.amber}% / ${SP_T.red}% of the stop — a rule of thumb, not a board rule (a stop-out crosses the spread twice).`)}">SPRD ${q.pctStop.toFixed(0)}% stop</span>`;
+}
+function spPaint(root){ if (!root) return; root.querySelectorAll("tr[data-sym] td.sym").forEach(td => { td.querySelectorAll(".spb").forEach(e => e.remove()); const h = spBadge(td.closest("tr").dataset.sym); if (h) td.insertAdjacentHTML("beforeend", " " + h); }); }
+function spLineHTML(sym){
+  const q = spOf(sym);
+  const body = q ? spTxt(q) : SP.msg ? `couldn't read quotes (${SP.msg})` : SP.noQuotes ? "no quotes on this Massive key (they come with Stocks Advanced)" : !spRth() ? "read during the regular session (09:30–16:00 ET)" : "reading…";
+  return `${q ? spBadge(sym) + " " : ""}Bid/ask spread: ${esc(body)}`;
+}
+function spPaintAll(){
+  if (!SP.q.size && !SP.msg && !SP.noQuotes) return;
+  for (const id of ["s61Box", "dpBox", "homeHeld", "watchBody", "listsBox", "focusBox", "mapTrack", "flsBox"]) try { spPaint($(id)); } catch (e) {}
+  try { spPaint(document.querySelector("#app .tab.on")); } catch (e) {}
+  document.querySelectorAll(".sppl[data-sym]").forEach(e => { e.innerHTML = spLineHTML(e.dataset.sym); });
+}
+hookOn("tab", "spread", () => spPaintAll());
+hookOn("all", "spread", ph => { if (ph === "after") spPaintAll(); });
+hookOn("drawerShown", "spread", () => setTimeout(() => spPoll().catch(() => {}), 50));
+hookOn("panel", "spread", (r, dr) => {
+  if (!r || !dr || typeof LV === "undefined" || !LV.cfg || !LV.cfg.on) return;
+  const box = dr.querySelector(".s61p") || dr.querySelector(".hx"); if (!box || box.querySelector(".sppl")) return;
+  box.insertAdjacentHTML("beforeend", `<div class="sppl small" data-sym="${esc(r.sym)}">${spLineHTML(r.sym)}</div>`);
+});
+document.head.insertAdjacentHTML("beforeend", `<style>
+.spb{display:inline-block;font-size:10.5px;line-height:1.35;padding:0 5px;border-radius:8px;font-weight:700;white-space:nowrap;vertical-align:1px}
+.spb.spr{background:var(--crit);color:#fff}.spb.spa{background:var(--warn);color:#1a1a1a}
+.sppl{margin-top:6px;line-height:1.5}
+</style>`);
 </script>
