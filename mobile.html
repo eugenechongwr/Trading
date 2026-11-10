@@ -8227,7 +8227,7 @@ function feedExport(){
   if (!S.has.hist) { toast("The feed needs the price history — load it first (Screens or Data check)"); return; }
   const st = feedStale();
   if (st && !confirm(`The stored price history ends ${st.last}, but the bars should run to ${st.want}. The feed's numbers would be built on a gap. Export anyway? (Better: Data check → update the price history first.)`)) return;
-  download(feedName(), feedCSV(), "text/csv"); toast(`Feed saved: ${feedName()}`);
+  download(feedName(), typeof adrfFeedCSV === "function" ? adrfFeedCSV() : feedCSV(), "text/csv"); toast(`Feed saved: ${feedName()}`);   // 10 Nov 2026: the feed is always built at the ruling ADR floor values (ADR FLOOR script)
 }
 
 /* ---------------- recognise TradingView exports (Deep Space Screener · TAS · REACCEL) — the comparison itself was removed 5 Nov 2026 ---------------- */
@@ -8476,7 +8476,7 @@ function s61Reset(){ S61C.key = ""; }
 // one stock, every check, its list, size and flags
 function s61Of(r){
   if (!r || r.etf || !S.has.hist) return null;
-  const k = (typeof dssKey === "function" ? dssKey() : "") + "|" + (mapRegime().v || "") + "|" + (S.tape ? S.tape.bucket : "") + "|" + JSON.stringify(s61Me()) + "|" + store.get("adrb.s61Cat", []).length + "|" + CFG.grade + "|" + CFG.nlv + "|" + JSON.stringify(store.get("adrb.s61Bmo", [])) + "|" + JSON.stringify(s61Grades());
+  const k = (typeof dssKey === "function" ? dssKey() : "") + "|" + (mapRegime().v || "") + "|" + (S.tape ? S.tape.bucket : "") + "|" + JSON.stringify(s61Me()) + "|" + store.get("adrb.s61Cat", []).length + "|" + CFG.grade + "|" + CFG.nlv + "|" + JSON.stringify(store.get("adrb.s61Bmo", [])) + "|" + JSON.stringify(s61Grades()) + (typeof adrfKey === "function" ? "|" + adrfKey() : "");   // 10 Nov 2026: ADR floor settings + held list (ADR FLOOR script)
   if (S61C.key !== k) { S61C.key = k; S61C.map = new Map(); }
   if (S61C.map.has(r.sym)) return S61C.map.get(r.sym);
   let out = null; try { out = s61Build(r); } catch (e) { console.warn("spec 6.1", r.sym, e); out = null; }
@@ -8489,6 +8489,7 @@ function s61Build(r){
   const money = v => v == null || !fin(v) ? "—" : v >= 1e9 ? "$" + (v / 1e9).toFixed(1) + "B" : "$" + Math.round(v / 1e6) + "M";
   add(1, "Liquidity", r.mcap == null ? null : pine.liqOk, `cap ${money(r.mcap)} · ${money(x.dv20)}/day · $${f2(x.close)}`, "cap ≥ $1B · ≥ $100M/day · > $10", "hard");
   if (typeof liqFold === "function") liqFold(r, x, ck, pine);   // 6 Nov 2026: check 1b tradeable liquidity (TRADEABLE LIQUIDITY script) - OUT fails check 1 on the board only
+  if (typeof adrfFold === "function") adrfFold(r, x, ck);   // 10 Nov 2026: check 1c ADR floor (ADR FLOOR + MEGA-CAP EXEMPTION script, MAP v4.11) - a FAIL fails check 1 on the board only
   add(2, "Data integrity", !x.brk, `${x.bars} bars${x.prov ? " (provisional)" : ""} · biggest 1-day move ${x.brkMax.toFixed(0)}%`, "no single bar > 40% in 50", "hard");
   add(3, "Trend (structure)", x.structOk, `daily 21 EMA ${x.k3e21 ? "✓" : "✗"} · daily 50 SMA ${x.k3s50 ? "✓" : "✗"} · weekly 10-week ${x.k3wk ? "✓" : "✗"}`, "above a rising daily 21 EMA, daily 50 SMA and weekly 10-week line", "hard");
   let stg = null; try { stg = stageOf(r); } catch (e) {}
@@ -8517,7 +8518,7 @@ function s61Build(r){
   else list = soft.length === 0 ? "A-eligible" : soft.length === 1 ? "OnDeck-1blocker" : "Out";
   const pass = [1, 2, 3, 4, 5, 6, 7, 8, 9].every(n => ck[n].ok === true);
   const ff = [1, 2, 3, 4, 5, 6, 7, 8, 9].find(n => ck[n].ok !== true);
-  const ffTxt = ff == null ? "" : ff === 1 && pine.liqOk && ck["1b"] && ck["1b"].ok === false ? `1b Liquidity ${ck["1b"].short}` : ff === 1 ? `1 Liquidity ${r.mcap == null ? "cap unknown" : r.mcap < C.liqCap ? "cap " + money(r.mcap) : !(x.dv20 >= C.liqDv) ? money(x.dv20) + "/day" : "px " + f2(x.close)}`
+  const ffTxt = ff == null ? "" : ff === 1 && pine.liqOk && ck["1b"] && ck["1b"].ok === false ? `1b Liquidity ${ck["1b"].short}` : ff === 1 && pine.liqOk && ck["1c"] && ck["1c"].ok === false ? `1c ADR floor ${ck["1c"].short}` : ff === 1 ? `1 Liquidity ${r.mcap == null ? "cap unknown" : r.mcap < C.liqCap ? "cap " + money(r.mcap) : !(x.dv20 >= C.liqDv) ? money(x.dv20) + "/day" : "px " + f2(x.close)}`
     : ff === 2 ? `2 Break ${x.brkMax.toFixed(0)}%>40%` : ff === 3 ? `3 Structure ${!x.k3e21 ? "21E" : !x.k3s50 ? "50S" : "10W"}` : ff === 4 ? `4 Stage ${stg ? stg.lab : "?"}`
     : ff === 5 ? `5 Ext ${fin(x.ext) ? x.ext.toFixed(2) : "?"}>4` : ff === 6 ? `6 ${x.loc ? loc61Name(x).replace(" — out", "") : "no ADR"}` : ff === 7 ? `7 Group ${gs || "unknown"}`
     : ff === 8 ? `8 RS ${r.rs ?? "?"}<${C.rsMin}` : ff === 9 ? `9 Earnings ${er.n == null ? "unknown" : er.n + "<" + C.erMin}` : !fin(x.entry) ? "10 Room no entry" : `10 Room ${x.room.toFixed(2)}R<${C.room}R`;
@@ -10143,6 +10144,7 @@ function ecWhy(s){
   const x = s.x, r = s.r, ck = s.ck, D = x.D, er = s.er, W = {};
   const money = v => !fin(v) ? "—" : v >= 1e9 ? "$" + (v / 1e9).toFixed(1) + "B" : "$" + Math.round(v / 1e6) + "M";
   if (ck[1].ok == null) W[1] = "Market cap unknown — the stock file needs a Market cap column to check the size.";
+  else if (ck[1].ok === false && /^1c ADR floor/.test(s.ffTxt || "")) W[1] = `ADR floor — ADR ${ck["1c"].short} on the higher of ADR 20D / 50D: too quiet for a stock long (market cap ≥ $${ck["1c"].q.megaB}B would be exempt).`;   // 10 Nov 2026: ADR FLOOR script
   else if (ck[1].ok === false) W[1] = "Too small or thin — " + (r.mcap < S61.liqCap ? `market cap ${money(r.mcap)} (needs $1B or more)` : !(x.dv20 >= S61.liqDv) ? `${money(x.dv20)} traded a day (needs $100M or more)` : `price $${f2(x.close)} (needs over $10)`) + ".";
   if (ck[2].ok === false) W[2] = `Bad data — a ${x.brkMax.toFixed(0)}% one-day move in the last 50 sessions (limit 40%). Check it isn't an unadjusted split.`;
   if (ck[3].ok === false) W[3] = !(x.close > x.e21) ? `Under the daily 21 EMA (${f2(x.e21)}) — out until it closes back above a rising 21.`
@@ -14598,6 +14600,7 @@ function dvRec(r){
     if (s.size && s.size.final) o.size = {grade: s.size.final[0], riskPct: s.size.final[1], shares: s.size.shares, regime: s.size.reg || null};
     o.stage = s.stage ? s.stage.lab : null; o.rmv = fin(s.rmv) ? Math.round(s.rmv) : null;
   } else { try { o.status = statusOf(r).t; } catch (e) {} }
+  if (typeof adrfDv === "function") try { adrfDv(r, o); } catch (e) {}   // 10 Nov 2026: ADR floor / MEGA / wrapper fields (ADR FLOOR script)
   return o;
 }
 function dvBuild(){
@@ -17123,9 +17126,12 @@ const itSel = () => { let s = "QQQ"; try { s = store.get("adrb.itSel", "QQQ") ||
 function itDb(){ return new Promise((res, rej) => { const q = indexedDB.open(IT_DB.name, IT_DB.ver); q.onupgradeneeded = () => { const db = q.result; if (!db.objectStoreNames.contains(IT_DB.store)) db.createObjectStore(IT_DB.store, {keyPath: "sym"}); }; q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); }
 async function itDbAll(){ const db = await itDb(); return new Promise((res, rej) => { const q = db.transaction(IT_DB.store, "readonly").objectStore(IT_DB.store).getAll(); q.onsuccess = () => res(q.result || []); q.onerror = () => rej(q.error); }); }
 async function itDbPut(recs){ if (!recs.length) return; const db = await itDb(); return new Promise((res, rej) => { const tx = db.transaction(IT_DB.store, "readwrite"), st = tx.objectStore(IT_DB.store); recs.forEach(r => st.put(r)); tx.oncomplete = res; tx.onerror = () => rej(tx.error); }); }
-async function itRestore(){
-  if (IT.loaded) return; IT.loaded = true;
-  try { (await itDbAll()).forEach(r => { if (r && r.sym && Array.isArray(r.d)) IT.recs.set(r.sym, r); }); } catch (e) { IT.msg = "This browser blocked local storage, so the 5-year history can't be kept."; }
+// 10 Nov 2026 (fix, display only): every caller waits for the one read — a second caller used to pass while the first was
+// still reading, find nothing stored and fetch all 19 ETFs again on every reload with this page open
+function itRestore(){
+  if (IT.restoring) return IT.restoring; IT.loaded = true;
+  IT.restoring = (async () => { try { (await itDbAll()).forEach(r => { if (r && r.sym && Array.isArray(r.d)) IT.recs.set(r.sym, r); }); } catch (e) { IT.msg = "This browser blocked local storage, so the 5-year history can't be kept."; } })();
+  return IT.restoring;
 }
 
 /* ---------- fetch (one call per ETF) ---------- */
@@ -18152,8 +18158,8 @@ function fpOf(r){
 function fpBuild(r, s){
   const x = fpCalcOf(r.sym); if (!x) return null;
   const C = FPC, ck = {}, add = (n, ok, v, lim, kind) => { ck[n] = {n, l: FP_CK[n], ok, v, lim, kind}; };
-  const c1 = s.ck[1], c1b = s.ck["1b"];
-  add(1, c1.ok === true, c1.v + (c1b && c1b.kind === "hard" ? ` · 1b ${c1b.short}` : ""), "as Playbook 1: cap ≥ $1B · ≥ $100M/day · > $10 · tradeable liquidity not OUT", "hard");
+  const c1 = s.ck[1], c1b = s.ck["1b"], c1c = s.ck["1c"];   // 10 Nov 2026: 1c ADR floor (ADR FLOOR script) arrives folded into check 1, as 1b does
+  add(1, c1.ok === true, c1.v + (c1b && c1b.kind === "hard" ? ` · 1b ${c1b.short}` : ""), "as Playbook 1: cap ≥ $1B · ≥ $100M/day · > $10 · tradeable liquidity not OUT · ADR floor (1c) for stock longs", "hard");
   add(2, !x.prov && !x.brk, `${x.n} sessions stored · biggest 1-day move ${x.brkMax.toFixed(0)}% (last 50)`, "≥ 100 sessions · no single move > 40%", "hard");
   add(3, x.trendOk, `close ${p2(x.close)} vs 50 SMA ${p2(x.s50)} ${x.aboveS50 ? "✓" : "✗"} · 50 SMA vs 10 sessions ago ${p2(x.s50Ago)} ${x.s50Ok ? "✓" : "✗"} · last weekly close ${p2(x.wk.c)} vs 10-week ${p2(x.wk.s)} ${x.wkOk ? "✓" : "✗"}`, "close above the 50 SMA · 50 SMA rising or flat (≥ 10 sessions ago × 0.995) · weekly close above the 10-week SMA", "hard");
   const stg = s.stage || null, main = stg ? (WS_MAIN[stg.lab] ?? null) : null;
@@ -18172,7 +18178,7 @@ function fpBuild(r, s){
   const ff = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].find(n => ck[n].ok !== true) ?? null;
   const ffTxt = ff == null ? "" : ff === 7 ? `7 Location ${x.loc ? FP_LOCF[x.loc] : "no ADR"}` : ff === 4 ? `4 Stage ${stg ? stg.lab : "?"}` : ff === 5 ? `5 Leg ${fin(x.leg.pct) ? x.leg.pct.toFixed(1) + "% · " + x.leg.ago + "d" : "none"}`
     : ff === 6 ? `6 Depth ${fin(x.depth) ? x.depth.toFixed(0) + "%" : "?"}` : ff === 8 ? `8 Volume ${fin(x.volRatio) ? x.volRatio.toFixed(2) + "x" : "?"}` : ff === 9 ? `9 Range ${fin(x.rngRatio) ? x.rngRatio.toFixed(2) + " ADR" : "?"}`
-    : ff === 10 ? `10 RS ${r.rs ?? "?"}<${C.rsMin}` : ff === 11 ? `11 Group ${gs || "unknown"}` : ff === 12 ? `12 Earnings ${er.n == null ? "unknown" : er.n + "<" + S61.erMin}` : ff === 2 ? `2 Data ${x.prov ? x.n + " bars" : x.brkMax.toFixed(0) + "%"}` : ff === 3 ? `3 Trend ${!x.aboveS50 ? "50S" : !x.s50Ok ? "50S slope" : "10W"}` : `1 Liquidity`;
+    : ff === 10 ? `10 RS ${r.rs ?? "?"}<${C.rsMin}` : ff === 11 ? `11 Group ${gs || "unknown"}` : ff === 12 ? `12 Earnings ${er.n == null ? "unknown" : er.n + "<" + S61.erMin}` : ff === 2 ? `2 Data ${x.prov ? x.n + " bars" : x.brkMax.toFixed(0) + "%"}` : ff === 3 ? `3 Trend ${!x.aboveS50 ? "50S" : !x.s50Ok ? "50S slope" : "10W"}` : /^1c ADR floor/.test(s.ffTxt || "") ? s.ffTxt : `1 Liquidity`;   // 10 Nov 2026: 1c (ADR FLOOR script)
   add(13, null, fin(x.room) ? `${x.room.toFixed(1)}R to the leg high ${p2(x.leg.hi)} (est.: entry ≈ close, 1R ≈ 0.6 ADR)` : "—", "information only", "info");
   add(14, null, "watched live", "over the 09:30–10:00 ET candle's high, from 10:00 ET · stop = its low", "live");
   return {r, s, x, ck, list: L.list, soft: L.soft, hard: L.hard, ff, ffTxt, stage: stg, stageMain: main, er, dv20: s.x.dv20};
@@ -18220,9 +18226,11 @@ function fpRankR(a, b){
   const ta = typeof lpOf === "function" ? lpTagO((lpOf(a.r.sym) || {}).tag) : 2, tb = typeof lpOf === "function" ? lpTagO((lpOf(b.r.sym) || {}).tag) : 2; if (ta !== tb) return ta - tb;
   const qa = fpLiq(a) ? 0 : 1, qb = fpLiq(b) ? 0 : 1; if (qa !== qb) return qa - qb;
   const ra = lo(a.r.rs == null ? NaN : -a.r.rs), rb = lo(b.r.rs == null ? NaN : -b.r.rs); if (ra !== rb) return ra - rb;
+  const ma = fpRmvO(a), mb = fpRmvO(b); if (ma !== mb) return ma - mb;   // 10 Nov 2026 (MAP v4.11 item 6; ADR FLOOR script): RMV, lower = tighter, the last tie-break — never a filter
   return a.r.sym < b.r.sym ? -1 : a.r.sym > b.r.sym ? 1 : 0;
 }
-const fpRankRS = (a, b) => ((b.r.rs ?? -1) - (a.r.rs ?? -1)) || (a.r.sym < b.r.sym ? -1 : a.r.sym > b.r.sym ? 1 : 0);
+function fpRmvO(f){ return f && f.s && fin(f.s.rmv) ? f.s.rmv : Infinity; }   // 10 Nov 2026: RMV tie-break (lower = tighter; missing last)
+const fpRankRS = (a, b) => ((b.r.rs ?? -1) - (a.r.rs ?? -1)) || (fpRmvO(a) !== fpRmvO(b) ? fpRmvO(a) - fpRmvO(b) : 0) || (a.r.sym < b.r.sym ? -1 : a.r.sym > b.r.sym ? 1 : 0);
 function fpLists(all){
   const L = {R: [], D: [], N: [], O: []}; if (FP_L.W) L.W = [];   // 8 Nov 2026: Undercut watch, only with the UNDERCUT & RECLAIM script
   if (!S.snap || !S.has || !S.has.hist) return L;
@@ -21223,4 +21231,323 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 .spb.spr{background:var(--crit);color:#fff}.spb.spa{background:var(--warn);color:#1a1a1a}
 .sppl{margin-top:6px;line-height:1.5}
 </style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   ADR FLOOR + MEGA-CAP EXEMPTION + WRAPPER MAP — CHECK 1c (10 Nov 2026). TRADING LOGIC (Entry Check lists + First Pullback
+   lists + the First Pullback rank); display for the badges, counter, panel line, connector fields.
+   Ruling: Eugene, 10 Nov 2026 ("think carefully pros and cons, if theoretically this is logical we proceed"), written in Notion:
+   MAP page "MAP — Premarket Awareness & Positioning (v4.11)", top callout "MAP v4.11 — 10 Nov 2026 — ADR floor for stock longs
+   + mega-cap exemption" (items 1–8, incl. the wrapper map) and Command Reference "RULINGS — 10 Nov 2026 (ADR floor)". Handover
+   "Deep Space Board: ADR floor + mega-cap exemption + wrapper map (MAP v4.11, 10 Nov 2026)". Notes: docs/adr-floor-mega-2026-11-10.md.
+   - RULE: a stock long on the Entry Check lists (Ready / On deck) or the First Pullback lists needs ADR% ≥ 3.0, measured as
+     the higher of ADR 20D and ADR 50D (protects a coiling base). Market cap ≥ $200B = MEGA: never removed by the floor.
+     Held names are never dropped on ADR (badge "low ADR" only). ETFs (no ADR filter), Former leader shorts: untouched.
+   - FORMULA: ADR 20D = the Entry Check's own ADR% (s61Calc: mean of (high − low) ÷ close × 100 over S61.adrN = 20 bars on
+     dssBars — the feed's "ADR%" column). ADR 50D = the same formula over 50 bars ending on the same bar. Floor value =
+     max(20D, 50D); fewer than 50 bars → ADR 20D alone, flagged "ADR50 n/a".
+   - MARKET CAP: the stock file's Market cap column (r.mcap, the same value check 1 reads). Missing → Massive
+     /v3/reference/tickers/{T} market_cap for held, MAP-list and wrapper-map names, cached per session date (adrb.adrfCap).
+     Unknown cap = not MEGA (check 1 already fails on an unknown cap).
+   - CHECK 1c (adrfFold, one guarded call in s61Build right after check 1b): FAIL only when stock AND not MEGA AND not held AND
+     floor value < floor → folded into check 1 (as 1b OUT does), so every Entry Check list, the First Pullback check 1 (it
+     reads s.ck[1]), the Undercut watch (FPUC.hard includes 1), the Daily Plan, the panel and the self-check follow. First
+     fail text "1c ADR floor (x.xx vs 3.0)". MEGA passes with "1c exempt — MEGA". Pine / Screener columns unchanged.
+   - FIRST PULLBACK RANK: RMV (lower = tighter, 0–100; s.rmv = the screener's RMV) is the last key before the ticker in
+     fpRankR (Ready) and fpRankRS (On deck / Not yet / Out / Undercut watch) — a tie-break only, never a filter.
+   - WRAPPER MAP (ADRF_WRAP: underlying → wrapper ticker only, checked 10 Nov 2026; re-checked monthly by MAP's
+     data-maintenance task). Kept inline (the board is one file and loads nothing else; the handover's config/mega-wrappers.json
+     would need a fetch a file:// page can't do). Wrappers are never discovered from the feeds. No volumes in the code (10 Nov
+     2026: the board is published, and Massive data / derived data never goes public — the 9 Nov figures live in
+     docs/adr-floor-mega-2026-11-10.md only). With a Massive key: each wrapper's 20-session mean $ volume (close × volume,
+     last finished sessions) from Massive daily bars, cached per session date in this browser (adrb.adrfWrap); without one
+     the wrapper's volume is "not checked" and the vehicle reads "stock / options". Wrapper OK = ≥ $20M/day (the ETF floor) → vehicle "<wrapper> (2x)", else
+     "stock / options". Setup, levels and stop always on the underlying.
+   - SETTINGS (adrb.adrfCfg {floor, megaB}; defaults = the ruling 3.0 / $200B) move the on-screen lists only: the Deep Space
+     feed is always built at the ruling values (adrfFeedCSV, one guarded call in feedExport) — the Strict-preset principle.
+   - FEED: eight columns appended at the very end (FEED_EXT): ADR 50D, ADR Floor Value, ADR Floor (PASS / FAIL / MEGA / HELD),
+     Mega (Y/N), Market Cap $B, Wrapper, Wrapper $Vol20 $M, Wrapper OK (Y/N). Stock rows only; ETF feed unchanged.
+   - CONNECTOR: dvRec (one guarded call) adds adr20, adr50, adrFloorValue, adrFloor, mega, marketCapB, wrapper,
+     wrapperVol20M, wrapperOk, vehicle → board_ticker and board_table.
+   - ON SCREEN: MEGA badge + wrapper chip (greyed when not OK) and "low ADR" on held names on the long-side lists; Entry Check
+     header counter "ADR floor: dropped n · mega exempt m" (whole file, Entry Check + First Pullback lists); ticker panel line;
+     Settings → "ADR floor (stock longs)".
+   - Never changes: Unified Spec 6.1 checks 1–11 thresholds, check 1b, triggers, LOD stops, exits, sizing, the ETF $20M floor,
+     Strict presets, the MAP paste-block import, ETF rows, Former leader short rows.
+   Storage NEW: adrb.adrfCfg, adrb.adrfCap {date, m: {SYM: cap}}, adrb.adrfWrap {date, m: {WRAPPER: $vol20}}.
+   Hook points "tab", "all", "panel", "s61Card", "settings"; guarded in-place calls in s61Of (cache key), s61Build, ecWhy,
+   fpBuild, fpRankR / fpRankRS, dvRec, feedExport. No override. Test: tools/board-adr-floor-test.js.
+   ===================================================================== */
+const ADRF_DEF = {floor: 3.0, megaB: 200};
+const ADRF_T = {n50: 50, wrapMin: 20e6, wrapN: 20, wrapMinBars: 15, capCap: 80};
+const ADRF_WRAP_CHECKED = "2026-11-10";
+// underlying → its 2x wrapper (MAP v4.11 callout item 4)
+const ADRF_WRAP = {NVDA: "NVDL", TSLA: "TSLL", MU: "MUU", AMD: "AMDL", GOOGL: "GGLL", META: "METU", AMZN: "AMZU", MSFT: "MSFU", TSM: "TSMX", AVGO: "AVL",
+  AAPL: "AAPU", PLTR: "PLTU", ORCL: "ORCX", UNH: "UNHG", LLY: "LLYX", NFLX: "NFXL", CRM: "CRMG", "BRK.B": "BRKU"};   // tickers only — no market data in the code
+const ADRF_NOWRAP = new Set(["JPM", "WMT", "V", "MA", "COST"]);   // no trading wrapper found (10 Nov 2026)
+const ADRF_H = ["ADR 50D", "ADR Floor Value", "ADR Floor", "Mega", "Market Cap $B", "Wrapper", "Wrapper $Vol20 $M", "Wrapper OK"];
+const ADRF = {feed: false, ver: 0, key: "", map: new Map(), cap: null, wrap: null, capBusy: false, wrapBusy: false, capTried: "", wrapTried: "", errs: []};
+const ADRX = {key: "", map: new Map()};
+
+/* ---------- settings (on-screen lists only; the feed always uses the ruling values) ---------- */
+function adrfCfgRaw(){ let o = null; try { o = store.get("adrb.adrfCfg", null); } catch (e) {}
+  const f = o && o.floor !== null && o.floor !== "" && isFinite(+o.floor) && +o.floor >= 0 && +o.floor <= 20 ? +o.floor : ADRF_DEF.floor, m = o && isFinite(+o.megaB) && +o.megaB > 0 ? +o.megaB : ADRF_DEF.megaB;
+  return {floor: f, megaB: m}; }
+function adrfCfg(){ return ADRF.feed ? {...ADRF_DEF} : adrfCfgRaw(); }
+function adrfIsDef(){ const c = adrfCfgRaw(); return c.floor === ADRF_DEF.floor && c.megaB === ADRF_DEF.megaB; }
+// part of the Entry Check cache key (s61Of): the floor settings, the feed switch, fetched caps, the held list
+function adrfKey(){ const c = adrfCfg(); return `adrf:${c.floor}|${c.megaB}|${ADRF.feed ? 1 : 0}|${ADRF.ver}|${typeof LISTS !== "undefined" && LISTS.held ? [...LISTS.held].sort().join(" ") : ""}`; }
+
+/* ---------- pure maths ---------- */
+// ADR% over the last p bars ending at t: mean of (high − low) ÷ close × 100 — the Entry Check's formula (s61Calc)
+function adrfAdr(h, l, c, t, p){
+  if (!(t >= p - 1)) return null; let s = 0;
+  for (let k = t - p + 1; k <= t; k++) { const q = (h[k] - l[k]) / c[k] * 100; if (!isFinite(q)) return null; s += q; }
+  return s / p;
+}
+// the rule itself (pure): {a20, a50, cap, held, floor, megaB} → {val, mega, status}
+function adrfRule(q){
+  const val = q.a20 == null ? null : q.a50 == null ? q.a20 : Math.max(q.a20, q.a50);
+  const mega = q.cap != null && isFinite(q.cap) && q.cap >= q.megaB * 1e9;
+  const status = mega ? "MEGA" : val == null ? null : val >= q.floor ? "PASS" : q.held ? "HELD" : "FAIL";
+  return {val, mega, status, low: val != null && val < q.floor};
+}
+
+/* ---------- data: market cap fallback + wrapper $ volume (Massive, cached per session date) ---------- */
+function adrfCapLoad(){ if (ADRF.cap) return; let o = null; try { o = store.get("adrb.adrfCap", null); } catch (e) {} ADRF.cap = o && o.date && o.m ? o : {date: "", m: {}}; }
+function adrfWrapLoad(){ if (ADRF.wrap) return; let o = null; try { o = store.get("adrb.adrfWrap", null); } catch (e) {} ADRF.wrap = o && o.date && o.m ? o : {date: "", m: {}}; }
+function adrfCapOf(r){
+  if (r && isFinite(r.mcap) && r.mcap > 0) return {v: r.mcap, src: "file"};
+  adrfCapLoad(); const m = ADRF.cap.m[r.sym]; return isFinite(m) && m > 0 ? {v: m, src: "Massive"} : {v: null, src: null};
+}
+function adrfWrapOf(sym){
+  const m = ADRF_WRAP[sym]; if (!m) return {wrap: null, wrapNone: ADRF_NOWRAP.has(sym)};
+  adrfWrapLoad(); const live = ADRF.wrap.m[m], ok = isFinite(live) && live > 0;
+  if (!ok) return {wrap: m, wrapDv: null, wrapSrc: newsKey() ? "not read yet (Massive)" : "not checked — needs your Massive key", wrapOk: null};
+  return {wrap: m, wrapDv: live, wrapSrc: `Massive, 20 sessions to ${ADRF.wrap.date}`, wrapOk: live >= ADRF_T.wrapMin};
+}
+const adrfVehicle = q => q && q.wrap && q.wrapOk ? `${q.wrap} (2x)` : "stock / options";
+async function adrfCapFill(){
+  if (ADRF.capBusy || !newsKey() || !S.snap || typeof mget !== "function") return;
+  adrfCapLoad(); const day = lastDoneSession(); if (ADRF.cap.date !== day) ADRF.cap = {date: day, m: {}};
+  const want = new Set([...LISTS.held, ...LISTS.focus, ...(typeof MAPL !== "undefined" ? [...MAPL.b, ...MAPL.stalk] : []), ...Object.keys(ADRF_WRAP), ...ADRF_NOWRAP]);
+  const todo = [...want].filter(s => { const r = S.rowBySym && S.rowBySym.get(s); return r && !r.etf && !(isFinite(r.mcap) && r.mcap > 0) && !(s in ADRF.cap.m); }).slice(0, ADRF_T.capCap);
+  const key = day + "|" + todo.join(","); if (!todo.length || ADRF.capTried === key) return; ADRF.capTried = key;
+  ADRF.capBusy = true; let i = 0, got = 0;
+  const worker = async () => { while (i < todo.length) { const s = todo[i++];
+    try { const j = await mget(`/v3/reference/tickers/${encodeURIComponent(s)}`, {}); const v = j && j.results ? +j.results.market_cap : NaN; ADRF.cap.m[s] = isFinite(v) && v > 0 ? v : null; if (isFinite(v)) got++; }
+    catch (e) { ADRF.errs.push(`${s}: ${e.msg || "error"}`); if (/refused/.test(e.msg || "")) i = todo.length; } } };
+  try { await Promise.all([worker(), worker()]); } finally { ADRF.capBusy = false; }
+  try { store.set("adrb.adrfCap", ADRF.cap); } catch (e) {}
+  if (got) { ADRF.ver++; if (S.snap) { computeAll(); renderAll(); } }
+}
+async function adrfWrapFill(){
+  if (ADRF.wrapBusy || !newsKey() || typeof mget !== "function") return;   // with a Massive key (the board carries no volumes of its own)
+  adrfWrapLoad(); const day = lastDoneSession(); if (ADRF.wrap.date === day) return;   // one try per session date (kept even when nothing came back)
+  if (ADRF.wrapTried === day || !S.rowBySym) return; ADRF.wrapTried = day;
+  const W = Object.entries(ADRF_WRAP).filter(([u]) => S.rowBySym.has(u)).map(([, x]) => x), m = {}; let i = 0;   // only wrappers whose underlying is in the file
+  if (!W.length) return;
+  ADRF.wrapBusy = true;
+  const worker = async () => { while (i < W.length) { const w = W[i++];
+    try { const j = await mget(`/v2/aggs/ticker/${encodeURIComponent(w)}/range/1/day/${addDays(day, -45)}/${day}`, {adjusted: "true", sort: "asc", limit: 120});
+      m[w] = adrfDv20((j && j.results) || [], day); }
+    catch (e) { ADRF.errs.push(`${w}: ${e.msg || "error"}`); if (/refused/.test(e.msg || "")) i = W.length; } } };
+  try { await Promise.all([worker(), worker()]); } finally { ADRF.wrapBusy = false; }
+  ADRF.wrap = {date: day, m}; try { store.set("adrb.adrfWrap", ADRF.wrap); } catch (e) {}
+  if (Object.values(m).some(v => isFinite(v))) { ADRF.ver++; if (S.snap) { computeAll(); renderAll(); } }
+}
+// 20-session mean of close × volume over finished daily bars up to `day` (null with fewer than 15 bars)
+function adrfDv20(bars, day){
+  const end = Date.parse(day + "T23:59:59Z"), B = bars.filter(b => b && isFinite(b.t) && b.t <= end && isFinite(b.c) && isFinite(b.v)).sort((a, b) => a.t - b.t).slice(-ADRF_T.wrapN);
+  return B.length >= ADRF_T.wrapMinBars ? B.reduce((a, b) => a + b.c * b.v, 0) / B.length : null;
+}
+
+/* ---------- per symbol ---------- */
+function adrf50(sym){
+  const k = dssKey(); if (ADRX.key !== k) { ADRX.key = k; ADRX.map = new Map(); }
+  if (ADRX.map.has(sym)) return ADRX.map.get(sym);
+  let v = null; try { const b = dssBars(sym); if (b && b.n >= ADRF_T.n50) v = adrfAdr(b.h, b.l, b.c, b.n - 1, ADRF_T.n50); } catch (e) { v = null; }
+  ADRX.map.set(sym, v); return v;
+}
+function adrfOf(r){
+  if (!r || r.etf || !S.has || !S.has.hist || !HIST.nD) return null;
+  const k = adrfKey() + "|" + dssKey(); if (ADRF.key !== k) { ADRF.key = k; ADRF.map = new Map(); }
+  if (ADRF.map.has(r.sym)) return ADRF.map.get(r.sym);
+  let q = null;
+  try {
+    const d = dssOf(r.sym), x = d && d.s61 ? d.s61 : null;
+    if (x) {
+      const C = adrfCfg(), a20 = isFinite(x.adr) && x.adr > 0 ? x.adr : null, a50 = adrf50(r.sym), cap = adrfCapOf(r), held = !!(LISTS.held && LISTS.held.has(r.sym));
+      q = {sym: r.sym, a20, a50, cap: cap.v, capSrc: cap.src, held, floor: C.floor, megaB: C.megaB, ...adrfRule({a20, a50, cap: cap.v, held, floor: C.floor, megaB: C.megaB}), ...adrfWrapOf(r.sym)};
+    }
+  } catch (e) { console.warn("ADR floor", r.sym, e); q = null; }
+  ADRF.map.set(r.sym, q); return q;
+}
+const adrfN = v => v == null || !isFinite(v) ? "n/a" : v.toFixed(2);
+const adrfCapTxt = q => q.cap == null ? "cap unknown" : `cap $${money(q.cap)}${q.capSrc === "Massive" ? " (Massive)" : ""}`;
+function adrfTxt(q){
+  if (!q) return "";
+  const head = q.status === "MEGA" ? "exempt — MEGA" : q.status === "PASS" ? "passes" : q.status === "HELD" ? "held — never dropped on ADR (low ADR)" : q.status === "FAIL" ? "fails" : "not checked (no ADR)";
+  return `${head} · ADR 20D ${adrfN(q.a20)} · 50D ${q.a50 == null ? "n/a (fewer than 50 sessions)" : adrfN(q.a50)} → ${adrfN(q.val)} vs ${q.floor.toFixed(1)} · ${adrfCapTxt(q)}${q.mega ? ` ≥ $${q.megaB}B` : ""}`
+    + (q.mega ? ` · vehicle ${adrfVehicle(q)}${q.wrap ? ` — ${q.wrap} ${q.wrapDv == null ? `volume ${q.wrapSrc}` : `$${money(q.wrapDv)}/day (${q.wrapSrc})${q.wrapOk ? "" : `, under $${money(ADRF_T.wrapMin)}`}`}` : q.wrapNone ? " — no trading wrapper" : ""}` : "");
+}
+// Entry Check: check 1c, folded into check 1 when it fails (as 1b OUT is)
+function adrfFold(r, x, ck){
+  const q = adrfOf(r), C = q ? q.floor : adrfCfg().floor;
+  const lim = `ADR% ≥ ${C.toFixed(1)} on the higher of the 20- and 50-session ADR · market cap ≥ $${q ? q.megaB : adrfCfg().megaB}B exempt (MEGA) · held names never dropped`;
+  if (!q || !q.status) { ck["1c"] = {n: "1c", l: "ADR floor", ok: null, v: "not checked — no ADR yet", lim, kind: "info", short: "not checked", q}; return; }
+  const short = q.status === "MEGA" ? "exempt — MEGA" : q.status === "HELD" ? `held — low ADR (${adrfN(q.val)} vs ${C.toFixed(1)})` : `(${adrfN(q.val)} vs ${C.toFixed(1)})`;
+  const pre = ck[1] ? ck[1].ok : null;
+  ck["1c"] = {n: "1c", l: "ADR floor", ok: q.status !== "FAIL", v: adrfTxt(q), lim, kind: "hard", short, q, pre};
+  if (q.status === "FAIL" && ck[1] && ck[1].ok === true) ck[1] = {...ck[1], ok: false, v: `${ck[1].v} · ADR floor (1c) ${short}`, lim: `${ck[1].lim} · ADR floor (1c)`};
+}
+// the list a name would be on without the floor (check 1 as it was before 1c) — for the counter only
+function adrfListNoFloor(s){
+  const c = s.ck["1c"], ck = {...s.ck, 1: {...s.ck[1], ok: c ? c.pre : s.ck[1].ok}}, x = s.x;
+  const hard = [1, 2, 3, 5, 7, 8].filter(n => ck[n].ok !== true), soft = [4, 9].filter(n => ck[n].ok !== true);
+  if (hard.length || x.loc == null || x.loc === "BELOW21") return "Out";
+  if (x.loc === "ABOVE") return soft.length >= 2 ? "Out" : "Background";
+  if (x.loc === "L2" || x.loc === "L3") return soft.length ? "Out" : x.loc === "L3" ? "OnDeck-L3" : "OnDeck-L2";
+  return soft.length === 0 ? "A-eligible" : soft.length === 1 ? "OnDeck-1blocker" : "Out";
+}
+const ADRF_EC = ["A-eligible", "OnDeck-L2", "OnDeck-1blocker", "OnDeck-L3"];
+function adrfCount(){
+  const drop = [], mega = [];
+  if (!S.snap || !S.has || !S.has.hist) return {drop, mega};
+  for (const r of S.stocks) {
+    let s = null; try { s = s61Of(r); } catch (e) {} if (!s) continue;
+    const c = s.ck["1c"]; if (!c || !c.q) continue;
+    let f = null; try { f = typeof fpOf === "function" ? fpOf(r) : null; } catch (e) {}
+    if (c.ok === false) {
+      const w = [];
+      if (!ADRF_EC.includes(s.list) && ADRF_EC.includes(adrfListNoFloor(s))) w.push("Entry Check");
+      if (f && typeof fpListOf === "function") { const ck = {...f.ck, 1: {...f.ck[1], ok: c.pre === true}}; const L = fpListOf(ck, f.x.loc, f.stageMain).list; if ((L === "R" || L === "D") && f.list !== "R" && f.list !== "D") w.push("First Pullback"); }
+      if (w.length) drop.push(`${r.sym} ${c.short} — ${w.join(" + ")}`);
+    } else if (c.q.status === "MEGA" && c.q.low && (ADRF_EC.includes(s.list) || (f && (f.list === "R" || f.list === "D")))) mega.push(`${r.sym} ADR ${adrfN(c.q.val)}`);
+  }
+  return {drop, mega};
+}
+// Deep Space feed: always the ruling values (3.0 / $200B), whatever the on-screen settings say
+function adrfFeedCSV(){
+  if (adrfIsDef()) return feedCSV();
+  const keep = S.plan; ADRF.feed = true;
+  try { try { GFV++; computePlan(); } catch (e) { console.warn("ADR floor feed plan", e); } return feedCSV(); }
+  finally { ADRF.feed = false; GFV++; S.plan = keep; }
+}
+function adrfCells(r){
+  const q = adrfOf(r); if (!q) return null;
+  return [q.a50 == null ? (q.a20 == null ? "" : "n/a") : +q.a50.toFixed(3), q.val == null ? "" : +q.val.toFixed(3), q.status || "", q.mega ? "Y" : "N",
+    q.cap == null ? "" : +(q.cap / 1e9).toFixed(1), q.wrap || "", q.wrap && q.wrapDv != null ? +(q.wrapDv / 1e6).toFixed(1) : "", q.wrap && q.wrapOk != null ? (q.wrapOk ? "Y" : "N") : ""];
+}
+FEED_EXT.push({h: ADRF_H, cells: o => o && o.r && !o.r.etf ? adrfCells(o.r) : null});
+// connector (board_ticker / board_table): the same fields, stocks only
+function adrfDv(r, o){
+  const q = adrfOf(r); if (!q) return;
+  const n2 = v => v == null || !isFinite(v) ? null : +(+v).toFixed(2);
+  Object.assign(o, {adr20: n2(q.a20), adr50: q.a50 == null ? "n/a" : n2(q.a50), adrFloorValue: n2(q.val), adrFloor: q.status || "not checked", adrFloorMin: q.floor, mega: q.mega,
+    marketCapB: q.cap == null ? null : +(q.cap / 1e9).toFixed(1), wrapper: q.wrap || null, wrapperVol20M: q.wrap && q.wrapDv != null ? +(q.wrapDv / 1e6).toFixed(1) : null, wrapperOk: q.wrap ? q.wrapOk : null,
+    vehicle: q.mega ? adrfVehicle(q) : null});
+}
+
+/* ---------- display ---------- */
+function adrfBadge(sym){
+  const r = S.rowBySym && S.rowBySym.get(sym); if (!r || r.etf) return "";
+  const q = adrfOf(r); if (!q) return "";
+  if (q.mega) { const t = esc(`MEGA: market cap ${q.cap != null ? "$" + money(q.cap) : "?"} ≥ $${q.megaB}B — exempt from the ADR floor. ${adrfTxt(q)}`);
+    const w = q.wrap ? `<span class="adb adw${q.wrapOk ? "" : " off"}" title="${esc(`2x wrapper ${q.wrap}: ${q.wrapDv == null ? `volume ${q.wrapSrc}; vehicle stock / options until it reads ≥ $20M/day` : `$${money(q.wrapDv)}/day (${q.wrapSrc}) — ${q.wrapOk ? "clears" : "under"} the $20M floor${q.wrapOk ? "" : "; vehicle stock / options"}`}. Setup, levels and stop on ${sym}.`)}">${esc(q.wrap)} 2x</span>` : "";
+    return `<span class="adb adm" title="${t}">MEGA</span>${w}`; }
+  if (q.status === "HELD") return `<span class="adb adl" title="${esc(`Held — never dropped on ADR. ${adrfTxt(q)}`)}">low ADR</span>`;
+  return "";
+}
+function adrfPaint(root){ if (!root) return; root.querySelectorAll("tr[data-sym] td.sym").forEach(td => { if (td.querySelector(".adb")) return; const h = adrfBadge(td.closest("tr").dataset.sym); if (h) td.insertAdjacentHTML("beforeend", " " + h); }); }
+// long-side lists only (never the short cards or the trackers' logs): Entry Check, Daily Plan, held, Watchlist, MAP lists,
+// and the First Pullback card when the playbook switch is on it
+function adrfPaintAll(){
+  for (const id of ["s61Box", "dpBox", "homeHeld", "watchBody", "listsBox", "focusBox"]) try { adrfPaint($(id)); } catch (e) {}
+  try { if (typeof pbCur === "function" && pbCur() === "fp") adrfPaint($("pbBox")); } catch (e) {}
+}
+hookOn("tab", "adrFloor", () => { adrfPaintAll(); adrfCapFill().catch(() => {}); adrfWrapFill().catch(() => {}); });
+hookOn("all", "adrFloor", ph => { if (ph === "after") adrfPaintAll(); });
+hookOn("s61Card", "adrFloor", () => {
+  const box = $("s61Box"); if (!box || !S.has.hist) return; const hd = box.querySelector(".hd"); if (!hd || hd.querySelector(".adfc")) return;
+  const c = adrfCount(), C = adrfCfg(), t = esc(`ADR floor ${C.floor.toFixed(1)} (higher of ADR 20D / 50D) on the Entry Check and First Pullback lists; market cap ≥ $${C.megaB}B exempt (MEGA); held names never dropped. Whole file, filter bar off.`
+    + (c.drop.length ? `\nDropped: ${c.drop.join("; ")}` : "") + (c.mega.length ? `\nMega exempt (under the floor, still listed): ${c.mega.join("; ")}` : "") + (adrfIsDef() ? "" : "\nSettings differ from the ruling (3.0 / $200B) — the Deep Space feed still uses the ruling."));
+  const sub = hd.querySelector(".sub"); const h = `<span class="adfc small" title="${t}">ADR floor: dropped ${c.drop.length} · mega exempt ${c.mega.length}${adrfIsDef() ? "" : ` <b>(floor ${C.floor} · mega $${C.megaB}B)</b>`}</span>`;
+  if (sub) sub.insertAdjacentHTML("afterend", h); else hd.insertAdjacentHTML("beforeend", h);
+});
+hookOn("panel", "adrFloor", (r, dr) => {
+  if (!r || !dr || r.etf) return; const q = adrfOf(r); if (!q) return; const box = dr.querySelector(".s61p"); if (!box || box.querySelector(".adpl")) return;
+  box.insertAdjacentHTML("beforeend", `<div class="adpl small">${adrfBadge(r.sym) || (q.status === "PASS" ? `<span class="adb adk">ADR OK</span>` : q.status === "FAIL" ? `<span class="adb adf">ADR FLOOR</span>` : "")} ADR floor (1c): ${esc(adrfTxt(q))}</div>`);
+});
+hookOn("settings", "adrFloor", () => {
+  const reset = $("sReset"); if (!reset) return; const c = adrfCfgRaw(), box = document.createElement("div");
+  box.innerHTML = `<h4>ADR floor (stock longs)</h4>
+    <div class="row"><div>ADR floor, %<div class="d">Leader Pullback (Entry Check) and First Pullback stock longs need the higher of ADR 20D and ADR 50D at or above this (MAP v4.11; ruling 3.0). Held names, ETFs and shorts are never dropped. The Deep Space feed always uses the ruling values.</div></div><div><input type="number" id="adrfFloor" step="0.1" min="0" max="20" value="${c.floor}" style="width:80px"></div></div>
+    <div class="row"><div>Mega caps exempt from, $B<div class="d">Market cap at or above this skips the floor and gets the MEGA tag with its 2x wrapper (ruling $200B).</div></div><div><input type="number" id="adrfMega" step="10" min="1" value="${c.megaB}" style="width:80px"></div></div>`;
+  reset.parentElement.before(box);
+  const save = () => { const f = +$("adrfFloor").value, m = +$("adrfMega").value; try { store.set("adrb.adrfCfg", f === ADRF_DEF.floor && m === ADRF_DEF.megaB ? null : {floor: f, megaB: m}); } catch (e) {}
+    if (typeof s61Reset === "function") s61Reset(); if (S.snap) { computeAll(); renderAll(); } toast(`ADR floor ${adrfCfgRaw().floor} · mega $${adrfCfgRaw().megaB}B (on screen; the feed keeps 3.0 / $200B)`); };
+  $("adrfFloor").onchange = save; $("adrfMega").onchange = save;
+});
+
+/* ---------- self-check: a separate short recompute (own loops on the bars, the rule as plain if / else) ---------- */
+function adrfSelf(){
+  const out = []; if (!S.snap || !S.has || !S.has.hist || !HIST.nD || typeof s61Lists !== "function") return out;
+  const L = s61Lists(true), names = new Set([...LISTS.held]); for (const k of Object.keys(L)) L[k].slice(0, 30).forEach(s => names.add(s.r.sym));
+  for (const sym of names) {
+    const r = S.rowBySym.get(sym); if (!r || r.etf) continue; const q = adrfOf(r), s = s61Of(r), b = dssBars(sym); if (!q || !s || !b) continue;
+    const t = b.n - 1, own = p => { if (t < p - 1) return null; let a = 0; for (let k = t - p + 1; k <= t; k++) { const v = (b.h[k] - b.l[k]) / b.c[k] * 100; if (v !== v) return null; a += v; } return a / p; };
+    const a20 = own(20), a50 = b.n >= 50 ? own(50) : null, near = (u, v) => u == null ? v == null : v != null && Math.abs(u - v) < 1e-9 * Math.max(1, Math.abs(v));
+    out.push({sym, what: "ADR 20D = Entry Check ADR%", ok: near(q.a20, a20), board: q.a20, mine: a20});
+    out.push({sym, what: "ADR 50D", ok: near(q.a50, a50), board: q.a50, mine: a50});
+    const val = a20 == null ? null : a50 == null ? a20 : a50 > a20 ? a50 : a20, cap = isFinite(r.mcap) && r.mcap > 0 ? r.mcap : q.cap;
+    let want = null; if (cap != null && cap >= q.megaB * 1e9) want = "MEGA"; else if (val != null) { if (val >= q.floor) want = "PASS"; else if (LISTS.held.has(sym)) want = "HELD"; else want = "FAIL"; }
+    out.push({sym, what: "ADR floor status", ok: q.status === want, board: q.status, mine: want});
+    if (want === "FAIL") { out.push({sym, what: "ADR floor FAIL is Out (Entry Check)", ok: s.list === "Out" && /^1c ADR floor/.test(s.ffTxt) === (s.ck["1c"].pre === true && !(s.ck["1b"] && s.ck["1b"].ok === false)), board: `${s.list} · ${s.ffTxt}`, mine: "Out"});
+      const f = typeof fpOf === "function" ? fpOf(r) : null; if (f) out.push({sym, what: "ADR floor FAIL is off the First Pullback lists", ok: !["R", "D", "N", "W"].includes(f.list), board: f.list, mine: "O"}); }
+  }
+  // First Pullback order: RMV is the last tie-break before the ticker (lower first)
+  if (typeof fpLists === "function") { const A = fpLists(true);
+    for (const k of ["R", "D"]) for (let i = 1; i < A[k].length; i++) { const a = A[k][i - 1], b = A[k][i];
+      const tie = k === "R" ? (a.x.loc === "9") === (b.x.loc === "9") && (typeof lpOf !== "function" || lpTagO((lpOf(a.r.sym) || {}).tag) === lpTagO((lpOf(b.r.sym) || {}).tag)) && fpLiq(a) === fpLiq(b) && (a.r.rs ?? -1) === (b.r.rs ?? -1) : (a.r.rs ?? -1) === (b.r.rs ?? -1);
+      if (!tie) continue; const ra = isFinite(a.s.rmv) ? a.s.rmv : Infinity, rb = isFinite(b.s.rmv) ? b.s.rmv : Infinity;
+      out.push({sym: b.r.sym, what: `First Pullback ${k === "R" ? "Ready" : "On deck"} RMV tie-break (lower first)`, ok: ra < rb || (ra === rb && a.r.sym < b.r.sym), board: `after ${a.r.sym}`, mine: `RMV ${ra} vs ${rb}`}); } }
+  return out;
+}
+if (typeof SC_X !== "undefined") SC_X.push(adrfSelf);
+document.head.insertAdjacentHTML("beforeend", `<style>
+.adb{display:inline-block;font-size:10.5px;line-height:1.35;padding:0 5px;border-radius:8px;font-weight:700;white-space:nowrap;vertical-align:1px;margin-left:2px}
+.adb.adm{background:var(--accent);color:#fff}.adb.adw{background:transparent;color:var(--accent);border:1px solid var(--accent)}.adb.adw.off{color:var(--ink-3);border-color:var(--line)}
+.adb.adl{background:var(--warn);color:#1a1a1a}.adb.adk{background:transparent;color:var(--good);border:1px solid var(--good)}.adb.adf{background:var(--crit);color:#fff}
+.adpl{margin-top:6px;line-height:1.5} .adfc{margin-left:10px;color:var(--ink-2)}
+</style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   BOARD VERSION LABEL (10 Nov 2026) — display only. On a 2-week trial (docs/trials.md).
+   Eugene, 10 Nov 2026: "how do i know whether the board is the latest update" → "yes add the version label".
+   - BOARD_VER = {date, n, what}: bumped in EVERY change to index.html (tools/board-version-test.js fails when index.html
+     differs from origin/main but BOARD_VER doesn't). Label "v<date>.<n>" — Claude quotes it when publishing, so the board
+     on screen can be matched to what was published.
+   - Shown: a small chip in the top bar right after the title (desktop + phone, via mobile.html), and a "Board version"
+     block in Settings. Hover = what changed in it.
+   - Never changes any number, list, feed column, storage key or setting. Storage: none. Hooks: "settings"; the chip is
+     inserted once at load. No override.
+   ===================================================================== */
+const BOARD_VER = {date: "2026-11-10", n: 2, what: "ADR floor + mega-cap exemption (check 1c); board version label"};
+const boardVerTxt = () => `v${BOARD_VER.date}.${BOARD_VER.n}`;
+(function verChip(){
+  try {
+    const h = document.querySelector("header.top h1"); if (!h || document.getElementById("verChip")) return;
+    h.insertAdjacentHTML("afterend", `<span class="chip verchip" id="verChip" title="${esc(`Board version ${boardVerTxt()} — ${BOARD_VER.what}. After a publish, hard-refresh (Cmd/Ctrl + Shift + R) and check this matches the version Claude quoted.`)}">${boardVerTxt()}</span>`);
+  } catch (e) { console.warn("version label", e); }
+})();
+hookOn("settings", "boardVersion", () => {
+  const reset = $("sReset"); if (!reset) return; const box = document.createElement("div");
+  box.innerHTML = `<h4>Board version</h4><div class="row"><div>This board<div class="d">${esc(BOARD_VER.what)}. After a publish, hard-refresh (Cmd/Ctrl + Shift + R) and check this matches the version Claude quoted.</div></div><div><b>${boardVerTxt()}</b></div></div>`;
+  reset.parentElement.before(box);
+});
+document.head.insertAdjacentHTML("beforeend", `<style>.chip.verchip{font-size:11px;padding:1px 7px;opacity:.75;margin-left:6px;align-self:center;font-variant-numeric:tabular-nums}</style>`);
 </script>
