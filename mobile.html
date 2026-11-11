@@ -5728,7 +5728,7 @@ function renderShorts(){
   const tp = S.tape, mr = mapRegime(), live = tp && tp.bucket === "Defensive" && mr.v === "Defensive";
   const br = tp && tp.lines.find(l => l.k === "breadth"), vo = tp && tp.lines.find(l => l.k === "vol");
   const L = shortList(), fb = L.filter(r => r.sLoc && !r.sBlock.length);
-  $("shGate").innerHTML = `<div class="shgate"><div class="verdict">
+  if ($("shGate")) $("shGate").innerHTML = `<div class="shgate"><div class="verdict">
       <div class="small">Short side · tape read + MAP's call</div>
       <div class="word ${live ? "live" : "watch"}">${live ? "Live · C size" : "Watch only"}</div>
       <div class="small">Tape: <b>${esc(tp ? tp.bucket : "no breadth file")}</b> · MAP: <b>${esc(mr.v || "not set")}</b></div>
@@ -20211,15 +20211,15 @@ const FLSPB_IDS = ["flsBox", "shGate", "shortBox", "invBox", "shEtf"];
   for (const id of ["shGate", "shEtf"]) { const el = $(id); if (el && plan) plan.appendChild(el); }
   if (sh) {
     const lede = sh.querySelector(".lede");
-    if (lede) lede.innerHTML = `Short-side research: the short research memory, failed rallies, the weakest groups and the weakness scans. The former leader short card, the short-side gate, the short watch and the inverse funds are on <b>Setups</b> with the playbook switch on <b>S · Former Leader Short</b>. Shorts are watch only.`;
-    (lede || sh.firstElementChild).insertAdjacentHTML(lede ? "afterend" : "beforebegin", `<div class="card g1" id="shMoved"><div class="bd" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span>The <b>former leader short</b> card, the <b>short-side gate</b>, the <b>short watch (relative weakness)</b> and the <b>inverse funds</b> now live on Setups → <b>S · Former Leader Short</b>.</span><button class="btn sm primary" id="shMovedGo">Open the short playbook</button></div></div>`);
+    if (lede) lede.innerHTML = `Short-side research: the short research memory, failed rallies, the weakest groups and the weakness scans. The former leader short card, the short watch and the inverse funds are on <b>Setups</b> with the playbook switch on <b>S · Former Leader Short</b>. Shorts are watch only.`;
+    (lede || sh.firstElementChild).insertAdjacentHTML(lede ? "afterend" : "beforebegin", `<div class="card g1" id="shMoved"><div class="bd" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span>The <b>former leader short</b> card, the <b>short focus</b>, the <b>short watch (relative weakness)</b> and the <b>inverse funds</b> now live on Setups → <b>S · Former Leader Short</b>.</span><button class="btn sm primary" id="shMovedGo">Open the short playbook</button></div></div>`);
   }
 }
 function flsPbOpen(){ if (pbCur() !== "fls") pbSet("fls"); goTab("plan"); }
 document.addEventListener("click", e => { if (e.target.closest("#shMovedGo")) { e.preventDefault(); flsPbOpen(); } });
 function flsPbLede(){
   const lede = $("planLede"); if (!lede) return;
-  lede.innerHTML = `<b>S · Former Leader Short</b> (paper / watch only) — in a market that has rolled over, a former leader that broke down bounces into old support or its falling 21 / 50 and fails with a lower high. Short the failure, never a name already far down. Below: the former leader card, the short-side gate, the short watch (relative weakness) and the inverse ETFs. Click a name for its Former Leader Short tab and the short levels on the chart.`;
+  lede.innerHTML = `<b>S · Former Leader Short</b> (paper / watch only) — in a market that has rolled over, a former leader that broke down bounces into old support or its falling 21 / 50 and fails with a lower high. Short the failure, never a name already far down. Below: the short focus (up to 2 names, inverse ETF first on clusters), the former leader card, the short watch (relative weakness) and the inverse ETFs. Click a name for its Former Leader Short tab and the short levels on the chart.`;
 }
 // the cards the short page needs drawn: the card (flsPaint), the gate + the inverse funds (renderShorts fills them by id).
 // The short watch (#shortBox) and the inverse ETF card (#invBox) are drawn by the Setups page itself, as before.
@@ -20233,7 +20233,7 @@ hookOn("tab", "formerLeaderShortPage", t => {
 });
 document.head.insertAdjacentHTML("beforeend", `<style>
 #tab-plan.pbFls.on{display:flex;flex-direction:column}
-#tab-plan.pbFls > :not(#planLede):not(#pbTop):not(#flsBox):not(#fltBox):not(#shGate):not(#shortBox):not(#invBox):not(#shEtf){display:none!important}
+#tab-plan.pbFls > :not(#planLede):not(#pbTop):not(#sfcBox):not(#flsBox):not(#fltBox):not(#shGate):not(#shortBox):not(#invBox):not(#shEtf){display:none!important}
 #tab-plan.pbFls > #planLede{order:1} #tab-plan.pbFls > #pbTop{order:2} #tab-plan.pbFls > #flsBox{order:3} #tab-plan.pbFls > #fltBox{order:3} #tab-plan.pbFls > #shGate{order:4}
 #tab-plan.pbFls > #shortBox{order:5} #tab-plan.pbFls > #invBox{order:6} #tab-plan.pbFls > #shEtf{order:7}
 #tab-plan:not(.pbFls) > #flsBox, #tab-plan:not(.pbFls) > #fltBox, #tab-plan:not(.pbFls) > #shGate, #tab-plan:not(.pbFls) > #shEtf, #tab-plan:not(.pbFls) > #shortBox, #tab-plan:not(.pbFls) > #invBox{display:none!important}
@@ -21997,6 +21997,80 @@ document.addEventListener("change", e => { const t = e.target; if (t && (t.id ==
 document.head.insertAdjacentHTML("beforeend", `<style>.sdtrt{margin:4px 0 6px;line-height:1.5}.sdtctx{margin:2px 0 6px}details.sdtres{margin-top:8px;border-top:1px solid var(--line,#333);padding-top:6px}details.sdtres>summary{cursor:pointer;font-size:12px;opacity:.85}</style>`);
 </script>
 <script>
+/* =====================================================================
+   SHORT · TODAY'S SHORT FOCUS (11 Nov 2026) — TRADING LOGIC for the short page's focus: which names to look at first.
+   PAPER / WATCH ONLY. Never sized. Rules: Notion "🩳 Short · Former leader, lower high — v1.0" green callout "11 Nov 2026 —
+   Eugene's short strategy: early transitions, narrow focus, inverse ETF first" + Command Reference "RULINGS — 11 Nov 2026
+   (short strategy)". Eugene (chat, 11 Nov 2026): "inverse etfs sit beside them as the first choice." · "follow the narrow
+   focus" · "keep 3, remove the old box, then build the cap".
+   RULE (read from flsRun / fltRun — no check, rank or state of the three routes is computed differently):
+   - Single names: at most SFC.cap (2) stocks — Top failure passing names first (its own order), then Daily failed rally
+     passing names (its own order), each name once. Early failed retest is the timing: shown per name (its state when the
+     name also passes the early route), never its own list here.
+   - Clusters: stocks passing ANY short route (Top failure, Daily failed rally, Early failed retest), counted by the
+     board's group (dsGroupName). A group with ≥ SFC.cluster (3) → its inverse ETF (SFC_INV by the group's theme — Claude's
+     proposed mapping, noted in the Notion callout for Eugene to confirm) is shown FIRST, beside the single names. A
+     cluster with no mapped fund says so.
+   - Regime: context only — MAP's call and SPY are shown, never block (the Legacy hard gate setting still closes the
+     routes' own lists, so a closed list gives no names here either).
+   ON SCREEN: card #sfcBox "Short focus today" on Setups with the switch on S, above the Former leader card.
+   REMOVED (Eugene, 11 Nov 2026: "remove the old box"): the "Short side · tape read + MAP's call" gate box (#shGate). Its
+   only readers were the S page layout, the side menu label and two tests; renderShorts now fills it only if present.
+   Never changes: the three routes' checks, lists, ranks, triggers, the feeds (Deep Space / ETF / FS columns), the Entry
+   Check, the plan, the Board log. Storage: none. Hooks: "tab", and the cards' two selects. Test: tools/board-short-focus-test.js.
+   ===================================================================== */
+const SFC = {cap: 2, cluster: 3};
+const SFC_INV = {"AI silicon / semis": "SOXS", "Memory / optical / components": "SOXS", "Software": "SQQQ", "Internet platforms": "SQQQ",
+  "Quantum / compute hardware": "SQQQ", "Neocloud / AI infra": "SQQQ", "Biotech": "LABD", "Financials / capital markets": "FAZ",
+  "Energy E&P / services": "ERY", "Refiners": "ERY", "Real estate": "DRV", "China / EM internet": "YANG"};
+{ const g = $("shGate"); if (g) g.remove(); }
+// pure: the focus from the routes' results
+function sfcCalc(F, T){
+  if (!F) return null;
+  const tP = T ? T.pass.filter(o => !o.r.etf) : [], dP = F.pass.filter(o => !o.r.etf), eP = F.early.pass.filter(o => !o.r.etf);
+  const names = [], seen = new Set();
+  if (F.open) for (const [o, rt] of [...tP.map(o => [o, "top"]), ...dP.map(o => [o, "daily"])]) { if (names.length >= SFC.cap) break; if (seen.has(o.r.sym)) continue; seen.add(o.r.sym); names.push({sym: o.r.sym, rt}); }
+  const by = new Map();
+  if (F.open) for (const o of [...tP, ...dP, ...eP]) { const g = dsGroupName(o.r); if (!by.has(g)) by.set(g, new Set()); by.get(g).add(o.r.sym); }
+  const clusters = [...by].filter(([, s]) => s.size >= SFC.cluster).map(([g, s]) => { const d = dsgOf([...s][0]); const th = d ? d[3] : ""; return {group: g, theme: th, etf: SFC_INV[th] || null, syms: [...s].sort()}; })
+    .sort((a, b) => b.syms.length - a.syms.length || a.group.localeCompare(b.group));
+  return {names, clusters, open: F.open};
+}
+function sfcCardHTML(){
+  const hd = `<div class="hd"><h2>Short focus today — up to ${SFC.cap} names, inverse ETF first when the weakness clusters</h2><span class="sub">paper / watch only · regime is context, never a gate · Notion 11 Nov 2026</span></div>`;
+  if (!pbHH()) return hd + `<div class="bd"><div class="empty">Needs the stored price history.</div></div>`;
+  let F = null, T = null; try { F = flsRun(); T = typeof fltRun === "function" ? fltRun() : null; } catch (e) { F = null; }
+  if (!F) return hd + `<div class="bd"><div class="empty">Load the files first.</div></div>`;
+  const q = sfcCalc(F, T), ctx = `<div class="small" style="margin-bottom:6px">Market context — never blocks: <b>${esc(F.mapTxt)}</b> · ${esc(F.spy.t)}</div>`;
+  if (!q.open) return hd + `<div class="bd">${ctx}<div class="empty"><b>No shorts listed</b> — the Legacy hard gate setting has the short lists closed.</div></div>`;
+  const by = S.rowBySym || new Map();
+  // one line per inverse ETF (groups that share a fund are merged); clusters with no mapped fund collapse to one dim line
+  const E = new Map(); q.clusters.filter(c => c.etf).forEach(c => { if (!E.has(c.etf)) E.set(c.etf, []); E.get(c.etf).push(c); });
+  const um = q.clusters.filter(c => !c.etf), tk = s => `<span class="sfctk" data-sym="${esc(s)}">${esc(s)}</span>`;
+  const inv = (E.size ? [...E].map(([etf, C]) => `<div class="sfcinv"><b class="sfcetf">${esc(etf)}</b> <span class="pill go">first choice</span> — ${C.map(c => `${c.syms.length} passing shorts in <b>${esc(c.group)}</b>: ${c.syms.map(tk).join(" ")}`).join(" · ")} · ${by.get(etf) && by.get(etf).etf ? "in your ETF file" : "not in your ETF file — check its liquidity"}</div>`).join("")
+      : `<div class="small dim">No group with ${SFC.cluster}+ passing shorts has a mapped inverse ETF — single names only.</div>`)
+    + (um.length ? `<div class="small dim sfcum">${SFC.cluster}+ passing shorts, no mapped inverse fund: ${um.map(c => `${esc(c.group)} (${c.syms.length})`).join(" · ")}</div>` : "");
+  const row = (n, i) => { const o = F.by.get(n.sym), t = T ? T.by.get(n.sym) : null, eP = !!(o && o.e && o.e.pass), r = by.get(n.sym) || {sym: n.sym};
+    let nx = ""; try { nx = n.rt === "top" ? fltNext(t) : eP ? flsEarlyNext(o) : FLS_NEXT + (o.x.fr && fin(o.x.fr.frHi) ? " " + p2(o.x.fr.frHi) : ""); } catch (e) { nx = ""; }
+    const st = n.rt === "top" ? (typeof fltStateHTML === "function" ? fltStateHTML(t, F) : "") : (typeof flsStateHTML === "function" && eP ? flsStateHTML(o, F) : `<span class="pill wait">${esc(F.verdict.get(n.sym) || "")}</span>`);
+    return `<tr data-sym="${esc(n.sym)}"><td>${i + 1}</td><td class="l sym">${esc(n.sym)}</td><td>${rsBadge(r.rs)}</td><td class="l small">${esc(dsGroupName(r))}</td><td class="l"><span class="pill">${n.rt === "top" ? "Top failure" : "Daily failed rally"}</span>${eP ? ` <span class="small dim">+ early retest</span>` : ""}</td><td class="l small">${st}</td></tr>
+      <tr class="sfcnx"><td></td><td class="l small" colspan="5"><b>Next:</b> ${esc(nx)}</td></tr>`; };
+  const tbl = q.names.length ? `<div class="tscroll" style="max-height:none"><table class="mini flst"><thead><tr><th>#</th><th class="l">Ticker</th><th>RS</th><th class="l">Group</th><th class="l">Route</th><th class="l">State</th></tr></thead><tbody>${q.names.map(row).join("")}</tbody></table></div>`
+    : `<div class="empty" style="padding:4px 0"><b>No single-name short today</b> — nothing passes Top failure or the Daily failed rally.</div>`;
+  return hd + `<div class="bd">${ctx}${inv}<div class="small" style="margin:8px 0 4px"><b>Single names</b> — Top failure first, then Daily failed rally; at most ${SFC.cap}. Early retest = the 30-min timing.</div>${tbl}</div>`;
+}
+function sfcPaint(){
+  const tab = $("tab-plan"); if (!tab || !S.snap) return;
+  let box = $("sfcBox"); if (!box) { const f = $("flsBox"); (f ? f : tab.lastElementChild).insertAdjacentHTML(f ? "beforebegin" : "afterend", `<div class="card g1" id="sfcBox"></div>`); box = $("sfcBox"); }
+  if (!box) return;
+  try { box.innerHTML = sfcCardHTML(); } catch (e) { console.error("short focus", e); box.innerHTML = `<div class="hd"><h2>Short focus today</h2></div><div class="bd"><div class="empty">Couldn't be drawn (error logged).</div></div>`; }
+}
+hookOn("tab", "shortFocus", t => { if (t === "plan" && pbCur() === "fls") sfcPaint(); });
+document.addEventListener("change", e => { const t = e.target; if (t && (t.id === "flsGateSel" || t.id === "flsRouteSel")) sfcPaint(); });
+document.addEventListener("click", e => { const k = e.target.closest && e.target.closest("#sfcBox [data-sym]"); if (k && typeof openDrawer === "function") openDrawer(k.dataset.sym); });
+document.head.insertAdjacentHTML("beforeend", `<style>#tab-plan:not(.pbFls) > #sfcBox{display:none!important}#tab-plan.pbFls > #sfcBox{order:3}.sfcinv{margin:3px 0}.sfcetf{font-size:14px}.sfctk{cursor:pointer;text-decoration:underline dotted;margin-right:4px}#sfcBox tr[data-sym]{cursor:pointer}</style>`);
+</script>
+<script>
 "use strict";
 /* =====================================================================
    BOARD VERSION LABEL (10 Nov 2026) — display only. On a 2-week trial (docs/trials.md).
@@ -22009,7 +22083,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>.sdtrt{margin:4px 0 6px;li
    - Never changes any number, list, feed column, storage key or setting. Storage: none. Hooks: "settings"; the chip is
      inserted once at load. No override.
    ===================================================================== */
-const BOARD_VER = {date: "2026-11-11", n: 2, what: "Short side tidy: watchlist short columns, panel routes line, one research fold"};
+const BOARD_VER = {date: "2026-11-11", n: 3, what: "Short focus: up to 2 names + inverse ETF first on clusters; old short gate box removed"};
 const boardVerTxt = () => `v${BOARD_VER.date}.${BOARD_VER.n}`;
 (function verChip(){
   try {
