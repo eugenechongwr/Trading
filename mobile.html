@@ -422,34 +422,6 @@ tr.thin td,.tk.thin{opacity:.5}
 /* ---------------- saved files + snapshot ---------------- */
 #restoreBar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--up-soft);border:1px solid var(--line);border-radius:10px;padding:6px 10px;margin:0 0 10px;font-size:12px}
 #snapPop{position:fixed;top:64px;right:24px;z-index:70;width:min(380px,92vw);background:var(--surface);border:1px solid var(--line-strong);border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.2);padding:12px 14px}
-/* ---------------- training tab ---------------- */
-.trbar{display:flex;flex-wrap:wrap;gap:14px;align-items:center;padding:8px 12px;margin-bottom:10px}
-.trbar .grp{display:flex;gap:6px;align-items:center}
-.trgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:10px;margin:10px 0}
-.trc{padding:10px 12px}
-.trc.rev{border-color:var(--line-strong)}
-.trh{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;margin-bottom:4px}
-.trsym{font-size:15px;font-weight:700;background:none;border:0;padding:0;color:var(--ink);cursor:pointer}
-.trsym:hover{text-decoration:underline;color:var(--accent)}
-#trChart{position:fixed;inset:0;z-index:75;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center}
-#trChart .box{background:var(--surface);border:1px solid var(--line-strong);border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.35);width:min(1200px,94vw);height:min(760px,88vh);display:flex;flex-direction:column;padding:10px 12px}
-#trChart .top{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:6px}
-#trChart .area{flex:1;min-height:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center}
-#trChart svg{width:100%;height:100%;display:block}
-.trq{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:6px 0}
-.trq .lbl{min-width:100%;font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em}
-.trb{border:1px solid var(--line-strong);background:var(--surface);border-radius:6px;padding:2px 7px;font-size:12px;cursor:pointer;color:var(--ink-2)}
-.trb:hover:not([disabled]){border-color:var(--accent)}
-.trb.on{background:var(--accent);border-color:var(--accent);color:#fff}
-.trb.right{box-shadow:0 0 0 2px var(--st1);border-color:var(--st1)}
-.trb.wrong{background:var(--down);border-color:var(--down);color:#fff}
-.trb[disabled]{cursor:default}
-.trrev{border-top:1px solid var(--line);margin-top:8px;padding-top:6px;display:grid;gap:3px;font-size:12px}
-.trck{margin:2px 0 0;padding-left:16px;font-size:11.5px}
-.trscore{font-variant-numeric:tabular-nums}
-.trhist{display:grid;gap:4px;font-size:12px}
-.trconf{border-collapse:collapse;font-size:12px;margin:4px 0}
-.trconf td,.trconf th{padding:3px 10px 3px 0;text-align:left;border-bottom:1px solid var(--line)}
 /* ---------------- Weinstein stages + leveraged ETFs ---------------- */
 .wsp{display:inline-block;min-width:26px;text-align:center;padding:1px 6px;border-radius:6px;font-weight:700;font-size:11.5px;background:var(--c);color:#111}
 .wsp.sm{font-size:10.5px;padding:0 5px;min-width:0;margin-left:3px}
@@ -688,7 +660,6 @@ html.ws #drawer.tp{width:min(1320px,96vw);padding:0;overflow:hidden;display:flex
 #tabs button[data-tab="plan"]{--ic:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='9'/><circle cx='12' cy='12' r='5'/><circle cx='12' cy='12' r='1'/></svg>")}
 #tabs button[data-tab="shorts"]{--ic:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 7l6 6 4-4 8 8'/><path d='M21 11v6h-6'/></svg>")}
 #tabs button[data-tab="data"]{--ic:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><ellipse cx='12' cy='6' rx='8' ry='3'/><path d='M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6'/><path d='M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3'/></svg>")}
-#tabs button[data-tab="train"]{--ic:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z'/><circle cx='12' cy='12' r='3'/></svg>")}
 </style>
 <style id="mobile-css">
 /* =====================================================================
@@ -1552,10 +1523,9 @@ const store = {
 // any direct localStorage write (older code, a pasted snapshot, another tab's change) drops the remembered reads at once
 // 31 Oct: store._g counts real changes only — a write of the same value isn't one, nor a write of page bookkeeping or a
 // tracking record that the self-check never reads (which page is open, the panel tab, TradingView-lists campaign memory)
-// 8 Nov 2026 (SPEED PASS 3): + the Training page's own records (current set, choices, score history) — read only by the
-// Training page, never by the self-check or the Former leader short lists, so a Training answer no longer makes the next
-// visit to Data check / Shorts recompute everything
-const STORE_UI = new Set(["adrb.tab", "adrb.tpTab", "adrb.tvlCamp", "adrb.trainSet", "adrb.trainCfg", "adrb.train"]);
+// (8 Nov 2026 added the Training page's records here; the Training tab was removed 11 Nov 2026 — Eugene: "Get rid of the
+// eye training games" — so its keys left this list.)
+const STORE_UI = new Set(["adrb.tab", "adrb.tpTab", "adrb.tvlCamp"]);
 for (const m of ["setItem", "removeItem", "clear"]) { const f = Storage.prototype[m]; Storage.prototype[m] = function(...a){ try { store._c.clear();
   if (m === "clear" || !(STORE_UI.has(a[0]) || this.getItem(a[0]) === (m === "setItem" ? String(a[1]) : null))) store._g++; } catch (e) {} return f.apply(this, a); }; }
 window.addEventListener("storage", () => { store._c.clear(); store._g++; });
@@ -5386,316 +5356,6 @@ filesBoot();
 <script>
 "use strict";
 /* =====================================================================
-   TRAINING TAB (17 Oct 2026) — eye-training game. Read-only: never touches rankings, states or the plan.
-   Game 1 "Read it": random liquid names from today's file, balanced across the 7 states. Guess state,
-     volatility and "on my A-list tonight?" from your own chart, then reveal against the board.
-   Game 2 "Before the run": the as-of date is 5 (or 10) sessions back in the stored Massive history.
-     Winners = top performers since then among liquid names in your file; decoys = liquid names flat or down.
-     Guess state / volatility / "would I have taken it?" at that date (TradingView bar replay), then reveal
-     against the board's state and volatility RECONSTRUCTED from Massive bars up to that date.
-   Per-viewer state in localStorage: adrb.trainCfg (choices), adrb.trainSet (current set), adrb.train (score history).
-   ===================================================================== */
-const TR_ST = () => [[1, "In zone"], [2, "Wait"], [3, "Above"], [4, "Extended"], [5, CFG.zMode === "band" ? "Under band" : "Below zone"], [6, "Under 50"], [7, "Broken"]];
-const TR_VS = ["coiled", "quiet", "normal", "loose", "wild"];
-const TR_HDEF = () => ({g1: {state: {n: 0, ok: 0}, vol: {n: 0, ok: 0}, alist: {n: 0, ok: 0}, conf: {}, vconf: {}},
-  g2: {state: {n: 0, ok: 0}, vol: {n: 0, ok: 0}, n: 0, win: 0, uAns: 0, uYes: 0, uYesWin: 0, uWinAns: 0, uWinYes: 0, bYes: 0, bYesWin: 0, bWinYes: 0, sets: 0}});
-const TR = {cfg: Object.assign({game: "read", n: 10, diff: "easy", back: 5}, store.get("adrb.trainCfg", {}) || {}), set: store.get("adrb.trainSet", null)};
-const trHist = () => { const h = store.get("adrb.train", null), d = TR_HDEF(); if (!h) return d; return {g1: {...d.g1, ...(h.g1 || {})}, g2: {...d.g2, ...(h.g2 || {})}}; };
-const trSaveSet = () => store.set("adrb.trainSet", TR.set);
-const trShuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
-const trPct = (a, b) => b ? Math.round(a / b * 100) + "%" : "—";
-
-// ---- Game 1 helpers
-// how close a name sits to the line that would change its state, in ADR (only the lines that matter for it)
-function trMargin(r){
-  const D = r.adrD; if (!D || r.zx == null || r.a50 == null || r.last == null) return null;
-  const [zl, zh] = zr(), m = [];
-  if (r.s50 != null) m.push(Math.abs(r.last - r.s50) / D);
-  if (r.a50 === false) { if (r.s200 != null) m.push(Math.abs(r.last - r.s200) / D); return Math.min(...m); }
-  if (CFG.zMode === "band" && r.e9 != null && r.e21 != null && r.s50 != null) {
-    // "Lag" needs both 9 < 21 and 21 < 50: distance to flipping into it (or out of it)
-    const d1 = (r.e9 - r.e21) / D, d2 = (r.e21 - r.s50) / D;
-    m.push(d1 < 0 && d2 < 0 ? Math.min(-d1, -d2) : Math.max(d1, d2));
-  }
-  if (r.state !== 7) m.push(Math.abs(r.zx - zl), Math.abs(r.zx - zh), Math.abs(r.zx - (zh + CFG.waitW)));
-  if (r.extU != null && !r.postER) m.push(Math.abs(r.extU - CFG.extCap));
-  return Math.min(...m);
-}
-// the six questions from the daily process (unknown = shown as "no data", doesn't fail the name)
-function trAList(r){
-  const s = statusOf60(r).k, al = alignOf(r), D = al[0].ok, W = al[2].ok, v = vsOf(r);   // Training keeps the old board states (22 Oct)
-  const above = S.plan.plan.filter(x => x.group === r.group && x.sym !== r.sym && (x.rs ?? 0) > (r.rs ?? 0)).length;
-  const items = [
-    {t: "In the zone or close (no more than 0.25 ADR above it)", ok: ["trig", "zone", "close"].includes(s)},
-    {t: `Daily and weekly trend green (daily ${D == null ? "no data" : D ? "yes" : "no"}, weekly ${W == null ? "no data" : W ? "yes" : "no"})`, ok: D == null ? null : D === true && W !== false},
-    {t: `Group cap: ${above} stronger name${above === 1 ? "" : "s"} from its group already in the plan (2 max)`, ok: above < 2},
-    {t: `Volatility not Loose or Wild (${v ? VSL[v.k].n : "no history"})`, ok: v ? !["loose", "wild"].includes(v.k) : null},
-    {t: r.zsRisk != null ? `Stop at the zone bottom fits the half-ADR rule (${f2(r.zsRisk)} ADR)` : "Stop at the zone bottom fits the half-ADR rule (not in or just above the zone)", ok: r.zsFit === true},
-    {t: `No earnings in the next 10 days (${r.erIn == null ? "no date" : r.erIn + "d"})`, ok: r.erIn == null ? null : !(r.erIn >= 0 && r.erIn <= 10)}
-  ];
-  return {yes: items.every(i => i.ok !== false), items};
-}
-// "easy" = well clear of every line that would change the state: 0.5 ADR, or 30% of the band's width for the
-// buy zone (0.5 ADR wide by default) and the wait band (1 ADR), which are narrower than that
-const trEasyMin = r => { const [zl, zh] = zr(); return r.state === 1 ? Math.min(0.5, 0.3 * (zh - zl)) : r.state === 2 ? Math.min(0.5, 0.3 * CFG.waitW) : 0.5; };
-function trNewRead(){
-  const pool = VS().filter(r => !r.thin && r.state != null), hard = TR.cfg.diff === "hard";
-  const fit = pool.filter(r => { const m = trMargin(r); return m != null && (hard ? m <= 0.25 : m >= trEasyMin(r) - 1e-9); });
-  const src = fit.length >= TR.cfg.n ? fit : pool;
-  const by = {}; for (const r of src) (by[r.state] = by[r.state] || []).push(r);
-  Object.values(by).forEach(trShuffle);
-  const out = []; let keys = trShuffle(Object.keys(by));
-  while (out.length < TR.cfg.n && keys.length) { keys = keys.filter(k => by[k].length); for (const k of keys) { if (out.length >= TR.cfg.n) break; const r = by[k].pop(); if (r) out.push(r.sym); } }
-  return {game: "read", key: snapKey(), cards: trShuffle(out), ans: {}, rev: {}, counted: {}, note: fit.length < TR.cfg.n ? `Only ${fit.length} names fit "${hard ? "hard" : "easy"}" — mixed in the rest.` : ""};
-}
-
-// ---- Game 2 helpers: rebuild the board's state and volatility from the stored daily bars up to session t
-function trStateAt(sym, t){
-  const s = series(sym, null); if (!s || t < 0 || !(s.c[t] > 0)) return null;
-  const c = s.c, h = s.h, l = s.l;
-  let a9 = null, a21 = null; const cs = [];
-  for (let k = 0; k <= t; k++) if (c[k] > 0) { a9 = a9 == null ? c[k] : a9 + (c[k] - a9) * 0.2; a21 = a21 == null ? c[k] : a21 + (c[k] - a21) * (2 / 22); cs.push(c[k]); }
-  const avg = n => cs.length >= n ? cs.slice(-n).reduce((a, b) => a + b, 0) / n : null;
-  const s50 = avg(50), s200 = avg(200), P = c[t];
-  const hl = []; for (let k = t; k >= 0 && hl.length < 20; k--) if (h[k] > 0 && l[k] > 0) hl.push((h[k] / l[k] - 1) * 100);
-  const adr = hl.length >= 10 ? hl.reduce((a, b) => a + b, 0) / hl.length : null;
-  if (a9 == null || s50 == null || !adr) return {state: null, P};
-  const adrD = P * adr / 100, e9 = a9, e21 = a21;
-  const trend = e9 > e21 && e21 > s50 ? "Lead" : e9 < e21 && e21 < s50 ? "Lag" : "Mediocre";
-  const anc = CFG.zMode === "e21" ? e21 : CFG.zMode === "e9" ? e9 : Math.max(e9, e21);
-  const zx = (P - anc) / adrD, a50 = P > s50, a200 = s200 != null ? P > s200 : null, extU = (P / s50 - 1) * 100 / adr;
-  const [zl, zh] = zr(), eps = 1e-9;
-  // same order as computeAll (no earnings-gap reset here: the stored bars don't carry earnings dates)
-  let st;
-  if ((a50 === false && a200 === false) || (CFG.zMode === "band" && trend === "Lag")) st = 7;
-  else if (!a50) st = 6;
-  else if (zx < zl - eps) st = 5;
-  else if (extU > CFG.extCap) st = 4;
-  else if (zx <= zh + eps) st = 1;
-  else if (zx <= zh + CFG.waitW + eps) st = 2;
-  else st = 3;
-  const v = s.v || new Float64Array(s.n).fill(NaN);
-  return {state: st, zx, extU, adr, P, trend, vs: volState(c, h, l, v, t)};
-}
-function trNewRun(){
-  if (!S.has.hist) return null;
-  const nD = HIST.nD, tL = nD - 1, tA = tL - (+TR.cfg.back || 5), half = Math.round(TR.cfg.n / 2);
-  if (tA < 60) return null;
-  const liq = [];
-  for (const r of VS()) {
-    const i = HIST.idx.get(r.sym); if (i == null) continue;
-    const o = i * nD, cA = HIST.C[o + tA], cL = HIST.C[o + tL];
-    if (!(cA >= 5) || !(cL > 0)) continue;
-    let dv = 0, dn = 0; for (let t = Math.max(0, tA - 19); t <= tA; t++) { const cc = HIST.C[o + t], vv = HIST.V[o + t]; if (isFinite(cc) && isFinite(vv)) { dv += cc * vv; dn++; } }
-    if (dn < 15 || dv / dn < 20e6) continue;
-    liq.push({sym: r.sym, ret: (cL / cA - 1) * 100});
-  }
-  liq.sort((a, b) => b.ret - a.ret);
-  const win = liq.slice(0, half).filter(x => x.ret > 1), wset = new Set(win.map(x => x.sym));
-  const dec = trShuffle(liq.filter(x => x.ret <= 1 && !wset.has(x.sym))).slice(0, half);
-  const cards = trShuffle([...win.map(x => ({sym: x.sym, ret: x.ret, win: true})), ...dec.map(x => ({sym: x.sym, ret: x.ret, win: false}))]);
-  return {game: "run", key: snapKey() + "|" + HIST.dates[tL], asOf: HIST.dates[tA], tA, to: HIST.dates[tL], back: +TR.cfg.back || 5, liq: liq.length,
-    cards: cards.map(c => c.sym), meta: Object.fromEntries(cards.map(c => [c.sym, {ret: c.ret, win: c.win}])), ans: {}, rev: {}, counted: {}};
-}
-function trTruth(sym){
-  const set = TR.set;
-  if (set.game === "read") { const r = S.rowBySym.get(sym); if (!r) return null; const v = vsOf(r); return {r, state: r.state, vol: v ? v.k : null, alist: trAList(r)}; }
-  const r = S.rowBySym.get(sym), rec = HIST.dates[set.tA] === set.asOf ? trStateAt(sym, set.tA) : null, m = set.meta[sym] || {};
-  const zh = zr()[1], v = rec && rec.vs ? rec.vs.k : null;
-  const boardYes = !!rec && (rec.state === 1 || (rec.state === 2 && rec.zx - zh <= 0.25)) && !["loose", "wild"].includes(v);
-  return {r, rec, state: rec ? rec.state : null, vol: v, ret: m.ret, win: !!m.win, boardYes};
-}
-// score a card once, the first time it is revealed (Clear doesn't let you score it again)
-function trCount(sym){
-  const set = TR.set; if (set.counted[sym]) return; set.counted[sym] = true;
-  const a = set.ans[sym] || {}, T = trTruth(sym); if (!T) return;
-  const H = trHist(), g = set.game === "read" ? H.g1 : H.g2;
-  if (a.state != null && T.state != null) { g.state.n++; if (+a.state === T.state) g.state.ok++; if (set.game === "read") { const c = g.conf[T.state] = g.conf[T.state] || {}; c[a.state] = (c[a.state] || 0) + 1; } }
-  if (a.vol != null && T.vol != null) { g.vol.n++; if (a.vol === T.vol) g.vol.ok++; if (set.game === "read") { const c = g.vconf[T.vol] = g.vconf[T.vol] || {}; c[a.vol] = (c[a.vol] || 0) + 1; } }
-  if (set.game === "read") { if (a.alist != null) { g.alist.n++; if ((a.alist === "y") === T.alist.yes) g.alist.ok++; } }
-  else {
-    g.n++; if (T.win) g.win++;
-    if (T.boardYes) { g.bYes++; if (T.win) g.bYesWin++; }
-    if (T.win && T.boardYes) g.bWinYes++;
-    if (a.take != null) { g.uAns++; if (T.win) g.uWinAns++; if (a.take === "y") { g.uYes++; if (T.win) { g.uYesWin++; g.uWinYes++; } } }
-  }
-  store.set("adrb.train", H);
-}
-function trEnsure(){
-  const game = TR.cfg.game, key = game === "read" ? snapKey() : snapKey() + "|" + (HIST.nD ? HIST.dates[HIST.nD - 1] : "");
-  if (TR.set && TR.set.game === game && TR.set.key === key && TR.set.cards.length && TR.set.cards.every(s => S.rowBySym && S.rowBySym.has(s))) return;
-  TR.set = game === "read" ? trNewRead() : trNewRun(); trSaveSet();
-}
-
-// ---- render
-function trBtns(sym, q, opts, T, revealed){
-  const a = (TR.set.ans[sym] || {})[q], truth = T ? (q === "state" ? T.state : q === "vol" ? T.vol : q === "alist" ? (T.alist.yes ? "y" : "n") : null) : null;
-  return opts.map(([v, label]) => {
-    const on = a != null && String(a) === String(v), right = revealed && truth != null && String(truth) === String(v);
-    const c = ["trb", on ? "on" : "", right ? "right" : "", revealed && on && !right && truth != null ? "wrong" : ""].filter(Boolean).join(" ");
-    return `<button class="${c}" data-tq="${q}" data-tv="${v}" data-tsym="${esc(sym)}" ${revealed ? "disabled" : ""}>${esc(label)}</button>`;
-  }).join("");
-}
-function trCard(sym, i){
-  const set = TR.set, rev = !!set.rev[sym], T = trTruth(sym), r = T && T.r, read = set.game === "read", hh = S.has.hist;
-  const STL = Object.fromEntries(TR_ST());
-  const yn = [["y", "Yes"], ["n", "No"]];
-  const vol = hh ? trBtns(sym, "vol", TR_VS.map(k => [k, VSL[k].n]), T, rev) : `<span class="small">needs the price history</span>`;
-  let out = "";
-  if (rev && T) {
-    const a = set.ans[sym] || {}, mark = (ok, has) => !has ? `<span class="dim">not answered</span>` : ok ? `<span class="pos">✓ right</span>` : `<span class="neg">✗ wrong</span>`;
-    if (read) {
-      const v = vsOf(r);
-      out = `<div class="trrev">
-        <div>Board: <b>${T.state ? esc(ST[T.state].name) : "—"}</b> ${mark(+a.state === T.state, a.state != null)}${hh ? ` · volatility <b>${v ? VSL[v.k].n : "—"}</b> ${mark(a.vol === T.vol, a.vol != null && T.vol != null)}` : ""}</div>
-        <div class="small">From the line ${sg(r.zx)} ADR · from the 50 SMA ${sg(r.extU)} ADR${v ? ` · RMV ${Math.round(v.rmv)} · ${v.n10} noisy bar${v.n10 === 1 ? "" : "s"} in 10` : ""} · ${esc(zoneStamp())}</div>
-        <div>A-list tonight: <b>${T.alist.yes ? "Yes" : "No"}</b> ${mark((a.alist === "y") === T.alist.yes, a.alist != null)}</div>
-        <ul class="trck">${T.alist.items.map(x => `<li class="${x.ok == null ? "dim" : x.ok ? "pos" : "neg"}">${x.ok == null ? "–" : x.ok ? "✓" : "✗"} ${esc(x.t)}</li>`).join("")}</ul></div>`;
-    } else {
-      const x = T.rec;
-      out = `<div class="trrev">
-        <div><b class="${T.win ? "pos" : "neg"}">${T.win ? "Winner" : "Decoy"}</b> · ${pc(T.ret, 1)} from the ${esc(set.asOf)} close to ${esc(set.to)}</div>
-        <div>Board on ${esc(set.asOf)}: <b>${x && x.state ? esc(ST[x.state].name) : "—"}</b> ${mark(+a.state === T.state, a.state != null && T.state != null)} · volatility <b>${T.vol ? VSL[T.vol].n : "—"}</b> ${mark(a.vol === T.vol, a.vol != null && T.vol != null)}</div>
-        ${x && x.state ? `<div class="small">From the line ${sg(x.zx)} ADR · from the 50 SMA ${sg(x.extU)} ADR · ADR ${f1(x.adr)}%${x.vs ? ` · RMV ${Math.round(x.vs.rmv)} · ${x.vs.n10} noisy` : ""}</div>` : ""}
-        <div>You: ${a.take == null ? `<span class="dim">no take answer</span>` : a.take === "y" ? "would have taken it" : "would have passed"} · board: ${T.boardYes ? "would have flagged it" : "would have passed"}</div>
-        <div class="small">Reconstructed from Massive bars — may differ slightly from TradingView.</div></div>`;
-    }
-  }
-  return `<div class="card trc ${rev ? "rev" : ""}">
-    <div class="trh"><span class="small">#${i + 1}</span> <button class="trsym" data-trchart="${esc(sym)}" title="${rev ? "Open the ticker panel (chart and all the board's data)" : "Open the chart (the full ticker panel opens after you reveal)"}">${esc(sym)}</button>${r ? ` <a href="${esc(tvURL(r))}" target="_blank" rel="noopener">Open in TradingView ↗</a>` : ""}${read ? "" : ` <span class="small">as of ${esc(set.asOf)}</span>`}</div>
-    <div class="trq"><span class="lbl">State${read ? "" : " then"}</span>${trBtns(sym, "state", TR_ST().map(([k, l]) => [k, l]), T, rev)}</div>
-    <div class="trq"><span class="lbl">Volatility${read ? "" : " then"}</span>${vol}</div>
-    <div class="trq"><span class="lbl">${read ? "On my A-list tonight?" : "Would I have taken it?"}</span>${trBtns(sym, read ? "alist" : "take", yn, read ? T : null, rev)}</div>
-    ${rev ? out : `<div class="trq"><button class="btn sm" data-trrev="${esc(sym)}">Reveal</button></div>`}
-  </div>`;
-}
-function trScoreLine(){
-  const set = TR.set, rv = set.cards.filter(s => set.rev[s]);
-  const tally = q => { let n = 0, ok = 0; for (const s of rv) { const a = (set.ans[s] || {})[q], T = trTruth(s); if (a == null || !T) continue; const t = q === "state" ? T.state : q === "vol" ? T.vol : q === "alist" ? (T.alist.yes ? "y" : "n") : null; if (t == null) continue; n++; if (String(a) === String(t)) ok++; } return n ? `${ok}/${n}` : "—"; };
-  const parts = [`State ${tally("state")}`, `Volatility ${tally("vol")}`];
-  if (set.game === "read") parts.push(`A-list ${tally("alist")}`);
-  else {
-    let uy = 0, uyw = 0, w = 0, wy = 0, by = 0, byw = 0, bwy = 0, wa = 0;
-    for (const s of rv) { const a = set.ans[s] || {}, T = trTruth(s); if (!T) continue; if (T.win) w++; if (T.boardYes) { by++; if (T.win) byw++; } if (T.win && T.boardYes) bwy++; if (a.take != null) { if (T.win) wa++; if (a.take === "y") { uy++; if (T.win) { uyw++; wy++; } } } }
-    parts.push(`Your Yes picks that were winners ${uyw}/${uy}`, `winners you'd have taken ${wy}/${wa}`, `board's Yes picks that were winners ${byw}/${by}`, `winners the board flagged ${bwy}/${w}`);
-  }
-  return `${parts.join(" · ")} · revealed ${rv.length} of ${set.cards.length}`;
-}
-function trHistHTML(){
-  const H = trHist(), g1 = H.g1, g2 = H.g2, ac = o => `${trPct(o.ok, o.n)} <span class="small">(${o.n})</span>`;
-  const STL = Object.fromEntries(TR_ST());
-  const conf = [];
-  for (const t in g1.conf) {
-    const row = g1.conf[t], n = Object.values(row).reduce((a, b) => a + b, 0); if (n < 3) continue;
-    const wrong = Object.entries(row).filter(([k]) => +k !== +t).sort((a, b) => b[1] - a[1])[0];
-    conf.push({t, n, ok: row[t] || 0, wrong});
-  }
-  conf.sort((a, b) => (a.ok / a.n) - (b.ok / b.n));
-  const vconf = [];
-  for (const t in g1.vconf) { const row = g1.vconf[t], n = Object.values(row).reduce((a, b) => a + b, 0); if (n < 3) continue; const wrong = Object.entries(row).filter(([k]) => k !== t).sort((a, b) => b[1] - a[1])[0]; if (wrong && wrong[1] / n >= 0.25) vconf.push(`you call ${VSL[t].n} names ${VSL[wrong[0]].n} ${trPct(wrong[1], n)} of the time`); }
-  return `<div class="trhist">
-    <div><b>Read it</b> — state ${ac(g1.state)} · volatility ${ac(g1.vol)} · A-list ${ac(g1.alist)}</div>
-    ${conf.length ? `<table class="trconf"><tr><th>Board said</th><th>Cards</th><th>You got right</th><th>Most common wrong call</th></tr>${conf.map(c => `<tr><td>${esc(STL[c.t] || c.t)}</td><td>${c.n}</td><td>${trPct(c.ok, c.n)}</td><td>${c.wrong ? `${esc(STL[c.wrong[0]] || c.wrong[0])} — ${trPct(c.wrong[1], c.n)} of the time` : "—"}</td></tr>`).join("")}</table>` : `<div class="small">Per-state breakdown shows once a state has 3+ answers.</div>`}
-    ${vconf.length ? `<div class="small">Volatility: ${esc(vconf.join(" · "))}</div>` : ""}
-    <div style="margin-top:6px"><b>Before the run</b> — state ${ac(g2.state)} · volatility ${ac(g2.vol)} · ${g2.n} cards, ${g2.win} winners</div>
-    <div>You: of your Yes picks, <b>${trPct(g2.uYesWin, g2.uYes)}</b> were winners (${g2.uYesWin}/${g2.uYes}) · of the winners, you'd have taken <b>${trPct(g2.uWinYes, g2.uWinAns)}</b> (${g2.uWinYes}/${g2.uWinAns})</div>
-    <div>Board: of its Yes calls, <b>${trPct(g2.bYesWin, g2.bYes)}</b> were winners (${g2.bYesWin}/${g2.bYes}) · of the winners, it flagged <b>${trPct(g2.bWinYes, g2.win)}</b> (${g2.bWinYes}/${g2.win})</div>
-    <div class="small">Board "Yes" in Before the run = reconstructed state In the zone, or no more than 0.25 ADR above it, and volatility not Loose or Wild. Small samples — read it as a rough guide, not proof.</div>
-  </div>`;
-}
-function renderTrain(){
-  const el = $("trainBody"); if (!el) return;
-  const c = TR.cfg, sel = (k, opts) => `<span class="seg">${opts.map(([v, l]) => `<button data-tc="${k}" data-tcv="${v}" class="${String(c[k]) === String(v) ? "on" : ""}">${l}</button>`).join("")}</span>`;
-  const bar = `<div class="card controls trbar">
-    <div class="grp"><span class="lbl">Game</span>${sel("game", [["read", "Read it · today"], ["run", "Before the run"]])}</div>
-    <div class="grp"><span class="lbl">Cards</span>${sel("n", [[10, "10"], [20, "20"]])}</div>
-    ${c.game === "read" ? `<div class="grp"><span class="lbl">Difficulty</span>${sel("diff", [["easy", "Easy"], ["hard", "Hard"]])}</div>` : `<div class="grp"><span class="lbl">As of</span>${sel("back", [[5, "5 sessions ago"], [10, "10 sessions ago"]])}</div>`}
-    <div class="grp"><button class="btn" data-ta="new">Randomise</button><button class="btn" data-ta="clear">Clear</button><button class="btn" data-ta="all">Reveal all</button></div>
-  </div>`;
-  if (c.game === "run" && !S.has.hist) { el.innerHTML = bar + `<div class="card"><div class="bd"><div class="empty">Before the run needs the price history from Massive. Add your Massive key in Settings, then load the history from the Screens tab.</div></div></div>` + `<div class="card"><div class="hd"><h2>Your score history</h2><button class="btn sm" data-ta="reset">Reset score history</button></div><div class="bd">${trHistHTML()}</div></div>`; return; }
-  trEnsure();
-  const set = TR.set;
-  if (!set || !set.cards.length) { el.innerHTML = bar + `<div class="card"><div class="bd"><div class="empty">Not enough names to make a set from this file${c.game === "run" ? " and history" : ""}.</div></div></div>`; return; }
-  const how = set.game === "read"
-    ? `Click a ticker to open its chart (or use "Open in TradingView"), pick your answers, then reveal. After the reveal, clicking the ticker opens the full ticker panel. The board's answers use today's file and ${esc(zoneStamp())}. ${c.diff === "hard" ? "Hard: every name is within 0.25 ADR of a line that would change its state." : "Easy: every name is well clear of the lines that would change its state (0.5 ADR, or a third of the band for names in the zone or just above it)."} ${esc(set.note || "")}`
-    : `Use TradingView bar replay to <b>${esc(set.asOf)}</b> (the close ${set.back} sessions ago) and judge each chart as it looked then — or click a ticker for a chart that stops at that close. After the reveal, the ticker opens the full ticker panel (today's data). Half of these are the best performers since that close among ${set.liq} liquid names in your file that your filters show (price $5+, $20M+ a day); the rest were flat or down. The board's answers are rebuilt from Massive bars up to that date.`;
-  el.innerHTML = bar + `<div class="card"><div class="hd"><h2>${set.game === "read" ? "Read it" : "Before the run"}</h2><span class="sub">${how}</span></div>
-    <div class="bd"><div class="trscore">${trScoreLine()}</div></div></div>
-    <div class="trgrid">${set.cards.map(trCard).join("")}</div>
-    <div class="card"><div class="hd"><h2>Your score history</h2><span class="sub">kept in this browser · each card counts once, the first time it is revealed</span><span class="spacer"></span><button class="btn sm" data-ta="reset">Reset score history</button></div><div class="bd">${trHistHTML()}</div></div>`;
-}
-// ---- chart popup: click a card's ticker. Shows only the chart, never the board's answers.
-// Read it: the TradingView embed. Before the run: until the card is revealed, a chart drawn from the stored Massive
-// daily bars that stops at the as-of session (the embed would show the run itself); after the reveal, both.
-function trBarsSVG(sym, tA){
-  const s = series(sym, null); if (!s) return `<div class="empty">No stored bars for ${esc(sym)}.</div>`;
-  const c = s.c, h = s.h, l = s.l, v = s.v;
-  const e9 = [], e21 = [], s50 = []; let a9 = null, a21 = null; const q = []; let qs = 0;
-  for (let t = 0; t <= tA; t++) {
-    if (c[t] > 0) { a9 = a9 == null ? c[t] : a9 + (c[t] - a9) * 0.2; a21 = a21 == null ? c[t] : a21 + (c[t] - a21) * (2 / 22); q.push(c[t]); qs += c[t]; if (q.length > 50) qs -= q.shift(); }
-    e9[t] = a9; e21[t] = a21; s50[t] = q.length === 50 ? qs / 50 : null;
-  }
-  const t0 = Math.max(0, tA - 129), idx = []; for (let t = t0; t <= tA; t++) if (c[t] > 0 && h[t] > 0 && l[t] > 0) idx.push(t);
-  if (idx.length < 5) return `<div class="empty">Not enough stored bars for ${esc(sym)} before ${esc(TR.set.asOf)}.</div>`;
-  let lo = Infinity, hi = -Infinity, vm = 0;
-  for (const t of idx) { lo = Math.min(lo, l[t], s50[t] ?? Infinity); hi = Math.max(hi, h[t], s50[t] ?? -Infinity); if (isFinite(v[t])) vm = Math.max(vm, v[t]); }
-  const W = 1160, H = 660, padR = 64, padT = 10, pH = 500, vTop = 530, vH = 110, n = idx.length, bw = (W - padR) / n;
-  const X = i => i * bw + bw / 2, Y = p => padT + (hi - p) / (hi - lo || 1) * pH;
-  let g = "";
-  for (let k = 0; k <= 4; k++) { const p = lo + (hi - lo) * k / 4, y = Y(p); g += `<line x1="0" x2="${W - padR}" y1="${y}" y2="${y}" stroke="var(--line)"/><text x="${W - padR + 6}" y="${y + 4}" font-size="12" fill="var(--ink-3)">${p.toFixed(2)}</text>`; }
-  let bars = "", vol = "";
-  idx.forEach((t, i) => {
-    const up = i === 0 || c[t] >= c[idx[i - 1]], col = up ? "var(--st1)" : "var(--down)", x = X(i);
-    bars += `<line x1="${x}" x2="${x}" y1="${Y(h[t])}" y2="${Y(l[t])}" stroke="${col}" stroke-width="${Math.max(1, bw * 0.35)}"/><line x1="${x}" x2="${x + bw * 0.45}" y1="${Y(c[t])}" y2="${Y(c[t])}" stroke="${col}" stroke-width="1.5"/>`;
-    if (vm && isFinite(v[t])) { const vh = v[t] / vm * vH; vol += `<rect x="${x - bw * 0.35}" y="${vTop + vH - vh}" width="${bw * 0.7}" height="${vh}" fill="${col}" opacity=".45"/>`; }
-  });
-  const line = (arr, col) => { const pts = idx.map((t, i) => arr[t] != null ? `${X(i).toFixed(1)},${Y(arr[t]).toFixed(1)}` : null).filter(Boolean); return pts.length > 1 ? `<polyline points="${pts.join(" ")}" fill="none" stroke="${col}" stroke-width="1.5"/>` : ""; };
-  const d0 = HIST.dates[idx[0]], d1 = HIST.dates[tA];
-  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${g}${bars}${line(e9, "var(--st2)")}${line(e21, "var(--st3)")}${line(s50, "var(--st4)")}${vol}
-    <text x="6" y="${H - 4}" font-size="12" fill="var(--ink-3)">${esc(d0)}</text><text x="${W - padR - 6}" y="${H - 4}" font-size="12" fill="var(--ink-3)" text-anchor="end">${esc(d1)}</text></svg>`;
-}
-function trChartOpen(sym, view){
-  const set = TR.set, r = S.rowBySym.get(sym); if (!set || !r) return;
-  const run = set.game === "run", rev = !!set.rev[sym], v = view || (run ? "bars" : "tv");
-  let el = $("trChart"); if (!el) { el = document.createElement("div"); el.id = "trChart"; document.body.appendChild(el); }
-  const views = run && rev ? `<span class="seg"><button data-trv="bars" class="${v === "bars" ? "on" : ""}">Up to ${esc(set.asOf)}</button><button data-trv="tv" class="${v === "tv" ? "on" : ""}">TradingView (today)</button></span>` : "";
-  const note = v === "bars" ? `<span class="small">Daily bars from Massive up to the ${esc(set.asOf)} close — nothing after it. High–low bar with a close tick (opens aren't stored). <span style="color:var(--st2)">9 EMA</span> · <span style="color:var(--st3)">21 EMA</span> · <span style="color:var(--st4)">50 SMA</span>.</span>`
-    : `<span class="small">9 / 21 EMA and 50 / 200 SMA, as in the ticker panel.</span>`;
-  el.innerHTML = `<div class="box"><div class="top"><b style="font-size:16px">${esc(sym)}</b><a href="${esc(tvURL(r))}" target="_blank" rel="noopener">Open in TradingView ↗</a>${views}${note}<span class="spacer"></span><button class="btn sm" data-trx>✕</button></div><div class="area" id="trChartArea"></div></div>`;
-  el.classList.remove("hidden");
-  const area = $("trChartArea");
-  if (v === "bars") area.innerHTML = trBarsSVG(sym, set.tA);
-  else if (!CFG.embed) area.innerHTML = `<span class="small">Chart embed is off — turn it on in Settings, or use the link above.</span>`;
-  else {
-    area.innerHTML = `<div id="trTvc" style="width:100%;height:100%"></div>`;
-    loadTV().then(() => { try { new TradingView.widget({container_id: "trTvc", autosize: true, symbol: tvSym(r), interval: CFG.tvInterval, timezone: "America/New_York", theme: isDark() ? "dark" : "light", style: "1", locale: "en", hide_side_toolbar: true, allow_symbol_change: false, withdateranges: true, save_image: false,
-      studies: [{id: "MAExp@tv-basicstudies", inputs: {length: 9}}, {id: "MAExp@tv-basicstudies", inputs: {length: 21}}, {id: "MASimple@tv-basicstudies", inputs: {length: 50}}, {id: "MASimple@tv-basicstudies", inputs: {length: 200}}]}); } catch (e) { area.innerHTML = "Couldn't start the chart."; } })
-      .catch(() => { if ($("trChartArea") === area) area.innerHTML = `<span class="small" style="padding:20px;text-align:center">Couldn't load the TradingView chart here (offline, or the page is blocked from loading it). The "Open in TradingView" link still works.</span>`; });
-  }
-  el.onclick = e => { if (e.target === el || e.target.closest("[data-trx]")) { trChartClose(); return; } const b = e.target.closest("[data-trv]"); if (b) trChartOpen(sym, b.dataset.trv); };
-}
-function trChartClose(){ const el = $("trChart"); if (el) { el.classList.add("hidden"); el.innerHTML = ""; } }
-document.addEventListener("keydown", e => { if (e.key === "Escape") trChartClose(); });
-$("tabs").insertAdjacentHTML("beforeend", `<button data-tab="train">Training</button>`);
-$("foot").insertAdjacentHTML("beforebegin", `<section class="tab" id="tab-train"><p class="lede">Train your eye: read state and volatility from your own chart, then check against the board. Cards come from the liquid names your filter bar shows (Everything = the whole file). Nothing here changes the board's rankings, states or plan.</p><div id="trainBody"></div></section>`);
-// 8 Nov 2026 (TIDY-UP, structure only): was a renderTab wrapper — now a page of renderTab's own (TABS)
-tabDraw("train", () => renderTrain());
-$("tab-train").addEventListener("click", e => {
-  const b = e.target.closest("button"); if (!b || !TR.cfg) return;
-  if (b.dataset.tc) { const k = b.dataset.tc, v = b.dataset.tcv; TR.cfg[k] = ["n", "back"].includes(k) ? +v : v; store.set("adrb.trainCfg", TR.cfg); if (k !== "game") TR.set = null; renderTrain(); return; }
-  if (b.dataset.tq) { const s = b.dataset.tsym, a = TR.set.ans[s] = TR.set.ans[s] || {}; a[b.dataset.tq] = a[b.dataset.tq] === b.dataset.tv ? null : b.dataset.tv; if (a[b.dataset.tq] == null) delete a[b.dataset.tq]; trSaveSet(); renderTrain(); return; }
-  if (b.dataset.trchart) { const s = b.dataset.trchart; if (TR.set.rev[s]) openDrawer(s); else trChartOpen(s); return; }   // revealed → the full ticker panel
-  if (b.dataset.trrev) { const s = b.dataset.trrev; TR.set.rev[s] = true; trCount(s); trSaveSet(); renderTrain(); return; }
-  const a = b.dataset.ta; if (!a) return;
-  if (a === "new") { TR.set = null; renderTrain(); }
-  else if (a === "clear") { TR.set.ans = {}; TR.set.rev = {}; trSaveSet(); renderTrain(); }
-  else if (a === "all") { for (const s of TR.set.cards) if (!TR.set.rev[s]) { TR.set.rev[s] = true; trCount(s); } trSaveSet(); renderTrain(); }
-  else if (a === "reset") { if (confirm("Reset your Training score history in this browser?")) { store.set("adrb.train", null); renderTrain(); } }
-});
-</script>
-<script>
-"use strict";
-/* =====================================================================
    WORKSPACE LAYOUT (18 Oct) — organisation only, no trading logic.
    - Shorts tab (both layouts): short-side gate, short watch, weakest groups, weakness scans, inverse funds.
    - Workspace layout (default; html.ws, localStorage adrb.layout = "ws" | "classic"):
@@ -5801,7 +5461,7 @@ const NAV = [
   ["Themes", [["themes", "Group strength & rotation"]]],
   ["Stocks", [["today", "Movers, gaps, in play"], ["map", "Where each name sits"], ["screens", "Preset scans"]]],
   ["Decide", [["plan", "The plan & on deck"], ["shorts", "Relative weakness watch"]]],
-  ["Tools", [["data", "Files & columns"], ["train", "Eye-training games"]]]
+  ["Tools", [["data", "Files & columns"]]]
 ];
 const SEC_NAMES = {tapeBox: "Tape read", mkTape: "Tape read", kpis: "Key numbers", mkKpis: "Key numbers", etfKpis: "Key numbers", spotlight: "Spotlight", shGate: "Short-side gate", listsBox: "MAP focus & held", focusBox: "MAP focus"};
 function afterTab(t){
@@ -9738,7 +9398,7 @@ const NAV2 = [
   ["Watchlist", [["watch", "MAP lists, favourites, held"]]],
   ["Setups", [["plan", "Per-name checks · the lists"]]],
   ["Review", [["journal", "What the board surfaced · how it did"]]],
-  ["Tools", [["data", "Files, MAP source, feed, self-check"], ["train", "Eye-training games"]]]
+  ["Tools", [["data", "Files, MAP source, feed, self-check"]]]
 ];
 if (WS) {
   const tabs = $("tabs");
@@ -14100,7 +13760,7 @@ new MutationObserver(mBar).observe($("drawer"), {childList: true});
 
 /* ---------------- back gesture closes the top layer (panel → settings → menu), not the page ---------------- */
 try { history.scrollRestoration = "manual"; } catch (e) {}   // stepping back through these entries must not jump the page
-const mOpen = () => $("drawer").classList.contains("open") || $("settings").classList.contains("open") || document.documentElement.classList.contains("menu") || !!($("trChart") && !$("trChart").classList.contains("hidden"));
+const mOpen = () => $("drawer").classList.contains("open") || $("settings").classList.contains("open") || document.documentElement.classList.contains("menu");
 function mWatch(){
   const open = mOpen();
   document.documentElement.classList.toggle("mlock", open);
@@ -14114,8 +13774,7 @@ addEventListener("popstate", () => {
   if (MOB.ignorePop) { MOB.ignorePop = false; return; }
   MOB.armed = false;
   const dr = $("drawer");
-  if ($("trChart") && !$("trChart").classList.contains("hidden")) trChartClose();
-  else if (dr.classList.contains("open")) { if (WSI.hist.length > 1) tpBack(); else closeDrawer(); }
+  if (dr.classList.contains("open")) { if (WSI.hist.length > 1) tpBack(); else closeDrawer(); }
   else if ($("settings").classList.contains("open")) $("settings").classList.remove("open");
   else mMenu(false);
   setTimeout(mWatch, 0);
@@ -14123,7 +13782,6 @@ addEventListener("popstate", () => {
 {
   const mo = new MutationObserver(mWatch);
   [$("drawer"), $("settings"), document.documentElement].forEach(el => mo.observe(el, {attributes: true, attributeFilter: ["class"]}));
-  new MutationObserver(() => { const tc = $("trChart"); if (tc && !tc._mob) { tc._mob = 1; mo.observe(tc, {attributes: true, attributeFilter: ["class"]}); } mWatch(); }).observe(document.body, {childList: true});   // the training chart pop-up is made on first use
 }
 
 /* ---------------- long-press shows the hover hint ---------------- */
@@ -14601,6 +14259,7 @@ function dvRec(r){
     o.stage = s.stage ? s.stage.lab : null; o.rmv = fin(s.rmv) ? Math.round(s.rmv) : null;
   } else { try { o.status = statusOf(r).t; } catch (e) {} }
   if (typeof adrfDv === "function") try { adrfDv(r, o); } catch (e) {}   // 10 Nov 2026: ADR floor / MEGA / wrapper fields (ADR FLOOR script)
+  if (typeof zlnDv === "function") try { zlnDv(r, o); } catch (e) {}   // 11 Nov 2026: zoneLine label (ZONE LINE script, display only)
   return o;
 }
 function dvBuild(){
@@ -22073,6 +21732,46 @@ document.head.insertAdjacentHTML("beforeend", `<style>#tab-plan:not(.pbFls) > #s
 <script>
 "use strict";
 /* =====================================================================
+   ZONE LINE (11 Nov 2026) — DISPLAY / TRACKING ONLY. On a 2-week trial (docs/trials.md).
+   Eugene, 11 Nov 2026: "Agree. Label only version." — he decided NOT to change the buy-zone definition (Playbook 1's entry
+   zone stays frozen until the 60-session review); the board only labels which daily line a pullback is sitting on.
+   Per stock (zlnOf, stocks only, never ETFs), from the Entry Check's own location object (s61Of(r).x, the band rule —
+   never the Buy-zone lens zlLoc / zlX / ecX):
+   - only when x.loc is "L1", "L2" or "L3" (close above the daily 21 EMA with the trend check passing, and not more than
+     0.5 ADR above the top of the 9/21 band); blank for ABOVE, BELOW21, no location, no history or non-finite inputs.
+   - "TIGHT" when |9 EMA − 21 EMA| / ADR$ (x.D) < ZL_TIGHT (wins over the other two);
+     else "9" when the last close (x.close, the price s61Calc places) ≥ the 9 EMA; else "21".
+   On screen / out:
+   - Table → Columns → Structure: "Zone Line" column (shown with the Structure group, like its other columns).
+   - Deep Space feed (MAP's input): one column "Zone Line" appended at the very END through FEED_EXT (blank for ETFs);
+     every older column byte-identical. The ETF feed (ES_FEED_EXT) is untouched.
+   - Claude connector: field zoneLine on each record (dvRec, guarded call like the ADR floor's; null when blank).
+   Never changes: any list, location (L1 / L2 / L3), check result, rank, size, score, filter or the buy zone itself.
+   Storage: none (no new keys). Hooks: "cols". No override. Self-check: not extended (a label, not trading maths).
+   Test: tools/board-zone-line-test.js (separate recompute).
+   ===================================================================== */
+const ZL_TIGHT = 0.25;   // ADR between the 9 and 21 EMA under which the label reads TIGHT — default, not Eugene's ruling
+function zlnOf(r){
+  if (!r || r.etf || !S.has.hist || typeof s61Of !== "function") return "";
+  let s = null; try { s = s61Of(r); } catch (e) { return ""; }
+  const x = s && s.x; if (!x || !(x.loc === "L1" || x.loc === "L2" || x.loc === "L3")) return "";
+  const {e9, e21, D, close} = x;
+  if (![e9, e21, D, close].every(v => typeof v === "number" && isFinite(v)) || !(D > 0)) return "";
+  if (Math.abs(e9 - e21) / D < ZL_TIGHT) return "TIGHT";
+  return close >= e9 ? "9" : "21";
+}
+const ZLN_TIP = `Which daily line the pullback is sitting on: 9 = at or above the 9 EMA; 21 = under the 9, above the 21; TIGHT = the two lines are less than ${ZL_TIGHT} ADR apart. Only for names in or just under the buy zone. Information only.`;
+hookOn("cols", "zoneLine", hx => {
+  hx.C.push({k: "zoneLine", l: "Zone Line", h: "9 / 21 / TIGHT", g: "struct", tip: ZLN_TIP, v: r => ({"9": 3, "21": 2, TIGHT: 1})[zlnOf(r)] ?? null,
+    f: r => { const z = zlnOf(r); return z ? `<span title="${esc(ZLN_TIP)}">${z}</span>` : "<span class='dim'>—</span>"; }});
+});
+FEED_EXT.push({h: ["Zone Line"], cells: o => o && o.r && !o.r.etf ? [zlnOf(o.r)] : null});
+// connector (board_ticker / board_table): stocks only
+function zlnDv(r, o){ if (!r || r.etf) return; o.zoneLine = zlnOf(r) || null; }
+</script>
+<script>
+"use strict";
+/* =====================================================================
    BOARD VERSION LABEL (10 Nov 2026) — display only. On a 2-week trial (docs/trials.md).
    Eugene, 10 Nov 2026: "how do i know whether the board is the latest update" → "yes add the version label".
    - BOARD_VER = {date, n, what}: bumped in EVERY change to index.html (tools/board-version-test.js fails when index.html
@@ -22083,7 +21782,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>#tab-plan:not(.pbFls) > #s
    - Never changes any number, list, feed column, storage key or setting. Storage: none. Hooks: "settings"; the chip is
      inserted once at load. No override.
    ===================================================================== */
-const BOARD_VER = {date: "2026-11-11", n: 3, what: "Short focus: up to 2 names + inverse ETF first on clusters; old short gate box removed"};
+const BOARD_VER = {date: "2026-11-12", n: 1, what: "Zone Line label: which daily line a pullback sits on (9 / 21 / TIGHT)"};
 const boardVerTxt = () => `v${BOARD_VER.date}.${BOARD_VER.n}`;
 (function verChip(){
   try {
