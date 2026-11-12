@@ -1531,7 +1531,7 @@ for (const m of ["setItem", "removeItem", "clear"]) { const f = Storage.prototyp
 window.addEventListener("storage", () => { store._c.clear(); store._g++; });
 // Hook points (BOARD HOOKS script, 28 Oct; moved up here 31 Oct so every section can use them — the installers that call
 // hookRun stay in BOARD HOOKS). Hooks run in the order they were added (= file order), each in its own try/catch.
-const HOOK = {panel: [], tab: [], chart: [], map: [], panelBuild: [], all: [], flags: [], snap: [], tabBefore: [], drawerBlocks: [], drawerShown: [], hist: [], settings: [], cols: [], s61Card: [], watchPage: [], envLine: [], popWin: []};   // 7 Nov 2026: "map" = MAP import (phase "parse" | "apply" | "html"; called in place in mapParse / mapApply / mapImpHTML — MAP · FP / FS PAPER LINES); 9 Nov 2026: "popWin" (d, view) = the chart window after every data write (end of popAfter, hookRun) — CHART WINDOW LAYOUT + DATA ONLY
+const HOOK = {panel: [], tab: [], chart: [], map: [], panelBuild: [], all: [], flags: [], snap: [], tabBefore: [], drawerBlocks: [], drawerShown: [], hist: [], settings: [], cols: [], s61Card: [], watchPage: [], envLine: [], popWin: []};   // 7 Nov 2026: "map" = MAP import (phase "parse" | "apply" | "html"; called in place in mapParse / mapApply / mapImpHTML — MAP · FP / FS PAPER LINES; 12 Nov 2026: + phase "check" in mapCheck — MAP v4.11 SYNC); 9 Nov 2026: "popWin" (d, view) = the chart window after every data write (end of popAfter, hookRun) — CHART WINDOW LAYOUT + DATA ONLY
 // 8 Nov 2026 (TIDY-UP, structure only): in-place points that replace chains of function wrappers, run with hookEach (below):
 //   "panelBuild" (r, want) — steps of the ticker panel build, at the end of tpBuild (were 6 tpBuild wrappers)
 //   "all" (phase "before" | "after") — around the redraw in renderAll (were 8 renderAll wrappers)
@@ -9511,6 +9511,7 @@ function mapParse(text){
 }
 function mapCheck(P){
   const w = [...P.warn], p = curPlanDay();
+  hookRun("map", "check", {P, w});   // 12 Nov 2026: hook point "map" phase "check" — the full parse (every wrapper's lines) before the import is judged: MAP v4.11 SYNC adds the import report and its errors
   if (!P.session) w.push(`No session date — it will be dated to the board's plan day, ${p}.`);
   else if (P.session !== p) w.push(`This MAP is for ${P.session}; the board's plan day is ${p}.`);
   const rowBy = S.rowBySym || new Map(), miss = [...P.A, ...P.B, ...P.S, ...P.H].filter(s => !rowBy.has(s));
@@ -9568,7 +9569,7 @@ function nextAction(r, held){
 /* ---------------- Watchlist page ---------------- */
 function wlGroups(){
   const rowBy = S.rowBySym || new Map(), G = [], p = typeof dpCur === "function" ? dpCur() : null, rec = p ? JN.recs[p] : null;
-  const mk = (sym, src) => ({s: sym, r: rowBy.get(sym) || null, src});
+  const mk = (sym, src) => { const e = {s: sym, r: rowBy.get(sym) || null, src}; if (typeof mpsWlNote === "function") { try { const n = mpsWlNote(sym, src); if (n) e.note = n; } catch (er) { console.warn("MAP v4.11 note", er); } } return e; };   // 12 Nov 2026: MAP's held why / now and the D-line level check (MAP v4.11 SYNC)
   G.push(["MAP Focus A", [...LISTS.focus].map(s => mk(s, "A"))]);
   G.push(["MAP Focus B", [...(typeof MAPL !== "undefined" ? MAPL.b : [])].map(s => mk(s, "B"))]);
   G.push(["MAP On deck / Stalk", [...(typeof MAPL !== "undefined" ? MAPL.stalk : [])].map(s => mk(s, "S"))]);
@@ -13204,8 +13205,8 @@ const INSTR = "Read-only view of Eugene's Deep Space Board (his US swing-trading
 const BOARD = {type: "string", description: "Which board: us (default), or asia-hk / asia-jp / asia-kr"};
 const DEVICE = {type: "string", description: "Optional: a device name such as Desktop or Phone. Default: the device whose data is newest."};
 const TOOLS = [
-  {name: "board_status", title: "Board status", description: "What the board is showing and how fresh it is: device, when it was shared, the files and their data date, Live mode (Massive data time), MAP's call and the board's tape read, how many names on each Entry Check list, and the other devices' views.", inputSchema: {type: "object", properties: {board: BOARD, device: DEVICE}}, annotations: {readOnlyHint: true}},
-  {name: "board_lists", title: "Board lists", description: "Every list as the board shows it: MAP Focus A / B / On deck-Stalk / Held, the Entry Check lists (Ready to trade, On deck), the Watchlist groups, one line per name (location, list, last, ext hours, planned entry, first resistance, room, next action).", inputSchema: {type: "object", properties: {board: BOARD, device: DEVICE}}, annotations: {readOnlyHint: true}},
+  {name: "board_status", title: "Board status", description: "What the board is showing and how fresh it is: device, when it was shared, the files and their data date, Live mode (Massive data time), MAP's call and the board's tape read, how many names on each Entry Check list, the last MAP import report (header read, count per code, skipped lines with reasons), and the other devices' views.", inputSchema: {type: "object", properties: {board: BOARD, device: DEVICE}}, annotations: {readOnlyHint: true}},
+  {name: "board_lists", title: "Board lists", description: "Every list as the board shows it: MAP Focus A / B / On deck-Stalk / Held, the Entry Check lists (Ready to trade, On deck), MAP's other paste-block lines (ETF setups, First Pullback / Short paper, inverse ETF first choice, held notes, OUT, WATCH, OVER-B, D-line level checks), the Watchlist groups, one line per name (location, list, last, ext hours, planned entry, first resistance, room, next action).", inputSchema: {type: "object", properties: {board: BOARD, device: DEVICE}}, annotations: {readOnlyHint: true}},
   {name: "board_ticker", title: "One ticker on the board", description: "Everything the board shows for one ticker: price, move, ext hours, RS, group, Entry Check location / list / first failing check / next action, planned entry, buy zone, first resistance, room, 1R, day-low check, earnings, size, stage, and which lists it is on.", inputSchema: {type: "object", properties: {symbol: {type: "string", description: "Ticker, e.g. NVDA"}, board: BOARD, device: DEVICE}, required: ["symbol"]}, annotations: {readOnlyHint: true}},
   {name: "board_table", title: "Board table", description: "Rows of the board's table, strongest RS first, optionally filtered: list (ready, ondeck, map, watchlist, held, etf, all), group or sector text, minimum RS, location text. Default 40 rows.", inputSchema: {type: "object", properties: {list: {type: "string", enum: ["all", "ready", "ondeck", "map", "watchlist", "held", "etf"]}, group: {type: "string"}, min_rs: {type: "number"}, location: {type: "string"}, limit: {type: "number"}, board: BOARD, device: DEVICE}}, annotations: {readOnlyHint: true}}
 ];
@@ -13227,12 +13228,13 @@ async function callTool(name, a, env){
   a = a || {}; const slot = clip(a.board || "us", 24).replace(/[^a-z0-9-]/gi, "") || "us";
   const P = await pick(env.DB, slot, a.device); if (P.err) return {text: P.err, isError: true};
   const V = P.V, N = V.names || {};
-  if (name === "board_status") return {text: JSON.stringify({...head(P), market: V.market, list_counts: V.counts, other_devices: P.others}, null, 1)};
+  if (name === "board_status") return {text: JSON.stringify({...head(P), market: V.market, list_counts: V.counts, map_import: V.mapx ? V.mapx.report : null, other_devices: P.others}, null, 1)};
   if (name === "board_lists") {
     const L = {}; for (const [k, syms] of Object.entries(V.lists || {})) L[k] = syms.map(s => lineOf(s, N[s]));
     const M = {}; for (const [k, syms] of Object.entries(V.map || {})) M[k] = (syms || []).map(s => lineOf(s, N[s]));
     const W = (V.watchlist || []).map(g => ({group: g.title, names: g.names.map(e => lineOf(e.s, N[e.s]) + (e.src ? \` [\${e.src}]\` : ""))}));
-    return {text: JSON.stringify({...head(P), map_lists: M, entry_check_lists: L, watchlist: W}, null, 1)};
+    const X = V.mapx || null;   // 12 Nov 2026: MAP's other paste-block lines (E, FP, FS, FS-ETF, held notes, OUT, WATCH, OVER-B)
+    return {text: JSON.stringify({...head(P), map_lists: M, map_other_lines: X ? {etf_setups: X.E, first_pullback_paper: X.FP, short_paper: X.FS, inverse_etf_paper: X.FSETF, held_notes: X.held, out: X.out, watch: X.watch, over_b: X.overB, d_level_checks: X.dLevel} : null, entry_check_lists: L, watchlist: W}, null, 1)};
   }
   if (name === "board_ticker") {
     const s = clip(a.symbol, 16).toUpperCase().trim(), n = N[s];
@@ -14184,6 +14186,7 @@ function xcols(root = document){
   try { lcPaint(root); } catch (e) { console.warn("last price", e); }
   try { asPaint(root); } catch (e) { console.warn("AS", e); }
   try { ehPaint(root); } catch (e) { console.warn("ext hours", e); }
+  try { if (typeof dcPaint === "function") dcPaint(root); } catch (e) { console.warn("day change", e); }   // 12 Nov 2026: Day chg after Last (DAY CHANGE script) — after Ext. hours so it lands between Last and Ext. hours
 }
 hookOn("tab", "xcols", () => xcols());
 hookOn("panel", "xcols", (r, dr) => xcols(dr || document));
@@ -14277,7 +14280,7 @@ function dvBuild(){
     market: {map_call: mapRegime().v || null, board_tape_read: tp ? {read: tp.bucket, score: tp.score} : null, size_regime: rg.v ? `${rg.v} (${rg.src === "map" ? "MAP" : rg.src === "tape" ? "tape read" : "default"})` : null,
       macro_checklist: (() => { try { return typeof mcSummary === "function" ? mcSummary() : null; } catch (e) { return null; } })()},   // 31 Oct: MACRO CHECKLIST (display only)
     map: {A: [...LISTS.focus], B: typeof MAPL !== "undefined" ? [...MAPL.b] : [], stalk: typeof MAPL !== "undefined" ? [...MAPL.stalk] : [], held: [...LISTS.held]},
-    lists, counts, watchlist: wl, names};
+    lists, counts, watchlist: wl, names, mapx: (() => { try { return typeof mpsDv === "function" ? mpsDv() : null; } catch (e) { return null; } })()};   // 12 Nov 2026: MAP's other lines + the import report (MAP v4.11 SYNC)
 }
 function dvDataAt(){ const v = S.snap; return v ? (v.live ? v.live.dataMs : v.mtime || 0) || 0 : 0; }
 function dvSoon(){ if (!dvOn()) return; clearTimeout(DV.t); DV.t = setTimeout(dvPush, 4000); }
@@ -21772,6 +21775,258 @@ function zlnDv(r, o){ if (!r || r.etf) return; o.zoneLine = zlnOf(r) || null; }
 <script>
 "use strict";
 /* =====================================================================
+   MAP v4.11 SYNC — "Import today's MAP" reads every line of the v4.11 paste block (12 Nov 2026).
+   DISPLAY / TRACKING ONLY — no list, rank, state, check, stop, size or "MAP says" value changes; the A / B / D / H / E /
+   FP / FS / OUT / WATCH / OVER-B parses are untouched except where noted. Feed columns added at the END for MAP.
+   Eugene (handover in chat, 12 Nov 2026): "The Board must read every line of the MAP paste block with 0 skipped lines, and
+   report what it read." Spec: the MAP page "MAP — Premarket Awareness & Positioning (v4.11)" (consolidated 12 Nov 2026),
+   section 9 "Deep Space Board paste block" — the code table, the FS-ETF line ("FS-ETF {INVERSE ETF} | group: … | names:
+   T1, T2 … | now: …", printed after the FS lines, one per qualifying group, paper, never sized) and "Side after the bar
+   (E1 XLV | long · …) fails the import with "E line has no long / short"".
+   What it adds:
+   - FS-ETF lines (parse hook): taken out before the base parser (they were "Skipped a line"); stored on adrb.mapImp as
+     FSETF [{t, group, names: [..], now, more}]. An import with no FS / FS-ETF lines for the same session keeps the
+     session's FS-ETF list (a MAP UPDATE need not repeat it, as the FP / FS paper lists). Shown, marked paper, on the Short
+     focus card (Setups, switch on S) beside the board's own inverse-ETF first choice (agree / differs) and under the
+     Watchlist's "MAP · Short (paper)" group.
+   - Held lines in both forms: "H TICKER" (as before) and "H{n} TICKER | why: … | now: …" — the why / now are kept in
+     adrb.mapImp.Hn {sym: {why, now}} (NOT in items, so nothing that reads MAP's A / B / D notes changes) and shown on
+     the Watchlist's Held row.
+   - Header: a bracketed note after the score ("regime Defensive -2 [tape Mixed]") is dropped from the score (round
+     brackets already were).
+   - E line without long / short directly after the ticker → an import error "E line has no long / short (E1 XLV …)"
+     (was a warning; the line was imported without a side). JSON E entries without a side fail the same way.
+   - Import report (hook "map" phase "check", stored as adrb.mapImp.report): header read (MAP / MAP UPDATE, session, data,
+     regime, score), count per code (A B D H E-long E-short FP FS FS-ETF OUT WATCH OVER-B, plus O when an old block has
+     them), each skipped line with its reason (unknown code / retired code / no ticker), and the D-line level checks.
+     Shown under "Last import"; the connector's board_status carries it (map_import).
+   - D-line level check: when a D line's clears names a 9 EMA price ("… prior day's 9 EMA 123.45 …", an illustrative number), it is compared with
+     the board's own reclaim level, the prior day's daily 9 EMA (s61Of(r).x.e9p, the level the Entry Check and the next
+     action use). More than 0.1% apart → a "MAP 9 EMA ≠ board" badge on the name's flags and the Watchlist row, both
+     prices shown; the board keeps using its own level for its own checks, MAP's text is shown as MAP wrote it.
+   - Connector (worker code, Eugene re-deploys once): board_lists gains map_other_lines (E, FP, FS, FS-ETF, held notes,
+     OUT, WATCH, OVER-B, D-level checks); board_status gains map_import (the report). The view carries them as `mapx`.
+   - Deep Space feed (MAP's input), 6 columns at the very end: Session (the plan day = target US session), Prior Day EMA9
+     (s61 x.e9p, 2 dp — the level the board shows), Daily Regime Code (0 chop / 1 neutral / 2 strong — dssRegime on the benchmark's daily bars, the Deep Space
+     Screener's regime; the old "Regime (0Chop1Neut2Strong)" column is not in today's feed and the "Regime" column holds
+     MAP's call / the tape read), FP Rank (First Pullback whole-file order:
+     Ready, On deck, Undercut watch, Not yet — each in the card's own sort), FS Rank (stocks passing a short route: Top
+     failure in its order, then Daily failed rally, then Early failed retest, each name once — the Short focus order
+     uncapped), Sessions Since 50SMA Cross (sessions since the last daily close on the other side of the 50 SMA; 0 = the
+     last bar crossed; blank when no cross in the stored bars).
+   In place (guarded, one line each): mapCheck → hookRun("map", "check"); wlGroups' mk → mpsWlNote; dvBuild → mpsDv;
+   the worker's board_status / board_lists. No function override. Storage: adrb.mapImp gains FSETF, Hn, report (fields
+   added, none renamed). On a 2-week trial (docs/trials.md): the FS-ETF lines on screen, the held why / now, the D-line
+   badge, the import report row. Not on trial: the parse itself, the feed columns, the connector fields (MAP / Eugene asked).
+   Test: tools/board-map-v411-test.js.
+   ===================================================================== */
+const MPS = {tol: 0.001};
+const MPS_FSETF = /^FS-ETF\s+([A-Za-z0-9.:\-]+)\s*(?:\|(.*))?$/i;
+const MPS_H = /^H\s*(\d+)?[.):]?\s+([A-Za-z0-9.:\-]+)\s*\|(.*)$/i;
+const MPS_BASE = /^(A|B|S|D|H)\s*(\d+)?[.):]?\s+([A-Za-z0-9.:\-]+)\s*(?:\|(.*))?$/i;   // the base parser's line (mapParse)
+function mpsFields(s){ const f = {}, more = [];
+  String(s || "").split("|").forEach(kv => { const v = kv.trim(); if (!v) return; const x = kv.match(/^\s*([a-z][a-z ]*?)\s*:\s*(.*)$/i);
+    if (x && !(x[1].toLowerCase().trim() in f)) f[x[1].toLowerCase().trim()] = x[2].trim(); else more.push(v); });
+  return {f, more}; }
+// hook "map", phase "parse": runs after the FP / FS hook — sees what is left for the base parser
+function mpsParse(hx){
+  const o = hx.out, FSETF = [], Hn = {}, skipped = [];
+  o.FSETF = FSETF; o.Hn = Hn; o.skipped = skipped;
+  const t = hx.text.trim();
+  if (t[0] === "{") { let j = null; try { j = JSON.parse(t); } catch (e) { j = null; }
+    if (j && typeof j === "object") {
+      (Array.isArray(j["FS-ETF"]) ? j["FS-ETF"] : Array.isArray(j.FSETF) ? j.FSETF : []).forEach(x => { if (!x) return; const s = esSym(typeof x === "string" ? x : x.t || x.ticker); if (!s || FSETF.some(y => y.t === s)) return;
+        const nm = typeof x === "object" ? x.names : ""; FSETF.push({t: s, group: String((typeof x === "object" && x.group) || ""), names: (Array.isArray(nm) ? nm : String(nm || "").split(/[,\s]+/)).map(esSym).filter(Boolean), now: String((typeof x === "object" && x.now) || ""), more: ""}); });
+      (j.H || []).forEach(x => { if (x && typeof x === "object") { const s = esSym(x.t || x.ticker); if (s && (x.why || x.now)) Hn[s] = {why: String(x.why || ""), now: String(x.now || "")}; } });
+    }
+    return; }
+  const keep = [];
+  for (const r of hx.text.split(/\r?\n/)) { const line = r.trim(); let m;
+    if ((m = line.match(MPS_FSETF))) { const s = esSym(m[1]); const {f, more} = mpsFields(m[2]);
+      if (s && !FSETF.some(y => y.t === s)) FSETF.push({t: s, group: f.group || "", names: String(f.names || f.name || "").split(/[,\s]+/).map(esSym).filter(Boolean), now: f.now || "", more: more.join(" · ")});
+      else if (s) o.warn.push(`${s} is on two FS-ETF lines — kept the first`);
+      continue; }
+    if ((m = line.match(MPS_H))) { const s = esSym(m[2]), {f} = mpsFields(m[3]); if (s && (f.why || f.now)) Hn[s] = {why: f.why || "", now: f.now || ""}; }
+    if (line && line[0] !== "#" && !/^MAP\b/i.test(line) && !/^over[- ]?b\s*[:|]/i.test(line) && !MPS_BASE.test(line)) {
+      const code = line.split(/[\s|:]/)[0].slice(0, 12), C = code.toUpperCase().replace(/\d+$/, "");
+      skipped.push({line: line.slice(0, 120), why: /^(R|OB|O)$/.test(C) ? `retired code "${code}" — MAP no longer prints it` : /^(A|B|S|D|H|E|FP|FS|FS-ETF|OUT|WATCH)$/.test(C) ? `"${code}" line with no ticker or a broken layout` : `unknown code "${code}"`}); }
+    keep.push(r); }
+  hx.text = keep.join("\n").trim() ? keep.join("\n") : "#";
+}
+// MAP's 9 EMA price in a D line's clears vs the board's prior-day 9 EMA
+function mpsDLevel(sym, clear){
+  const m = String(clear || "").match(/9\s*EMA\D{0,12}?(\d+(?:\.\d+)?)/i); if (!m) return null;
+  const mp = +m[1], r = S.rowBySym && S.rowBySym.get(sym); let b = null;
+  try { const s = r && !r.etf && S.has && S.has.hist ? s61Of(r) : null; b = s && s.x && fin(s.x.e9p) ? s.x.e9p : null; } catch (e) { b = null; }
+  if (b == null) return {t: sym, map: mp, board: null, off: null, bad: false, why: r ? "board level unknown (needs the price history)" : "not in the files"};
+  const off = (mp - b) / b; return {t: sym, map: mp, board: +b.toFixed(4), off: +(100 * off).toFixed(3), bad: Math.abs(off) > MPS.tol};
+}
+// hook "map", phase "check": the full parse is in — errors that block the import, then the report
+function mpsCheck(hx){
+  const P = hx.P; if (!P) return;
+  if (P.code) P.code = P.code.replace(/\s*\[[^\]]*\]/g, "").trim();
+  for (const e of P.E || []) if (!e.side) { const msg = `E line has no long / short (E${e.k} ${e.t}) — the side goes right after the ticker: "E${e.k} ${e.t} long | why: …"`; if (!P.errs.includes(msg)) P.errs.push(msg); }
+  const notes = P.notes || [], E = P.E || [];
+  const dl = P.S.map(s => { const it = P.items[s]; return it ? mpsDLevel(s, it.clear) : null; }).filter(Boolean);
+  P.report = {at: Date.now(), header: {kind: P.upd ? "MAP UPDATE" : P.session ? "MAP" : "none", session: P.session, data: P.data, regime: P.regime, score: P.code || "", time: P.upd || ""},
+    counts: {A: P.A.length, B: P.B.length, D: P.S.length, H: P.H.length, E: E.length, "E long": E.filter(e => e.side === "long").length, "E short": E.filter(e => e.side === "short").length,
+      FP: (P.FP || []).length, FS: (P.FS || []).length, "FS-ETF": (P.FSETF || []).length, OUT: notes.filter(n => n.kind === "out").length, WATCH: notes.filter(n => n.kind === "watch").length, "OVER-B": P.overB ? 1 : 0, ...((P.O || []).length ? {O: P.O.length} : {})},
+    skipped: (P.skipped || []).slice(), dLevel: dl, errors: P.errs.slice()};
+}
+// hook "map", phase "apply": the record keeps the new fields
+function mpsApply(hx){
+  const P = hx.P, rec = hx.rec; if (!P || !rec) return;
+  const prev = mapImp(); let F = P.FSETF || [];
+  if (!F.length && !(P.FS || []).length && !P.fsNone && prev && prev.session === rec.session && Array.isArray(prev.FSETF)) F = prev.FSETF;
+  rec.FSETF = F; rec.Hn = P.Hn || {}; rec.report = P.report || null; rec.n = {...rec.n, FSETF: F.length};
+}
+const mpsCur = () => { const m = mapImp(); if (!m) return null; const p = curPlanDay(); return !m.session || m.session === p || m.session === prevSess(p) ? m : null; };
+const mpsPx = v => fin(v) ? (Math.abs(v) >= 1 ? v.toFixed(2) : v.toFixed(4)) : "—";
+function mpsReportHTML(R){
+  if (!R) return "";
+  const c = R.counts || {}, h = R.header || {};
+  const cs = ["A", "B", "D", "H"].map(k => `${k} ${c[k] ?? 0}`).join(" · ") + ` · E ${c.E ?? 0}${c.E ? ` (${c["E long"]} long, ${c["E short"]} short)` : ""} · ` + ["FP", "FS", "FS-ETF", "OUT", "WATCH", "OVER-B", ...(c.O ? ["O"] : [])].map(k => `${k} ${c[k] ?? 0}`).join(" · ");
+  const sk = R.skipped || [], bad = (R.dLevel || []).filter(d => d.bad);
+  return `<div class="mpsrep"><b>Read:</b> ${esc(h.kind)}${h.time ? " " + esc(h.time) : ""} ${esc(h.session || "?")} · data ${esc(h.data || "?")} · regime ${esc(h.regime || "not set")}${h.score ? " " + esc(h.score) : ""} · ${esc(cs)} · <b class="${sk.length ? "neg" : ""}">skipped ${sk.length}</b>
+    ${sk.length ? `<div class="neg">${sk.map(x => `Skipped "${esc(x.line)}" — ${esc(x.why)}`).join("<br>")}</div>` : ""}
+    ${bad.length ? `<div class="neg">D-line level differs from the board's prior-day 9 EMA: ${bad.map(d => `${esc(d.t)} MAP ${mpsPx(d.map)} vs board ${mpsPx(d.board)} (${d.off > 0 ? "+" : ""}${d.off.toFixed(2)}%)`).join(" · ")}</div>` : ""}</div>`;
+}
+// hook "map", phase "html": the report under the last import line + the two new forms in the format fold
+function mpsHtml(hx){
+  const m = hx.m;
+  if (m && m.report) hx.row += mpsReportHTML(m.report);
+  if (m && hx.cur && m.FSETF && m.FSETF.length) hx.row += `<div>Inverse ETF first choice (paper): ${m.FSETF.map(x => `<b>${esc(x.t)}</b> — ${esc(x.group || "group ?")}${x.names.length ? ": " + esc(x.names.join(", ")) : ""}`).join(" · ")}</div>`;
+  hx.fmt += `<br>Inverse ETF first choice (MAP v4.11, paper): <code>FS-ETF SOXS | group: … | names: CRDO, GLW, FN | now: …</code> — after the FS lines, one per group. Held: <code>H NVDA</code> or <code>H1 NVDA | why: … | now: …</code>. An E line needs long / short right after the ticker (<code>E1 XLV long | …</code>) or the import stops. A note in [brackets] after the regime score is ignored.`;
+}
+hookOn("map", "mapV411", (ph, hx) => { if (ph === "parse") mpsParse(hx); else if (ph === "check") mpsCheck(hx); else if (ph === "apply") mpsApply(hx); else if (ph === "html") mpsHtml(hx); });
+
+/* ---------------- on screen ---------------- */
+// the D-line check for one name (current import only)
+function mpsDOf(sym){ const m = mpsCur(); if (!m || !m.items || !m.items[sym] || m.items[sym].l !== "S") return null; return mpsDLevel(sym, m.items[sym].clear); }
+// Watchlist notes (wlGroups' mk): Held = MAP's why / now; MAP On deck = the level check when it differs
+function mpsWlNote(sym, src){
+  if (src === "H") { const m = mpsCur(), n = m && m.Hn ? m.Hn[sym] : null; return n ? `MAP (held): ${[n.why, n.now].filter(Boolean).join(" · ")}` : ""; }
+  if (src === "S") { const d = mpsDOf(sym); return d && d.bad ? `MAP 9 EMA ${mpsPx(d.map)} ≠ board's prior-day 9 EMA ${mpsPx(d.board)} (${d.off > 0 ? "+" : ""}${d.off.toFixed(2)}%) — check which level is right before using either` : ""; }
+  return "";
+}
+hookOn("flags", "mapV411DLevel", hx => { const r = hx.r; if (!r) return; let d = null; try { d = mpsDOf(r.sym); } catch (e) { d = null; }
+  if (d && d.bad) hx.s += `<span class="flag mpsd" title="${esc(`MAP's D line says the prior day's 9 EMA is ${mpsPx(d.map)}; the board's prior-day daily 9 EMA is ${mpsPx(d.board)} (${d.off > 0 ? "+" : ""}${d.off.toFixed(2)}%). More than 0.1% apart — check which level is right.`)}">MAP 9 EMA ≠ board</span>`; });
+// FS-ETF beside the board's own inverse-ETF first choice (Short focus card) and under the Watchlist's MAP · Short (paper)
+function mpsFsEtfHTML(where){
+  const m = mpsCur(); if (!m || !m.FSETF || !m.FSETF.length) return "";
+  let own = new Set(); if (where === "sfc") { try { const F = flsRun(), T = typeof fltRun === "function" ? fltRun() : null, q = F ? sfcCalc(F, T) : null; own = new Set(q ? q.clusters.map(c => c.etf).filter(Boolean) : []); } catch (e) { own = new Set(); } }
+  return `<div class="small mpsfse"><b>MAP · inverse ETF first choice (paper, never sized):</b> ${m.FSETF.map(x => `<span class="sfctk" data-sym="${esc(x.t)}">${esc(x.t)}</span> <span class="pill">paper</span> ${esc(x.group || "")}${x.names.length ? ` — ${esc(x.names.join(", "))}` : ""}${x.now ? ` · ${esc(x.now)}` : ""}${where === "sfc" ? ` · <span class="${own.has(x.t) ? "pos" : "neg"}">${own.has(x.t) ? "board agrees" : "board's clusters don't name it"}</span>` : ""}`).join("<br>")}</div>`;
+}
+hookOn("tab", "mapV411FsEtf", t => { if (t !== "plan" || pbCur() !== "fls") return; const b = document.querySelector("#sfcBox .bd"); if (!b || b.querySelector(".mpsfse")) return; const h = mpsFsEtfHTML("sfc"); if (h) b.insertAdjacentHTML("afterbegin", h); });
+hookOn("watchPage", "mapV411FsEtf", () => { const h = mpsFsEtfHTML("wl"); if (!h) return;
+  const g = [...document.querySelectorAll("#watchBody .wlg")].find(c => { const t = c.querySelector(".hd h2"); return t && t.textContent === "MAP · Short (paper)"; });
+  const at = g ? g.querySelector(".bd") : null; if (at && !at.querySelector(".mpsfse")) at.insertAdjacentHTML("beforeend", h); });
+
+/* ---------------- connector (dvBuild) ---------------- */
+function mpsDv(){
+  const m = mpsCur(); if (!m) return null;
+  const notes = m.notes || [], it = m.items || {};
+  return {session: m.session || null, report: m.report || null,
+    E: (m.E || []).map(e => ({t: e.t, side: e.side, why: e.why, vehicle: e.vehicle, now: e.now, catalyst: e.catalyst})),
+    FP: (m.FP || []).map(x => ({t: x.t, why: x.why, now: x.now, trigger: x.trigger})), FS: (m.FS || []).map(x => ({t: x.t, why: x.why, route: x.route, level: x.level, now: x.now})),
+    FSETF: (m.FSETF || []).map(x => ({t: x.t, group: x.group, names: x.names, now: x.now})),
+    held: Object.entries(m.Hn || {}).map(([t, n]) => ({t, ...n})),
+    out: notes.filter(n => n.kind === "out").map(n => ({t: n.t, note: n.note})), watch: notes.filter(n => n.kind === "watch").map(n => ({t: n.t, note: n.note})),
+    overB: m.overB || "", dLevel: Object.keys(it).filter(s => it[s].l === "S").map(s => mpsDLevel(s, it[s].clear)).filter(Boolean)};
+}
+
+/* ---------------- Deep Space feed: six columns for MAP ---------------- */
+function mpsX50(sym){
+  let b = null; try { b = dssBars(sym); } catch (e) { b = null; } if (!b || !b.n || b.n < 52) return null;
+  const s = PZ.sma(b.c, 50), t = b.n - 1; if (!fin(s[t])) return null;
+  const side = k => b.c[k] > s[k];
+  for (let k = t; k >= 1; k--) { if (!fin(s[k - 1])) return null; if (side(k) !== side(k - 1)) return t - k; }
+  return null;
+}
+FEED_EXT.push({h: ["Session", "Prior Day EMA9", "Daily Regime Code", "FP Rank", "FS Rank", "Sessions Since 50SMA Cross"],
+  prep: () => {
+    const fp = new Map(), fs = new Map();
+    if (pbHH()) {
+      try { const A = fpLists(true); [...A.R, ...A.D, ...(A.W || []), ...A.N].forEach(f => { if (!fp.has(f.r.sym)) fp.set(f.r.sym, fp.size + 1); }); } catch (e) { console.warn("feed FP Rank", e); }
+      try { const F = flsRun(), T = typeof fltRun === "function" ? fltRun() : null;
+        if (F && F.open) [...(T ? T.pass : []), ...F.pass, ...F.early.pass].filter(o => !o.r.etf).forEach(o => { if (!fs.has(o.r.sym)) fs.set(o.r.sym, fs.size + 1); }); } catch (e) { console.warn("feed FS Rank", e); }
+    }
+    return {p: curPlanDay(), fp, fs};
+  },
+  cells: (o, P) => {
+    const r = o.r; let e9p = null;
+    try { const s = r && !r.etf && pbHH() ? s61Of(r) : null; e9p = s && s.x && fin(s.x.e9p) ? +s.x.e9p.toFixed(2) : null; } catch (e) { e9p = null; }
+    return [P ? P.p : curPlanDay(), e9p, o.d && o.d.reg != null ? o.d.reg : null, P && P.fp.has(o.sym) ? P.fp.get(o.sym) : null, P && P.fs.has(o.sym) ? P.fs.get(o.sym) : null, o.d ? mpsX50(o.sym) : null];
+  }});
+document.head.insertAdjacentHTML("beforeend", `<style>.mpsrep{margin-top:4px}.flag.mpsd{color:var(--down);border-color:var(--down)}.mpsfse{margin:4px 0 8px}</style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   DAY CHANGE ($ AND %) NEXT TO THE PRICE (12 Nov 2026) — DISPLAY ONLY. On a 2-week trial (docs/trials.md).
+   Eugene, 12 Nov 2026: "Can you also add a price change and % change to tickers especially in watchlist and setup. Or any
+   location where its relevant … price changes and % price change for the day has an important role to play. We have the
+   ext hours%." Before the open (his answer "a"): the PREVIOUS regular session's change; premarket stays in Ext. hours.
+   - One "Day chg" cell "+2.07 +1.47%" (green / red), right after Last:
+     · the board's own tables (Table: ranked universe, screens …) — a real column "dchg" (Today group, after Last; sortable
+       on the %), ticking with the live prices (LS_QCOLS);
+     · every small list table that has a Last column (Watchlist, Entry Check lists, Daily Plan, MAP lists, First Pullback,
+       short cards, inverse ETFs, the ticker panel's tables …) — painted by xcols() after Ext. hours, so it sits right after
+       Last (after Entry on the Entry Check / Watchlist tables, where Last stays next to Entry), and ticked every second
+       while live prices are on (only the cells on the page).
+   - Numbers: regular session = last − previous close (r.last, r.prevClose; % = r.dayPct, the board's own Chg %); live
+     ticks = the live price vs the same previous close (lsRow). Premarket mode = the previous session's change from the
+     file / Live mode (r.chg1d on the previous close r.price), labelled "prev. session" in the tooltip and a small tag.
+   - Never changes: any row value, rank, state, list, check, size, the feeds, the Board log, the Ext. hours column, the
+     existing Chg % column. Storage: none. Hooks: "cols" (+ one guarded in-place call in xcols). No override.
+   ===================================================================== */
+// {d: $, p: %, prev: true when it is the previous session's (premarket)} or null
+function dcOf(r){
+  if (!r) return null;
+  if (S.mode === "pm") { const c = r.chg1d, b = r.price; if (!fin(c) || !fin(b)) return null; return {d: b - b / (1 + c / 100), p: c, prev: true}; }
+  if (!fin(r.last) || !fin(r.prevClose) || !(r.prevClose > 0)) return fin(r.dayPct) ? {d: null, p: r.dayPct, prev: false} : null;
+  return {d: r.last - r.prevClose, p: fin(r.dayPct) ? r.dayPct : (r.last / r.prevClose - 1) * 100, prev: false};
+}
+const dcTip = x => x && x.prev ? "Change in the previous regular session (premarket mode — the premarket move is in Ext. hours)" : `Change today vs the previous close — ${S.snap && S.snap.live ? "Massive, " + lvDT() : "the stock file"}`;   // no apostrophes: the live tick compares innerHTML
+function dcHTML(r){
+  const x = dcOf(r); if (!x) return `<span class="dim">—</span>`;
+  const c = x.p > 0 ? "pos" : x.p < 0 ? "neg" : "", sd = v => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(2);
+  return `<span class="dcv ${c}" title="${esc(dcTip(x))}">${x.d != null ? sd(x.d) + " " : ""}${sd(x.p)}%${x.prev ? ` <span class="small dim">prev</span>` : ""}</span>`;
+}
+hookOn("cols", "dayChange", hx => {
+  const C = hx.C, i = C.findIndex(c => c.k === "last"); if (i < 0 || C.some(c => c.k === "dchg")) return;
+  C.splice(i + 1, 0, {k: "dchg", l: "Day chg", h: S.mode === "pm" ? "prev. session" : "$ · %", g: "today", tip: "Day change in dollars and percent: today vs the previous close; in premarket mode the previous session's (the premarket move is in Ext. hours). Information only.", v: r => { const x = dcOf(r); return x ? x.p : null; }, f: r => dcHTML(r)});
+});
+if (typeof LS_QCOLS !== "undefined" && !LS_QCOLS.includes("dchg")) LS_QCOLS.push("dchg");
+function dcPaint(root = document){
+  root.querySelectorAll("table:not([data-dc])").forEach(t => {
+    if ((t.classList.contains("s61t") || t.classList.contains("wlt")) && !t.dataset.lc) return;     // the Last column goes in first
+    const hs = [...t.querySelectorAll(":scope > thead > tr > th")]; if (!hs.length || hs.some(h => h.dataset.k)) return;   // the board's own tables carry it as a column
+    const li = ehLastIdx(hs); if (li < 0 || !t.querySelector(":scope > tbody > tr[data-sym]")) return;
+    const ec = t.classList.contains("s61t") || t.classList.contains("wlt"), i = ec && hs[li + 1] && /^Entry/.test(hs[li + 1].textContent.trim()) ? li + 1 : li;
+    t.dataset.dc = 1;
+    hs[i].insertAdjacentHTML("afterend", `<th class="dch" title="Day change: today vs the previous close ($ and %); before the open, the previous session's">Day chg</th>`);
+    t.querySelectorAll(":scope > tbody > tr").forEach(tr => {
+      if (!tr.dataset.sym) { const cs = tr.children.length === 1 && tr.querySelector(":scope > td[colspan]"); if (cs) cs.colSpan = cs.colSpan + 1; return; }
+      const cs = tr.querySelector(":scope > td[colspan]"); if (cs) { cs.colSpan = cs.colSpan + 1; return; }
+      if (tr.children.length !== hs.length) return;
+      const r = S.rowBySym && S.rowBySym.get(tr.dataset.sym);
+      tr.children[i].insertAdjacentHTML("afterend", `<td class="dc" data-dcs="${esc(tr.dataset.sym)}">${dcHTML(r)}</td>`);
+    });
+  });
+}
+// live ticks for the painted cells (the board's own tables tick through LS_QCOLS)
+setInterval(() => { try {
+  if (typeof lsLive !== "function" || !lsLive() || document.hidden) return;
+  const F = LV.frame, rb = S.rowBySym;
+  document.querySelectorAll("td.dc[data-dcs]").forEach(td => { if (!td.offsetParent) return; const r = rb && rb.get(td.dataset.dcs), q = LS.q.get(td.dataset.dcs);
+    if (!r || !q || !(q.p > 0) || !(q.t > F.dataMs)) return; const h = dcHTML(lsRow(r, q)); if (td._dcH !== h) { td.innerHTML = h; td._dcH = h; } });
+} catch (e) { console.warn("day change ticks", e); } }, 1000);
+document.head.insertAdjacentHTML("beforeend", `<style>td.dc{white-space:nowrap}.dcv{font-variant-numeric:tabular-nums}</style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
    BOARD VERSION LABEL (10 Nov 2026) — display only. On a 2-week trial (docs/trials.md).
    Eugene, 10 Nov 2026: "how do i know whether the board is the latest update" → "yes add the version label".
    - BOARD_VER = {date, n, what}: bumped in EVERY change to index.html (tools/board-version-test.js fails when index.html
@@ -21782,7 +22037,7 @@ function zlnDv(r, o){ if (!r || r.etf) return; o.zoneLine = zlnOf(r) || null; }
    - Never changes any number, list, feed column, storage key or setting. Storage: none. Hooks: "settings"; the chip is
      inserted once at load. No override.
    ===================================================================== */
-const BOARD_VER = {date: "2026-11-12", n: 1, what: "Zone Line label: which daily line a pullback sits on (9 / 21 / TIGHT)"};
+const BOARD_VER = {date: "2026-11-12", n: 4, what: "Day change ($ and %) next to the price in the Watchlist, Setups and every ticker table; MAP v4.11 import"};
 const boardVerTxt = () => `v${BOARD_VER.date}.${BOARD_VER.n}`;
 (function verChip(){
   try {
