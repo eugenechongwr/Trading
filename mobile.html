@@ -1531,7 +1531,7 @@ for (const m of ["setItem", "removeItem", "clear"]) { const f = Storage.prototyp
 window.addEventListener("storage", () => { store._c.clear(); store._g++; });
 // Hook points (BOARD HOOKS script, 28 Oct; moved up here 31 Oct so every section can use them — the installers that call
 // hookRun stay in BOARD HOOKS). Hooks run in the order they were added (= file order), each in its own try/catch.
-const HOOK = {compute: [], panel: [], tab: [], chart: [], map: [], panelBuild: [], all: [], flags: [], snap: [], tabBefore: [], drawerBlocks: [], drawerShown: [], hist: [], settings: [], cols: [], s61Card: [], watchPage: [], envLine: [], popWin: []};   // 7 Nov 2026: "map" = MAP import (phase "parse" | "apply" | "html"; called in place in mapParse / mapApply / mapImpHTML — MAP · FP / FS PAPER LINES; 12 Nov 2026: + phase "check" in mapCheck — MAP v4.11 SYNC); 9 Nov 2026: "popWin" (d, view) = the chart window after every data write (end of popAfter, hookRun) — CHART WINDOW LAYOUT + DATA ONLY
+const HOOK = {compute: [], groupDrawer: [], panel: [], tab: [], chart: [], map: [], panelBuild: [], all: [], flags: [], snap: [], tabBefore: [], drawerBlocks: [], drawerShown: [], hist: [], settings: [], cols: [], s61Card: [], watchPage: [], envLine: [], popWin: []};   // 7 Nov 2026: "map" = MAP import (phase "parse" | "apply" | "html"; called in place in mapParse / mapApply / mapImpHTML — MAP · FP / FS PAPER LINES; 12 Nov 2026: + phase "check" in mapCheck — MAP v4.11 SYNC); 9 Nov 2026: "popWin" (d, view) = the chart window after every data write (end of popAfter, hookRun) — CHART WINDOW LAYOUT + DATA ONLY
 // 8 Nov 2026 (TIDY-UP, structure only): in-place points that replace chains of function wrappers, run with hookEach (below):
 //   "panelBuild" (r, want) — steps of the ticker panel build, at the end of tpBuild (were 6 tpBuild wrappers)
 //   "all" (phase "before" | "after") — around the redraw in renderAll (were 8 renderAll wrappers)
@@ -1548,6 +1548,8 @@ const HOOK = {compute: [], panel: [], tab: [], chart: [], map: [], panelBuild: [
 //   "envLine" ({h}) — a line added to the environment strip (hx.h), at the end of envHTML (were 3 envHTML wrappers)
 // 14 Nov 2026 (VALIDATION FREEZE, tracking only): "compute" () — at the start of computeAll, before any number is worked
 //   out (the 20-session validation forces the ruling list settings there; no wrapper)
+// 14 Nov 2026 (GROUP PANEL · ADR % AND $ VOLUME, display only): "groupDrawer" (g) — at the end of the base groupDrawer, after
+//   the group panel's table is drawn (no wrapper)
 // 3 Nov (display only): sort keys a Table can sort on that aren't one of its own columns — {key: row => value}; a value of
 // null always sorts last. Used by the Ext. hours column (it's added after each draw, so it isn't in COLS).
 const TBL_XSORT = {};
@@ -3536,6 +3538,7 @@ function groupDrawer(name){
   $("drawer").classList.add("open");
   $("dx").onclick = closeDrawer;
   $("gTV").onclick = () => tvWatchlist([[g.name, g.leaders]]);
+  hookRun("groupDrawer", g);   // 14 Nov 2026: hook point (BOARD HOOKS) — GROUP PANEL · ADR % AND $ VOLUME adds its columns here
 }
 function closeDrawer(){ $("drawer").classList.remove("open"); }
 
@@ -22867,6 +22870,37 @@ hookOn("tab", "validationTrackerArch", t => { if (t === "plan" && S.snap) valArc
 <script>
 "use strict";
 /* =====================================================================
+   GROUP PANEL · ADR % AND $ VOLUME COLUMNS (14 Nov 2026) — DISPLAY ONLY. On a 2-week trial (docs/trials.md).
+   Eugene, 14 Nov 2026 (group page screenshot): "in the group page. i would like to add ADR% and average dollar volume traded as
+   columns. this will allow me to quickly identify the liquid stocks in the group. either these or tags that are already
+   programmed. whichever is easier".
+   - Two columns right after RS in the group panel's table (click a group anywhere; the table scrolls sideways if needed): "ADR %" = the Entry Check's 20-day ADR %
+     (the file's ADR % when the price history isn't loaded), dimmed under the 3.0 ADR floor; "$Vol 20d" = the same 20-day
+     average dollar volume the LIQ LEADER tag reads (llDv: stored history, else the file's 30-day value, marked "file"),
+     bold green at ≥ $500M a day (the liquid-leader line), dimmed under $100M (Entry Check liquidity minimum).
+   - Never changes a list, rank, check, size, group number, feed, Board log or MAP. Reads only. Storage: none.
+   - Plugs in at the new "groupDrawer" hook point (end of the base groupDrawer). No override.
+   ===================================================================== */
+function gpCells(r){
+  const x = typeof ecX === "function" ? ecX(r) : null, adr = x && fin(x.adr) ? x.adr : fin(r.adr) ? r.adr : null;
+  const q = typeof llDv === "function" ? llDv(r.sym) : null, dv = q ? q.dv : null;
+  const aC = adr == null ? "" : adr < 3 ? "dim" : "", vC = dv == null ? "" : dv >= 500e6 ? "pos gpliq" : dv < 100e6 ? "dim" : "";
+  const aT = adr == null ? "—" : adr.toFixed(1) + "%", vT = dv == null ? "—" : "$" + money(dv) + (q.src === "csv" ? " <span class=\"small dim\">file</span>" : "");
+  return `<td class="${aC}" title="ADR % (20-day)${adr != null && adr < 3 ? " — under the 3.0 ADR floor" : ""}">${aT}</td><td class="${vC}" title="Average dollar volume, 20 sessions${q && q.src === "csv" ? " (the file's 30-day value — price history not loaded)" : ""} · liquid leader at $500M+, Entry Check minimum $100M">${vT}</td>`;
+}
+hookOn("groupDrawer", "groupLiquidity", g => {
+  const dr = $("drawer"), t = dr && dr.querySelector(":scope > table"); if (!t || t.dataset.gp) return; t.dataset.gp = 1;
+  // right after RS (the panel is narrow — columns at the end fall off its edge); the table scrolls sideways if it still doesn't fit
+  const hr = t.querySelector("thead tr"), at = hr && hr.children[1]; if (at) at.insertAdjacentHTML("afterend", `<th title="ADR % (20-day) — dimmed under the 3.0 ADR floor">ADR %</th><th title="Average dollar volume traded, 20 sessions — bold green at $500M+ a day (liquid leader), dimmed under $100M">$Vol 20d</th>`);
+  const by = S.rowBySym || new Map();
+  t.querySelectorAll("tbody tr[data-sym]").forEach(tr => { const r = by.get(tr.dataset.sym), c = tr.children[1]; if (c) c.insertAdjacentHTML("afterend", r ? gpCells(r) : "<td>—</td><td>—</td>"); });
+  const w = document.createElement("div"); w.className = "tscroll gpscroll"; t.before(w); w.appendChild(t);
+});
+document.head.insertAdjacentHTML("beforeend", `<style>#drawer td.gpliq{font-weight:700}#drawer .gpscroll{overflow-x:auto}#drawer .gpscroll > table{min-width:100%}</style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
    BOARD VERSION LABEL (10 Nov 2026) — display only. On a 2-week trial (docs/trials.md).
    Eugene, 10 Nov 2026: "how do i know whether the board is the latest update" → "yes add the version label".
    - BOARD_VER = {date, n, what}: bumped in EVERY change to index.html (tools/board-version-test.js fails when index.html
@@ -22877,7 +22911,7 @@ hookOn("tab", "validationTrackerArch", t => { if (t === "plan" && S.snap) valArc
    - Never changes any number, list, feed column, storage key or setting. Storage: none. Hooks: "settings"; the chip is
      inserted once at load. No override.
    ===================================================================== */
-const BOARD_VER = {date: "2026-11-14", n: 1, what: "20-session validation: list rules locked until 14 Dec, Rules Version in the feed, daily ledger snapshot, online window, skip reasons, validation CSV"};
+const BOARD_VER = {date: "2026-11-14", n: 2, what: "Group panel: ADR % and 20-day $ volume columns (liquid names at a glance)"};
 const boardVerTxt = () => `v${BOARD_VER.date}.${BOARD_VER.n}`;
 (function verChip(){
   try {
