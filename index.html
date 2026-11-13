@@ -22465,6 +22465,8 @@ hookOn("tab", "validationTrackerArch", t => { if (t === "plan" && S.snap) valArc
      (the file's ADR % when the price history isn't loaded), dimmed under the 3.0 ADR floor; "$Vol 20d" = the same 20-day
      average dollar volume the LIQ LEADER tag reads (llDv: stored history, else the file's 30-day value, marked "file"),
      bold green at ≥ $500M a day (the liquid-leader line), dimmed under $100M (Entry Check liquidity minimum).
+   - 14 Nov 2026 (Eugene: "widen the margins of the group table … without need to side scroll"): the panel is 880 px wide while it
+     shows a group (class gpw; 620 px before) — the widest group table on the 13 Nov file is 764 px. Stock panels keep their width.
    - Never changes a list, rank, check, size, group number, feed, Board log or MAP. Reads only. Storage: none.
    - Plugs in at the new "groupDrawer" hook point (end of the base groupDrawer). No override.
    ===================================================================== */
@@ -22482,8 +22484,11 @@ hookOn("groupDrawer", "groupLiquidity", g => {
   const by = S.rowBySym || new Map();
   t.querySelectorAll("tbody tr[data-sym]").forEach(tr => { const r = by.get(tr.dataset.sym), c = tr.children[1]; if (c) c.insertAdjacentHTML("afterend", r ? gpCells(r) : "<td>—</td><td>—</td>"); });
   const w = document.createElement("div"); w.className = "tscroll gpscroll"; t.before(w); w.appendChild(t);
+  dr.classList.add("gpw");   // 14 Nov 2026 (Eugene: "widen the margins … so everything is displayed in 1 page without need to side scroll"): a wider panel for groups only
 });
-document.head.insertAdjacentHTML("beforeend", `<style>#drawer td.gpliq{font-weight:700}#drawer .gpscroll{overflow-x:auto}#drawer .gpscroll > table{min-width:100%}</style>`);
+// a stock panel opened after a group takes its own width back (its "tp" / "invp" class wins too)
+hookOn("drawerShown", "groupWidthOff", () => { const dr = $("drawer"); if (dr) dr.classList.remove("gpw"); });
+document.head.insertAdjacentHTML("beforeend", `<style>#drawer td.gpliq{font-weight:700}#drawer .gpscroll{overflow-x:auto}#drawer .gpscroll > table{min-width:100%}#drawer.gpw:not(.tp):not(.invp){width:min(880px,96vw)}</style>`);
 </script>
 <script>
 "use strict";
@@ -22498,7 +22503,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>#drawer td.gpliq{font-weig
    - Never changes any number, list, feed column, storage key or setting. Storage: none. Hooks: "settings"; the chip is
      inserted once at load. No override.
    ===================================================================== */
-const BOARD_VER = {date: "2026-11-14", n: 2, what: "Group panel: ADR % and 20-day $ volume columns (liquid names at a glance)"};
+const BOARD_VER = {date: "2026-11-14", n: 3, what: "Group panel wider (880 px) so the whole table fits without side-scrolling"};
 const boardVerTxt = () => `v${BOARD_VER.date}.${BOARD_VER.n}`;
 (function verChip(){
   try {
