@@ -1338,7 +1338,7 @@ for (const m of ["setItem", "removeItem", "clear"]) { const f = Storage.prototyp
 window.addEventListener("storage", () => { store._c.clear(); store._g++; });
 // Hook points (BOARD HOOKS script, 28 Oct; moved up here 31 Oct so every section can use them — the installers that call
 // hookRun stay in BOARD HOOKS). Hooks run in the order they were added (= file order), each in its own try/catch.
-const HOOK = {panel: [], tab: [], chart: [], map: [], panelBuild: [], all: [], flags: [], snap: [], tabBefore: [], drawerBlocks: [], drawerShown: [], hist: [], settings: [], cols: [], s61Card: [], watchPage: [], envLine: [], popWin: []};   // 7 Nov 2026: "map" = MAP import (phase "parse" | "apply" | "html"; called in place in mapParse / mapApply / mapImpHTML — MAP · FP / FS PAPER LINES; 12 Nov 2026: + phase "check" in mapCheck — MAP v4.11 SYNC); 9 Nov 2026: "popWin" (d, view) = the chart window after every data write (end of popAfter, hookRun) — CHART WINDOW LAYOUT + DATA ONLY
+const HOOK = {compute: [], panel: [], tab: [], chart: [], map: [], panelBuild: [], all: [], flags: [], snap: [], tabBefore: [], drawerBlocks: [], drawerShown: [], hist: [], settings: [], cols: [], s61Card: [], watchPage: [], envLine: [], popWin: []};   // 7 Nov 2026: "map" = MAP import (phase "parse" | "apply" | "html"; called in place in mapParse / mapApply / mapImpHTML — MAP · FP / FS PAPER LINES; 12 Nov 2026: + phase "check" in mapCheck — MAP v4.11 SYNC); 9 Nov 2026: "popWin" (d, view) = the chart window after every data write (end of popAfter, hookRun) — CHART WINDOW LAYOUT + DATA ONLY
 // 8 Nov 2026 (TIDY-UP, structure only): in-place points that replace chains of function wrappers, run with hookEach (below):
 //   "panelBuild" (r, want) — steps of the ticker panel build, at the end of tpBuild (were 6 tpBuild wrappers)
 //   "all" (phase "before" | "after") — around the redraw in renderAll (were 8 renderAll wrappers)
@@ -1353,6 +1353,8 @@ const HOOK = {panel: [], tab: [], chart: [], map: [], panelBuild: [], all: [], f
 //   "cols" ({C}) — add / relabel table columns (hx.C), at the end of COLS (were 5 COLS wrappers)
 //   "s61Card" () / "watchPage" () — after the Entry Check card / the Watchlist groups are drawn (were 3 + 3 wrappers)
 //   "envLine" ({h}) — a line added to the environment strip (hx.h), at the end of envHTML (were 3 envHTML wrappers)
+// 14 Nov 2026 (VALIDATION FREEZE, tracking only): "compute" () — at the start of computeAll, before any number is worked
+//   out (the 20-session validation forces the ruling list settings there; no wrapper)
 // 3 Nov (display only): sort keys a Table can sort on that aren't one of its own columns — {key: row => value}; a value of
 // null always sorts last. Used by the Ext. hours column (it's added after each draw, so it isn't in COLS).
 const TBL_XSORT = {};
@@ -1449,6 +1451,7 @@ const RGEN = {rows: null, n: 0};
 function rowsGen(){ if (S.rows !== RGEN.rows) { RGEN.rows = S.rows; RGEN.n++; } return RGEN.n; }
 function computeAll(){
   if (!S.snap) return;
+  hookRun("compute");   // 14 Nov 2026: hook point (VALIDATION FREEZE forces the ruling list settings here) — runs nothing else
   refreshStates();
   const mode = S.mode = effMode();
   const merged = new Map(S.snap.map);
@@ -12986,6 +12989,8 @@ const SY_WORKER = `// Deep Space Board — sync between devices (28 Oct 2026). C
 // PUT  /view?slot=&dev=  {name, at, dataAt, hash, data} → {ok}   what one device's board shows (SYNC_KEY; gzip + base64)
 // POST /mcp/<READ_KEY>   MCP (Streamable HTTP, JSON responses): read-only tools board_status · board_lists · board_ticker
 //                        · board_table over the freshest view. Without READ_KEY the connector is off (404).
+// 14 Nov · 20-session validation ledger, write connector (secret WRITE_KEY) and the overnight outcome engine (secret
+//          MASSIVE_KEY + a Cron Trigger) — see the VALIDATION block below. Sync and the read connector are unchanged.
 const CORS = {"Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, PUT, POST, OPTIONS", "Access-Control-Allow-Headers": "Authorization, Content-Type", "Access-Control-Max-Age": "86400"};
 const J = (o, status = 200) => new Response(JSON.stringify(o), {status, headers: {...CORS, "content-type": "application/json", "cache-control": "no-store"}});
 const PART = 400000;                         // characters per row (D1 rows stay well under its 2 MB limit)
@@ -13072,10 +13077,10 @@ async function rpc(m, env){
   const ok = result => ({jsonrpc: "2.0", id: m.id, result}), no = (code, message) => ({jsonrpc: "2.0", id: m.id, error: {code, message}});
   if (m.method === "initialize") { const v = m.params && m.params.protocolVersion; return ok({protocolVersion: PROTO.includes(v) ? v : PROTO[0], capabilities: {tools: {listChanged: false}}, serverInfo: {name: "deep-space-board", title: "Deep Space Board", version: "1.0.0"}, instructions: INSTR}); }
   if (m.method === "ping") return ok({});
-  if (m.method === "tools/list") return ok({tools: TOOLS});
+  if (m.method === "tools/list") return ok({tools: [...TOOLS, ...V_READ]});
   if (m.method === "tools/call") {
-    const p = m.params || {}; if (!TOOLS.some(t => t.name === p.name)) return no(-32602, "Unknown tool " + p.name);
-    try { const r = await callTool(p.name, p.arguments, env); return ok({content: [{type: "text", text: r.text}], isError: !!r.isError}); }
+    const p = m.params || {}; if (![...TOOLS, ...V_READ].some(t => t.name === p.name)) return no(-32602, "Unknown tool " + p.name);
+    try { const r = V_READ.some(t => t.name === p.name) ? await vTool(p.name, p.arguments, env) : await callTool(p.name, p.arguments, env); return ok({content: [{type: "text", text: r.text}], isError: !!r.isError}); }
     catch (e) { return ok({content: [{type: "text", text: "The board view couldn't be read: " + (e && e.message || e)}], isError: true}); }
   }
   return no(-32601, "Method not found: " + m.method);
@@ -13087,11 +13092,482 @@ async function mcp(req, env){
   if (Array.isArray(m)) { const out = []; for (const x of m) { const r = await rpc(x, env); if (r) out.push(r); } return out.length ? J(out) : new Response(null, {status: 202, headers: CORS}); }
   const r = await rpc(m, env); return r ? J(r) : new Response(null, {status: 202, headers: CORS});
 }
+// =====================================================================================================================
+// 14 Nov 2026 · 20-SESSION VALIDATION (docs/validation-2026-11-handover.md, approved by Eugene 13 Nov 2026) — MEASUREMENT
+// ONLY. Nothing here changes a list, rank, check or the board's numbers; it stores what the board and Claude send, and
+// scores episodes overnight. Tables are created on first use (initVal), so sync and the read connector run as before.
+// Board (SYNC_KEY):   PUT /val/ledger?session=  {dataTo, rulesVer, boardVer, dev, name, correction, rows, feed, mapsrc}
+//                       → {ok, ver} · 409 {exists, ver, savedAt, dev} (write-once; correction:true adds version ver+1)
+//                     GET /val/ledger?session=   → saved versions (no rows) · GET /val/raw?session=&kind=feed|mapsrc|ctx|maplist
+//                     PUT /val/maplist?session=  MAP's A / B / On deck lists + verdict once imported (replaces; not part of the frozen snapshot)
+//                     POST /val/presence {kind: online|offline, at, dev} · GET /val/presence?session=
+//                     GET /val/skips?session=    → that session's triggered names with no fill (+ reasons tagged)
+//                     POST /val/skip {session, sym, reason}     reason MARKET | GROUP | STOCK | RISK | OTHER | "" (clear)
+//                     POST /val/log {job, status, note, counts} → the run log (rule-unlock events, board errors)
+//                     GET /val/export.csv            → every episode, whole window
+// Claude (WRITE_KEY): POST /mcpw/<WRITE_KEY>  MCP tools ingest_alerts · ingest_fills · log_run + the read tools
+// Claude (READ_KEY):  POST /mcp/<READ_KEY>    adds read tools ledger_session · open_episodes · validation_export
+// Cron (scheduled):   the outcome engine. Secret MASSIVE_KEY. Each run scores a few tickers (free-plan limits: ~50
+//                     outbound calls and 10 ms CPU per run), so it runs every 3 minutes after 18:30 ET until all are done.
+// Assumptions where Notion is silent are listed in VAL.notes and stamped on every outcome through VAL.engine.
+// =====================================================================================================================
+const VAL = {engine: "E1.0-2026-11-14", win: 10, hold: 5, cap: 0.6, cost: 0.05, first: 600, chunk: 6, warmDays: 14, histDays: 120,
+  start: "18:30", lastSess: "2026-12-14",
+  notes: ["Regular-session 30-min bars only (09:30-16:00 ET, 13:00 on half-days); the 30-min 21 EMA runs across days, warmed up on 14 calendar days of bars before the first session",
+    "Fresh cross = a 30-min close above the 30-min 21 EMA after the previous 30-min close at or below it (Spec 6.1 §3, 25 Oct); first valid bar = the 09:30-10:00 bar",
+    "Stop = the day's low through the trigger bar; entry = the next 30-min bar's open in the same session (a trigger on the last bar of the day has no entry and is passed over)",
+    "Cap = entry minus that low <= 0.6 x ADR$ (ADR% 20 x close at the snapshot); a trigger that fails the cap is skipped and the episode keeps watching for a later fresh cross",
+    "On deck: the trigger counts only at or after the first 30-min close above the prior day's daily 9 EMA that session (the reclaim)",
+    "Episode = ticker + set (A eligible / N near-miss) + first listed session; 10 sessions to trigger counting the first listed session; ends untriggered if a later saved snapshot no longer lists it in that set",
+    "Primary R: stop (a gap below it fills at the open), the close of the 5th session after entry (entry session = 0), or the Exit By close, whichever first; same bar stop + target = stop; 0.05R cost",
+    "Ladder R: Spec 6.1 §6 copy — a third off at 2R or at the T+3 close (all out there if below entry), breakeven on the rest, 10% shaves at 7, 8, 9 ... ADR above the daily 50 SMA, runner out on a daily close below the daily 9 EMA, everything out at the Exit By close; 0.05R cost",
+    "MFE / MAE R: highest high / lowest low from entry to the primary exit, in R; time to 1R / 2R in sessions + the bar's close time"]};
+const NYSE_HOL_W = new Set(["2026-01-01", "2026-01-19", "2026-02-16", "2026-04-03", "2026-05-25", "2026-06-19", "2026-07-03", "2026-09-07", "2026-11-26", "2026-12-25",
+  "2027-01-01", "2027-01-18", "2027-02-15", "2027-03-26", "2027-05-31", "2027-06-18", "2027-07-05", "2027-09-06", "2027-11-25", "2027-12-24"]);
+const NYSE_HALF = new Set(["2026-11-27", "2026-12-24", "2027-11-26"]);          // 13:00 ET closes
+const vAddDays = (d, n) => { const t = new Date(d + "T12:00:00Z"); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
+const vIsSess = d => { const w = new Date(d + "T12:00:00Z").getUTCDay(); return w > 0 && w < 6 && !NYSE_HOL_W.has(d); };
+const vNext = d => { let x = vAddDays(d, 1); while (!vIsSess(x)) x = vAddDays(x, 1); return x; };
+const vPrev = d => { let x = vAddDays(d, -1); while (!vIsSess(x)) x = vAddDays(x, -1); return x; };
+const vCloseMin = d => NYSE_HALF.has(d) ? 780 : 960;
+let VETF = null;
+function vET(ms){
+  VETF = VETF || new Intl.DateTimeFormat("en-CA", {timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23"});
+  const p = {}; for (const x of VETF.formatToParts(new Date(ms))) p[x.type] = x.value;
+  return {d: \`\${p.year}-\${p.month}-\${p.day}\`, m: +p.hour * 60 + +p.minute};
+}
+// the default offline time for a session: 00:00 Asia/Singapore at the end of that US day (11:00 ET until US daylight
+// saving starts, then 12:00 ET). Stored as the Singapore instant, so it follows the clock change by itself.
+const vOffAt = d => Date.parse(vAddDays(d, 1) + "T00:00:00+08:00");
+// the last completed session whose scoring time (18:30 ET) has passed
+function vScoredTo(now){ const e = vET(now); let d = e.d; if (!vIsSess(d) || e.m < 18 * 60 + 30) d = vPrev(d); return d; }
+const vSessIdx = (a, b) => { let n = 0, x = a; while (x < b && n < 400) { x = vNext(x); n++; } return n; };   // sessions from a to b
+const vf = v => (typeof v === "number" && isFinite(v)) ? Math.round(v * 10000) / 10000 : v == null ? null : v;
+let valReady = false;
+async function initVal(db){
+  if (valReady) return;
+  await db.batch([
+    db.prepare("CREATE TABLE IF NOT EXISTS led_snap (session TEXT, ver INTEGER, data_to TEXT, rules_ver TEXT, board_ver TEXT, dev TEXT, name TEXT, saved_at INTEGER, correction INTEGER, n_rows INTEGER, parts INTEGER, PRIMARY KEY (session, ver))"),
+    db.prepare("CREATE TABLE IF NOT EXISTS led_part (session TEXT, ver INTEGER, kind TEXT, i INTEGER, data TEXT, PRIMARY KEY (session, ver, kind, i))"),
+    db.prepare("CREATE TABLE IF NOT EXISTS v_alert (fire_id TEXT PRIMARY KEY, sym TEXT, session TEXT, bar_time INTEGER, fired_at INTEGER, kind TEXT, playbook TEXT, parsed TEXT, raw TEXT, at INTEGER)"),
+    db.prepare("CREATE TABLE IF NOT EXISTS v_fill (exec_id TEXT PRIMARY KEY, sym TEXT, session TEXT, side TEXT, t INTEGER, price REAL, qty REAL, raw TEXT, at INTEGER)"),
+    db.prepare("CREATE TABLE IF NOT EXISTS v_fillday (session TEXT PRIMARY KEY, n INTEGER, at INTEGER)"),
+    db.prepare("CREATE TABLE IF NOT EXISTS v_presence (session TEXT, at INTEGER, kind TEXT, dev TEXT, PRIMARY KEY (session, at, kind))"),
+    db.prepare("CREATE TABLE IF NOT EXISTS v_skip (session TEXT, sym TEXT, reason TEXT, at INTEGER, PRIMARY KEY (session, sym))"),
+    db.prepare("CREATE TABLE IF NOT EXISTS v_state (k TEXT, i INTEGER, data TEXT, PRIMARY KEY (k, i))"),
+    db.prepare("CREATE TABLE IF NOT EXISTS v_done (id TEXT PRIMARY KEY, sym TEXT, first TEXT, set_ TEXT, data TEXT, at INTEGER)"),
+    db.prepare("CREATE TABLE IF NOT EXISTS v_log (at INTEGER, job TEXT, status TEXT, note TEXT, counts TEXT)")
+  ]);
+  valReady = true;
+}
+// ---------- blobs: split into parts like the synced board (D1 rows stay small, few queries) ----------
+const vSplit = s => { const p = []; for (let i = 0; i * PART < s.length; i++) p.push(s.slice(i * PART, (i + 1) * PART)); return p.length ? p : [""]; };
+async function vStateGet(db, k, dflt){
+  const rows = (await db.prepare("SELECT i, data FROM v_state WHERE k = ? ORDER BY i").bind(k).all()).results || [];
+  if (!rows.length) return dflt; try { return JSON.parse(rows.map(r => r.data).join("")); } catch (e) { return dflt; }
+}
+const vStatePut = (db, k, o) => [db.prepare("DELETE FROM v_state WHERE k = ?").bind(k), ...vSplit(JSON.stringify(o)).map((p, i) => db.prepare("INSERT INTO v_state (k, i, data) VALUES (?, ?, ?)").bind(k, i, p))];
+async function vLedgerRows(db, session, ver){
+  const rows = (await db.prepare("SELECT i, data FROM led_part WHERE session = ? AND ver = ? AND kind = 'rows' ORDER BY i").bind(session, ver).all()).results || [];
+  try { return JSON.parse(rows.map(r => r.data).join("") || "[]"); } catch (e) { return []; }
+}
+async function vSnaps(db){ return ((await db.prepare("SELECT session, ver, data_to, rules_ver, board_ver, dev, name, saved_at, correction, n_rows FROM led_snap ORDER BY session, ver").all()).results || []); }
+const vLatest = snaps => { const m = new Map(); for (const s of snaps) if (!m.has(s.session) || m.get(s.session).ver < s.ver) m.set(s.session, s); return [...m.values()].sort((a, b) => a.session < b.session ? -1 : 1); };
+async function vLog(db, job, status, note, counts){ try { await db.prepare("INSERT INTO v_log (at, job, status, note, counts) VALUES (?, ?, ?, ?, ?)").bind(Date.now(), clip(job, 40), clip(status, 20), clip(note, 2000), JSON.stringify(counts || {}).slice(0, 4000)).run(); } catch (e) {} }
+
+// ---------- TradingView alert messages (Leader Pullback + First Pullback, as their Pine scripts write them) ----------
+const vNum = s => { const v = parseFloat(String(s).replace(/,/g, "")); return isFinite(v) ? v : null; };
+function vParseAlert(msg, name){
+  const m = String(msg || ""), nm = String(name || ""), out = {playbook: null, kind: "unparsed", p: {}};
+  let x;
+  if (/^First Pullback/i.test(nm) || /First Pullback/i.test(m)) {
+    out.playbook = "first-pullback (paper)";
+    if ((x = m.match(/^([A-Z0-9.\\-]+) — First Pullback (READY|BUY|STOPPED|TRIGGER)/i))) { out.kind = "FP_" + x[2].toUpperCase(); out.p.sym = x[1]; const at = m.match(/\\(at the ([^)]+)\\)/); if (at) out.p.at = at[1]; }
+    return out;
+  }
+  if (/^Leader Pullback/i.test(nm) || /30m LONG|LONG trade/.test(m)) {
+    out.playbook = "leader-pullback";
+    if ((x = m.match(/^([A-Z0-9.\\-]+) 30m LONG GET READY .*?trigger line \\(([\\d.,]+)\\).*?stop = day low ([\\d.,]+) \\(([\\d.]+) ADR\\),\\s*([\\d.]+)R room/))) {
+      out.kind = "GET_READY"; out.p = {sym: x[1], trigger: vNum(x[2]), stop: vNum(x[3]), adrOffLow: vNum(x[4]), room: vNum(x[5])};
+    } else if ((x = m.match(/^([A-Z0-9.\\-]+) 30m LONG BUY .*?next open ≈ ([\\d.,]+), stop = day low ([\\d.,]+), 2R ([\\d.,]+), ([\\d.]+) ADR off the low, ([\\d.]+)R room/))) {
+      out.kind = "BUY"; out.p = {sym: x[1], entry: vNum(x[2]), stop: vNum(x[3]), t2r: vNum(x[4]), adrOffLow: vNum(x[5]), room: vNum(x[6])};
+    } else if ((x = m.match(/^([A-Z0-9.\\-]+) LONG trade: STOPPED.*?entry ([\\d.,]+)/))) {
+      out.kind = "STOPPED"; out.p = {sym: x[1], entry: vNum(x[2])};
+    }
+    return out;
+  }
+  return out;
+}
+const vSym = s => String(s || "").toUpperCase().replace(/^[A-Z]+:/, "").trim();
+const vMs = t => { if (t == null || t === "") return null; if (typeof t === "number") return t < 1e12 ? t * 1000 : t; const v = Date.parse(t); return isFinite(v) ? v : null; };
+async function vInsertJson(db, sql, rows){          // json_each: one bound parameter per statement (D1: 100 params a query)
+  const out = []; let buf = [], len = 0;
+  const flush = () => { if (buf.length) out.push(db.prepare(sql).bind(JSON.stringify(buf))); buf = []; len = 0; };
+  for (const r of rows) { const s = JSON.stringify(r).length; if (len + s > 80000) flush(); buf.push(r); len += s; }
+  flush(); for (let i = 0; i < out.length; i += 20) await db.batch(out.slice(i, i + 20));
+}
+async function vIngestAlerts(db, a){
+  const ev = Array.isArray(a.events) ? a.events.slice(0, 5000) : [];
+  const ids = ev.map(e => String(e.fire_id ?? "")).filter(Boolean);
+  const have = new Set();
+  for (let i = 0; i < ids.length; i += 90) { const q = ids.slice(i, i + 90);
+    ((await db.prepare(\`SELECT fire_id FROM v_alert WHERE fire_id IN (\${q.map(() => "?").join(",")})\`).bind(...q).all()).results || []).forEach(r => have.add(String(r.fire_id))); }
+  const now = Date.now(), add = [], c = {received: ev.length, new: 0, duplicate: 0, no_id: 0, by_kind: {}, unparsed: 0, unparsed_examples: []}, seen = new Set();
+  for (const e of ev) {
+    const id = String(e.fire_id ?? ""); if (!id) { c.no_id++; continue; }
+    if (have.has(id) || seen.has(id)) { c.duplicate++; continue; } seen.add(id);
+    const P = vParseAlert(e.message, e.name), bt = vMs(e.bar_time), fa = vMs(e.fired_at), sym = P.p.sym || vSym(e.symbol);
+    c.by_kind[P.kind] = (c.by_kind[P.kind] || 0) + 1; if (P.kind === "unparsed") { c.unparsed++; if (c.unparsed_examples.length < 5) c.unparsed_examples.push(clip(e.message, 160)); }
+    add.push({id, sym, session: bt ? vET(bt).d : fa ? vET(fa).d : "", bt, fa, kind: P.kind, pb: P.playbook || "", parsed: JSON.stringify(P.p), raw: JSON.stringify(e).slice(0, 4000), at: now});
+  }
+  await vInsertJson(db, "INSERT OR IGNORE INTO v_alert (fire_id, sym, session, bar_time, fired_at, kind, playbook, parsed, raw, at) SELECT json_extract(value,'$.id'), json_extract(value,'$.sym'), json_extract(value,'$.session'), json_extract(value,'$.bt'), json_extract(value,'$.fa'), json_extract(value,'$.kind'), json_extract(value,'$.pb'), json_extract(value,'$.parsed'), json_extract(value,'$.raw'), json_extract(value,'$.at') FROM json_each(?)", add);
+  c.new = add.length; return c;
+}
+async function vIngestFills(db, a){
+  const F = Array.isArray(a.fills) ? a.fills.slice(0, 5000) : [], sess = String(a.session || "").slice(0, 10);
+  const ids = F.map(f => String(f.exec_id ?? f.execution_id ?? "")).filter(Boolean), have = new Set();
+  for (let i = 0; i < ids.length; i += 90) { const q = ids.slice(i, i + 90);
+    ((await db.prepare(\`SELECT exec_id FROM v_fill WHERE exec_id IN (\${q.map(() => "?").join(",")})\`).bind(...q).all()).results || []).forEach(r => have.add(String(r.exec_id))); }
+  const now = Date.now(), add = [], c = {received: F.length, new: 0, duplicate: 0, no_id: 0, session: sess || null}, seen = new Set();
+  for (const f of F) {
+    const id = String(f.exec_id ?? f.execution_id ?? ""); if (!id) { c.no_id++; continue; }
+    if (have.has(id) || seen.has(id)) { c.duplicate++; continue; } seen.add(id);
+    const t = vMs(f.time), side = /^(B|BOT|BUY)/i.test(String(f.side || "")) ? "BUY" : /^(S|SLD|SELL)/i.test(String(f.side || "")) ? "SELL" : String(f.side || "").toUpperCase();
+    add.push({id, sym: vSym(f.ticker || f.symbol), session: t ? vET(t).d : sess, side, t, price: +f.price, qty: +f.quantity || +f.qty || 0, raw: JSON.stringify(f).slice(0, 2000), at: now});
+  }
+  await vInsertJson(db, "INSERT OR IGNORE INTO v_fill (exec_id, sym, session, side, t, price, qty, raw, at) SELECT json_extract(value,'$.id'), json_extract(value,'$.sym'), json_extract(value,'$.session'), json_extract(value,'$.side'), json_extract(value,'$.t'), json_extract(value,'$.price'), json_extract(value,'$.qty'), json_extract(value,'$.raw'), json_extract(value,'$.at') FROM json_each(?)", add);
+  if (/^\\d{4}-\\d\\d-\\d\\d$/.test(sess)) await db.prepare("INSERT INTO v_fillday (session, n, at) VALUES (?, ?, ?) ON CONFLICT(session) DO UPDATE SET n = excluded.n, at = excluded.at").bind(sess, F.length, now).run();
+  c.new = add.length; return c;
+}
+
+// ---------- the scorer (PURE: same inputs → same result; exported for the tests) ----------
+// ep: {id, sym, set, first, left, snaps: {session: {list, D, e9, exitBy, dataTo}}, closes?}
+// B30: regular-session 30-min bars [{t, o, h, l, c}] sorted; BD: daily bars [{d, o, h, l, c}] sorted; to = last scored session
+function vScore(ep, B30, BD, to){
+  const R = {status: "watching", engine: VAL.engine, scoredTo: to};
+  const bySess = new Map(); for (const b of B30) { const e = vET(b.t); const cm = e.m + 30; if (e.m < 570 || cm > vCloseMin(e.d)) continue; if (!bySess.has(e.d)) bySess.set(e.d, []); bySess.get(e.d).push({...b, d: e.d, cm}); }
+  const dIdx = new Map(BD.map((b, i) => [b.d, i]));
+  // 30-min 21 EMA through every regular-session bar, in order
+  const all = [...bySess.keys()].sort().flatMap(d => bySess.get(d)); const k21 = 2 / 22; let e = NaN, n = 0, sum = 0;
+  all.forEach((b, i) => { b.i = i; });
+  for (const b of all) { if (n < 21) { sum += b.c; n++; e = n === 21 ? sum / 21 : NaN; b.ema = e; continue; } e = e + k21 * (b.c - e); b.ema = e; }
+  // the daily 9 EMA rolled forward from the latest snapshot value with the daily closes after its data-to date
+  const e9Prior = (sess, sn) => { let v = sn.e9; if (!isFinite(v)) return NaN; let x = sn.dataTo; const tgt = vPrev(sess); while (x < tgt) { x = vNext(x); const i = dIdx.get(x); if (i == null) return NaN; v = v + 0.2 * (BD[i].c - v); } return v; };
+  const snapFor = sess => { let best = null; for (const s of Object.keys(ep.snaps || {}).sort()) if (s <= sess) best = s; return best ? ep.snaps[best] : null; };
+  // ---- trigger search: the first listed session + the next 9 sessions, before the episode left its list
+  let sess = ep.first, k = 0, trig = null; const caps = [];
+  while (k < VAL.win && sess <= to && !trig) {
+    if (ep.left && sess >= ep.left) { R.status = "done"; R.exit = "Left the list before a trigger"; R.r = 0; R.triggered = false; R.leftAt = ep.left; return R; }
+    const bars = bySess.get(sess) || [];
+    if (!bars.length) { R.status = "done"; R.exit = "Missing data"; R.missing = sess; R.triggered = null; return R; }
+    const sn = snapFor(sess) || {}; const deck = /^OnDeck/.test(sn.list || ""), lvl = deck ? e9Prior(sess, sn) : NaN;
+    let reclaimed = !deck, lod = Infinity;
+    for (let i = 0; i < bars.length && !trig; i++) {
+      const b = bars[i]; lod = Math.min(lod, b.l);
+      if (deck && !reclaimed && isFinite(lvl) && b.c > lvl) reclaimed = true;
+      const pb = b.i > 0 ? all[b.i - 1] : null;
+      if (b.cm < VAL.first || !pb || !isFinite(b.ema) || !isFinite(pb.ema) || !(b.c > b.ema) || !(pb.c <= pb.ema) || !reclaimed) continue;
+      const nb = bars[i + 1]; if (!nb) { caps.push({sess, cm: b.cm, why: "last bar, no next open"}); continue; }
+      const D = sn.D, risk = nb.o - lod, offLow = isFinite(D) && D > 0 ? risk / D : NaN;
+      if (!(risk > 0)) { caps.push({sess, cm: b.cm, why: "next open at or below the day low"}); continue; }
+      if (!(offLow <= VAL.cap + 1e-9)) { caps.push({sess, cm: b.cm, why: \`entry \${vf(offLow)} ADR above the low > \${VAL.cap}\`, offLow: vf(offLow)}); continue; }
+      trig = {sess, k, cm: b.cm, barT: b.t, entry: nb.o, entryT: nb.t, stop: lod, risk, offLow, D, list: sn.list, exitBy: sn.exitBy || null, gapOpen: null, reclaimLvl: deck ? vf(lvl) : null};
+      const pc = BD[(dIdx.get(sess) ?? 0) - 1]; trig.gapOpen = pc && isFinite(D) ? vf((bars[0].o - pc.c) / D) : null;
+    }
+    if (!trig) { k++; sess = vNext(sess); }
+  }
+  R.capSkips = caps;
+  if (!trig) { if (k >= VAL.win) { R.status = "done"; R.exit = "Untriggered (10 sessions)"; R.r = 0; R.triggered = false; } return R; }
+  R.triggered = true; R.trigger = {session: trig.sess, sessionNo: trig.k + 1, barClose: trig.cm, entry: vf(trig.entry), stop: vf(trig.stop), risk: vf(trig.risk), offLowADR: vf(trig.offLow), gapOpenADR: trig.gapOpen, list: trig.list, reclaimLevel: trig.reclaimLvl, by11: trig.cm <= 660};
+  // ---- primary exit, MFE / MAE, time to 1R / 2R, alt exits
+  const E = trig.entry, Rk = trig.risk, stop = trig.stop, cost = VAL.cost, rOf = p => (p - E) / Rk;
+  const t5 = (() => { let x = trig.sess; for (let i = 0; i < VAL.hold; i++) x = vNext(x); return x; })();
+  const xb = trig.exitBy && /^\\d{4}-\\d\\d-\\d\\d$/.test(trig.exitBy) ? (trig.exitBy < trig.sess ? trig.sess : trig.exitBy) : null;
+  const endSess = xb && xb < t5 ? xb : t5, endWhy = xb && xb < t5 ? "Exit By" : "T+5 close";
+  let mfe = 0, mae = 0, hit1 = null, hit2 = null, hit15 = false, exit = null, px = null, gapThrough = false, d = trig.sess;
+  const reach = (b, s) => { const hr = rOf(b.h); if (hr >= 1 && !hit1) hit1 = {session: s, sessionNo: vSessIdx(trig.sess, s), barClose: b.cm}; if (hr >= 2 && !hit2) hit2 = {session: s, sessionNo: vSessIdx(trig.sess, s), barClose: b.cm}; if (hr >= 1.5) hit15 = true; };
+  let first2 = null, first15 = null;      // which came first: target or the primary exit
+  while (d <= to && !exit) {
+    const bars = (bySess.get(d) || []).filter(b => b.t >= trig.entryT);
+    if (!bars.length) { R.status = "done"; R.exit = "Missing data"; R.missing = d; return R; }
+    for (const b of bars) {
+      if (b.o <= stop && b.t > trig.entryT) { exit = "Stop"; px = b.o; gapThrough = true; mae = Math.min(mae, rOf(b.l)); break; }
+      if (b.l <= stop) { exit = "Stop"; px = stop; mae = Math.min(mae, rOf(stop)); mfe = Math.max(mfe, rOf(b.h)); break; }   // same bar stop + move = stop
+      mfe = Math.max(mfe, rOf(b.h)); mae = Math.min(mae, rOf(b.l)); reach(b, d);
+      if (!first15 && rOf(b.h) >= 1.5) first15 = {session: d}; if (!first2 && rOf(b.h) >= 2) first2 = {session: d};
+    }
+    if (!exit && d === endSess) { const di = dIdx.get(d); if (di == null) { R.status = "done"; R.exit = "Missing data"; R.missing = d; return R; } exit = endWhy; px = BD[di].c; }
+    if (!exit) d = vNext(d);
+  }
+  R.mfeR = vf(mfe); R.maeR = vf(mae); R.time1R = hit1; R.time2R = hit2;
+  if (!exit) { R.status = "open"; R.markR = (() => { const lb = (bySess.get(to) || []).slice(-1)[0]; return lb ? vf(rOf(lb.c)) : null; })(); return R; }
+  const raw = rOf(px);
+  R.status = "done"; R.exit = exit; R.exitSession = d; R.exitPx = vf(px); R.gapThroughStop = gapThrough; R.r = vf(raw - cost);
+  R.altHalf15 = vf((first15 ? 0.5 * 1.5 + 0.5 * raw : raw) - cost); R.altAll2 = vf((first2 ? 2 : raw) - cost);
+  R.ladder = vLadder(trig, bySess, BD, dIdx, to, ep);
+  return R;
+}
+// Spec 6.1 §6 ladder (mechanical copy for the test's secondary score)
+function vLadder(trig, bySess, BD, dIdx, to, ep){
+  const E = trig.entry, Rk = trig.risk, rOf = p => (p - E) / Rk, D = trig.D;
+  let pos = 1, got = 0, stop = trig.stop, third = false, d = trig.sess, t3 = trig.sess; for (let i = 0; i < 3; i++) t3 = vNext(t3);
+  const xb = trig.exitBy && trig.exitBy >= trig.sess ? trig.exitBy : null, shaved = new Set();
+  const sma50 = i => { if (i < 49) return NaN; let s = 0; for (let j = i - 49; j <= i; j++) s += BD[j].c; return s / 50; };
+  let e9 = NaN; { const i0 = dIdx.get(vPrev(trig.sess)); if (i0 != null && i0 >= 8) { let v = 0; for (let j = 0; j < 9; j++) v += BD[j].c; v /= 9; for (let j = 9; j <= i0; j++) v = v + 0.2 * (BD[j].c - v); e9 = v; } }
+  let guard = 0;
+  while (d <= to && pos > 1e-9 && guard++ < 300) {
+    const bars = (bySess.get(d) || []).filter(b => b.t >= trig.entryT), di = dIdx.get(d);
+    if (!bars.length || di == null) return {status: "missing", missing: d};
+    for (const b of bars) {
+      if (b.o <= stop && b.t > trig.entryT) { got += pos * rOf(b.o); pos = 0; break; }
+      if (b.l <= stop) { got += pos * rOf(stop); pos = 0; break; }
+      if (!third && b.h >= E + 2 * Rk) { got += (1 / 3) * 2; pos -= 1 / 3; third = true; stop = Math.max(stop, E); }
+      const s50 = sma50(di); if (isFinite(s50) && isFinite(D) && D > 0) for (let st = 7; st < 40; st++) { const lv = s50 + st * D; if (b.h >= lv && !shaved.has(st)) { shaved.add(st); got += pos * 0.1 * rOf(lv); pos *= 0.9; } }
+    }
+    if (pos <= 1e-9) break;
+    const c = BD[di].c; e9 = isFinite(e9) ? e9 + 0.2 * (c - e9) : NaN;
+    if (!third && d === t3) { if (c < E) { got += pos * rOf(c); pos = 0; break; } got += (1 / 3) * rOf(c); pos -= 1 / 3; third = true; stop = Math.max(stop, E); }
+    if (third && isFinite(e9) && c < e9) { got += pos * rOf(c); pos = 0; break; }
+    if (xb && d === xb) { got += pos * rOf(c); pos = 0; break; }
+    d = vNext(d);
+  }
+  return pos > 1e-9 ? {status: "open", bankedR: vf(got), left: vf(pos)} : {status: "done", r: vf(got - VAL.cost)};
+}
+
+// ---------- Massive bars (secret MASSIVE_KEY) ----------
+async function vBars(env, sym, mult, span, from, to){
+  const u = \`https://api.massive.com/v2/aggs/ticker/\${encodeURIComponent(sym)}/range/\${mult}/\${span}/\${from}/\${to}?adjusted=true&sort=asc&limit=50000&apiKey=\${encodeURIComponent(env.MASSIVE_KEY)}\`;
+  const r = await fetch(u); if (!r.ok) throw new Error(\`Massive \${r.status} \${sym} \${span}\`);
+  const j = await r.json(); return (j.results || []).map(b => ({t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v}));
+}
+
+// ---------- the nightly run: plan episodes from saved snapshots, score a chunk, join alerts / fills ----------
+// state "eps": {planned: {session: ver}, eps: {id: ep}, open: [ids], done counts}
+async function vPlan(db, st){
+  const snaps = vLatest(await vSnaps(db)); let changed = false;
+  for (const s of snaps) {
+    if (st.planned[s.session] === s.ver) continue;
+    const rows = await vLedgerRows(db, s.session, s.ver); changed = true;
+    const inSet = {A: new Set(), N: new Set()};
+    for (const r of rows) { const set = r.set === "N" ? "N" : "A"; inSet[set].add(r.sym);
+      // an active episode for this name + set continues; else a new one starts at this session
+      let ep = Object.values(st.eps).find(e => e.sym === r.sym && e.set === set && !e.left && !e.closed);
+      if (!ep) { const id = \`\${r.sym} · \${s.session} · \${set}\`; ep = st.eps[id] = {id, sym: r.sym, set, gate: r.nearGate || null, first: s.session, left: null, snaps: {}}; }
+      ep.snaps[s.session] = {list: r.list, D: r.adrD, e9: r.e9, exitBy: r.exitBy || null, dataTo: s.data_to, rulesVer: s.rules_ver};
+    }
+    for (const ep of Object.values(st.eps)) if (!ep.left && !ep.closed && ep.first < s.session && !inSet[ep.set].has(ep.sym) && !ep.trig) ep.left = s.session;
+    st.planned[s.session] = s.ver;
+  }
+  return changed;
+}
+async function vRun(env, now, opt){
+  opt = opt || {}; const db = env.DB; await initVal(db);
+  const to = opt.to || vScoredTo(now || Date.now()), st = await vStateGet(db, "eps", {planned: {}, eps: {}, scored: {}});
+  await vPlan(db, st);
+  const want = Object.values(st.eps).filter(e => !e.closed && e.first <= to && st.scored[e.sym] !== to);
+  const syms = [...new Set(want.map(e => e.sym))].slice(0, opt.chunk || +env.ENGINE_CHUNK || VAL.chunk);
+  const errs = [], done = []; let scored = 0;
+  for (const sym of syms) {
+    const eps = want.filter(e => e.sym === sym), first = eps.map(e => e.first).sort()[0];
+    let B30, BD;
+    try { B30 = await vBars(env, sym, 30, "minute", vAddDays(first, -VAL.warmDays), to); BD = await vBars(env, sym, 1, "day", vAddDays(first, -VAL.histDays), to);
+      BD = BD.map(b => ({...b, d: vET(b.t + 12 * 36e5).d})); }
+    catch (e) { errs.push(String(e && e.message || e)); continue; }
+    for (const ep of eps) {
+      const R = vScore(ep, B30, BD, to); ep.res = R; ep.trig = !!R.triggered; scored++;
+      if (R.status === "done" && (!R.ladder || R.ladder.status !== "open")) { ep.closed = to; done.push(ep); }
+    }
+    st.scored[sym] = to;
+  }
+  const B = [...vStatePut(db, "eps", {...st, eps: Object.fromEntries(Object.entries(st.eps).filter(([, e]) => !e.closed))})];
+  for (const ep of done) B.push(db.prepare("INSERT INTO v_done (id, sym, first, set_, data, at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data, at = excluded.at").bind(ep.id, ep.sym, ep.first, ep.set, JSON.stringify(ep), Date.now()));
+  await db.batch(B);
+  const left = Object.values(st.eps).filter(e => !e.closed && e.first <= to && st.scored[e.sym] !== to).length;
+  if (syms.length || errs.length) await vLog(db, "engine", errs.length ? "partial" : "ok", errs.slice(0, 5).join(" | "), {to, tickers: syms.length, episodes: scored, closed: done.length, waiting: left});
+  return {to, tickers: syms.length, episodes: scored, closed: done.length, waiting: left, errors: errs};
+}
+// every episode (open + done), with Taken / Skipped / Offline and the execution numbers joined on
+async function vAllEpisodes(db){
+  await initVal(db);
+  const st = await vStateGet(db, "eps", {planned: {}, eps: {}, scored: {}});
+  const done = ((await db.prepare("SELECT data FROM v_done").all()).results || []).map(r => { try { return JSON.parse(r.data); } catch (e) { return null; } }).filter(Boolean);
+  const eps = [...Object.values(st.eps), ...done.filter(d => !st.eps[d.id])];
+  const trigSess = [...new Set(eps.filter(e => e.res && e.res.trigger).map(e => e.res.trigger.session))];
+  const q = async (sql, args) => (await db.prepare(sql).bind(...args).all()).results || [];
+  const A = {}, F = {}, P = {}, FD = new Set(((await db.prepare("SELECT session FROM v_fillday").all()).results || []).map(r => r.session)), SK = {};
+  for (const s of trigSess) {
+    A[s] = await q("SELECT fire_id, sym, bar_time, fired_at, kind, parsed FROM v_alert WHERE session = ? AND playbook = 'leader-pullback'", [s]);
+    F[s] = await q("SELECT exec_id, sym, side, t, price, qty FROM v_fill WHERE session = ?", [s]);
+    P[s] = await q("SELECT at, kind FROM v_presence WHERE session = ? ORDER BY at", [s]);
+    for (const r of await q("SELECT sym, reason FROM v_skip WHERE session = ?", [s])) SK[s + "|" + r.sym] = r.reason;
+  }
+  for (const e of eps) {
+    const T = e.res && e.res.trigger; if (!T) continue;
+    const s = T.session;
+    const buys = (A[s] || []).filter(a => a.sym === e.sym && a.kind === "BUY"), gr = (A[s] || []).filter(a => a.sym === e.sym && a.kind === "GET_READY");
+    const am = buys.map(a => ({...a, cm: a.bar_time ? vET(a.bar_time).m + 30 : null}));
+    const match = am.find(a => a.cm === T.barClose);
+    const fills = (F[s] || []).filter(f => f.sym === e.sym && f.side === "BUY").sort((a, b) => a.t - b.t);
+    // online at the trigger bar's close? the latest tap that day before it, else the default (before 00:00 Singapore)
+    const tMs = vEtMs(s, T.barClose), taps = (P[s] || []).filter(p => p.at <= tMs), last = taps[taps.length - 1];
+    const online = last ? last.kind === "online" : tMs <= vOffAt(s);   // a bar closing at 11:00 ET is still actionable (protocol)
+    const cls = fills.length ? "Taken" : !FD.has(s) ? "Pending (fills not in yet)" : online ? "Skipped" : "Offline";
+    const f0 = fills[0], a0 = match || am[0];
+    e.join = {group: cls, online, alert: match ? "match" : am.length ? "alert at another bar" : "engine only", alertBarClose: a0 ? a0.cm : null,
+      alertTime: a0 ? new Date(a0.fired_at).toISOString() : null, alertParsed: a0 ? JSON.parse(a0.parsed || "{}") : null, getReadyTime: gr[0] ? new Date(gr[0].fired_at).toISOString() : null,
+      fill: f0 ? {time: new Date(f0.t).toISOString(), price: f0.price, qty: f0.qty, n: fills.length} : null,
+      fillLagMin: f0 && a0 && a0.fired_at ? Math.round((f0.t - a0.fired_at) / 60000) : null,
+      slipR: f0 && T.risk ? vf((f0.price - T.entry) / T.risk) : null, skipReason: SK[s + "|" + e.sym] || null};
+  }
+  // alerts with no engine episode that session ("alert only")
+  const alertOnly = [];
+  for (const s of trigSess) for (const a of (A[s] || []).filter(a => a.kind === "BUY")) if (!eps.some(e => e.sym === a.sym && e.res && e.res.trigger && e.res.trigger.session === s)) alertOnly.push({session: s, sym: a.sym, fire_id: a.fire_id});
+  return {eps, alertOnly};
+}
+const vEtMs = (d, m) => { for (const off of ["-05:00", "-04:00"]) { const t = Date.parse(\`\${d}T\${String(Math.floor(m / 60)).padStart(2, "0")}:\${String(m % 60).padStart(2, "0")}:00\${off}\`); const e = vET(t); if (e.d === d && e.m === m) return t; } return NaN; };
+const V_COLS = ["episode", "ticker", "set", "near_miss_gate", "first_listed", "list_at_trigger", "status", "exit", "primary_r", "ladder_r", "alt_half_1_5r", "alt_all_2r", "mfe_r", "mae_r",
+  "triggered", "trigger_session", "trigger_session_no", "trigger_bar_close_et", "trigger_by_1100", "entry", "stop", "risk", "entry_off_low_adr", "gap_open_adr", "gap_through_stop",
+  "time_1r_sessions", "time_2r_sessions", "exit_session", "missing_data", "group", "online_at_trigger", "alert_vs_engine", "alert_time", "get_ready_time", "fill_time", "fill_price", "fill_lag_min", "slippage_r", "skip_reason", "rules_version", "engine"];
+function vRow(e){
+  const R = e.res || {}, T = R.trigger || {}, J = e.join || {}, sn = e.snaps ? e.snaps[Object.keys(e.snaps).sort()[0]] : {};
+  const hm = m => m == null ? "" : \`\${String(Math.floor(m / 60)).padStart(2, "0")}:\${String(m % 60).padStart(2, "0")}\`;
+  return [e.id, e.sym, e.set, e.gate || "", e.first, T.list || "", R.status || "not scored", R.exit || "", R.r ?? "", R.ladder && R.ladder.r != null ? R.ladder.r : "", R.altHalf15 ?? "", R.altAll2 ?? "", R.mfeR ?? "", R.maeR ?? "",
+    R.triggered == null ? "" : R.triggered ? "Y" : "N", T.session || "", T.sessionNo || "", hm(T.barClose), T.session ? (T.by11 ? "Y" : "N") : "", T.entry ?? "", T.stop ?? "", T.risk ?? "", T.offLowADR ?? "", T.gapOpenADR ?? "", R.gapThroughStop ? "Y" : "",
+    R.time1R ? R.time1R.sessionNo : "", R.time2R ? R.time2R.sessionNo : "", R.exitSession || "", R.missing || "", J.group || "", J.online == null ? "" : J.online ? "Y" : "N", J.alert || "", J.alertTime || "", J.getReadyTime || "",
+    J.fill ? J.fill.time : "", J.fill ? J.fill.price : "", J.fillLagMin ?? "", J.slipR ?? "", J.skipReason || "", sn && sn.rulesVer || "", R.engine || ""];
+}
+const vCsv = rows => rows.map(r => r.map(v => { const s = String(v ?? ""); return /[",\\n]/.test(s) ? \`"\${s.replace(/"/g, '""')}"\` : s; }).join(",")).join("\\n");
+
+// ---------- MCP: read tools (both connectors) + write tools (WRITE_KEY only) ----------
+const V_READ = [
+  {name: "ledger_session", title: "Validation ledger — one session", description: "The 20-session validation ledger for one US session (the board's write-once snapshot): rules version, board version, data-to date, device, versions saved (corrections kept), and the rows — every Ready, On deck, Ready-LATE and near-miss name with every gate value, ranking key and MA-confluence field as numbers. Paged.", inputSchema: {type: "object", properties: {session: {type: "string", description: "YYYY-MM-DD (US session the snapshot was taken for). Omit = the latest."}, set: {type: "string", enum: ["all", "A", "N"], description: "A = eligible, N = near-miss"}, offset: {type: "number"}, limit: {type: "number", description: "Rows per page, default 100, max 400"}, version: {type: "number", description: "Default: the latest (a correction)"}}}, annotations: {readOnlyHint: true}},
+  {name: "open_episodes", title: "Validation — open episodes", description: "Episodes still being scored (watching for a trigger or in the hold), with the engine's state so far, and the engine's last runs (counts, failures).", inputSchema: {type: "object", properties: {limit: {type: "number"}}}, annotations: {readOnlyHint: true}},
+  {name: "validation_export", title: "Validation — whole-window export", description: "Every scored episode, whole window, as CSV (or JSON): set, list, trigger, entry, stop, primary R, ladder R, alt exits, MFE / MAE, time to 1R / 2R, Taken / Skipped / Offline, alert vs engine, fill and slippage, skip reason, rules version, engine version. Paged; join to ledger_session rows by ticker + first listed session for the gate values.", inputSchema: {type: "object", properties: {format: {type: "string", enum: ["csv", "json"]}, offset: {type: "number"}, limit: {type: "number", description: "default 300, max 1000"}, from: {type: "string"}, to: {type: "string"}}}, annotations: {readOnlyHint: true}}
+];
+const V_WRITE = [
+  {name: "ingest_alerts", title: "Ingest TradingView alerts", description: "Store TradingView alert-log events for the validation ledger. Pass the events exactly as the TradingView connector returns them (fire_id, symbol, bar_time, fired_at, message, name). Duplicates are dropped on fire_id; the raw event is kept; Leader Pullback GET READY / BUY / STOPPED messages are parsed; First Pullback alerts are tagged paper; unparsed messages are stored and counted, never dropped. Returns the counts.", inputSchema: {type: "object", properties: {events: {type: "array", items: {type: "object"}}}, required: ["events"]}},
+  {name: "ingest_fills", title: "Ingest IBKR fills", description: "Store IBKR US-book fills for one session (exclude Asian exchanges). Each fill: exec_id (execution id), ticker, side (BUY / SELL), time (ISO), price, quantity. Duplicates dropped on exec_id; raw kept. Always pass session (YYYY-MM-DD) — an empty list for a session with no fills still records that the session's fills were pulled.", inputSchema: {type: "object", properties: {session: {type: "string"}, fills: {type: "array", items: {type: "object"}}}, required: ["session", "fills"]}},
+  {name: "log_run", title: "Log a validation job run", description: "Add a line to the ledger's run log: job name (e.g. Validation Feed), status (ok / failed / retry), counts and a short note.", inputSchema: {type: "object", properties: {job: {type: "string"}, status: {type: "string"}, note: {type: "string"}, counts: {type: "object"}}, required: ["job", "status"]}}
+];
+async function vTool(name, a, env){
+  a = a || {}; const db = env.DB; await initVal(db);
+  if (name === "ingest_alerts") { const c = await vIngestAlerts(db, a); await vLog(db, "ingest_alerts", "ok", "", c); return {text: JSON.stringify(c, null, 1)}; }
+  if (name === "ingest_fills") { if (!/^\\d{4}-\\d\\d-\\d\\d$/.test(String(a.session || ""))) return {text: "session (YYYY-MM-DD) is required", isError: true}; const c = await vIngestFills(db, a); await vLog(db, "ingest_fills", "ok", "", c); return {text: JSON.stringify(c, null, 1)}; }
+  if (name === "log_run") { await vLog(db, a.job, a.status, a.note, a.counts); return {text: "logged"}; }
+  if (name === "ledger_session") {
+    const snaps = await vSnaps(db); if (!snaps.length) return {text: "No ledger snapshot saved yet."};
+    const sess = a.session || snaps[snaps.length - 1].session, vers = snaps.filter(s => s.session === sess); if (!vers.length) return {text: \`No snapshot for \${sess}. Saved sessions: \${[...new Set(snaps.map(s => s.session))].join(", ")}\`, isError: true};
+    const v = a.version != null ? vers.find(s => s.ver === +a.version) : vers[vers.length - 1]; if (!v) return {text: "No such version", isError: true};
+    let rows = await vLedgerRows(db, sess, v.ver); if (a.set === "A" || a.set === "N") rows = rows.filter(r => r.set === a.set);
+    const off = Math.max(0, +a.offset || 0), lim = Math.max(1, Math.min(400, +a.limit || 100));
+    return {text: JSON.stringify({session: sess, versions: vers, shown: v.ver, total_rows: rows.length, offset: off, rows: rows.slice(off, off + lim)}, null, 1)};
+  }
+  if (name === "open_episodes") {
+    const st = await vStateGet(db, "eps", {eps: {}}), L = Object.values(st.eps).filter(e => !e.closed);
+    const log = ((await db.prepare("SELECT at, job, status, note, counts FROM v_log ORDER BY at DESC LIMIT 15").all()).results || []).map(r => ({...r, at: new Date(r.at).toISOString()}));
+    return {text: JSON.stringify({open: L.length, episodes: L.slice(0, Math.min(500, +a.limit || 200)).map(e => ({id: e.id, set: e.set, gate: e.gate, first: e.first, left: e.left, status: e.res ? e.res.status : "not scored yet", trigger: e.res ? e.res.trigger || null : null, markR: e.res ? e.res.markR ?? null : null})), run_log: log, engine: VAL.engine, engine_notes: VAL.notes}, null, 1)};
+  }
+  if (name === "validation_export") {
+    const {eps, alertOnly} = await vAllEpisodes(db); let L = eps.sort((x, y) => (x.first < y.first ? -1 : x.first > y.first ? 1 : x.sym < y.sym ? -1 : 1));
+    if (a.from) L = L.filter(e => e.first >= a.from); if (a.to) L = L.filter(e => e.first <= a.to);
+    const off = Math.max(0, +a.offset || 0), lim = Math.max(1, Math.min(1000, +a.limit || 300)), page = L.slice(off, off + lim);
+    if (a.format === "json") return {text: JSON.stringify({total: L.length, offset: off, episodes: page, alert_only: alertOnly, engine: VAL.engine}, null, 1)};
+    return {text: \`total \${L.length} · offset \${off} · alert-only BUY alerts: \${alertOnly.length}\\n\` + vCsv([V_COLS, ...page.map(vRow)])};
+  }
+  return {text: "Unknown tool " + name, isError: true};
+}
+
+// ---------- board endpoints (SYNC_KEY) ----------
+async function valHttp(req, env, u, path){
+  const db = env.DB; await initVal(db);
+  const body = async () => { try { return await req.json(); } catch (e) { return null; } };
+  const sess = String(u.searchParams.get("session") || "").slice(0, 10), okD = d => /^\\d{4}-\\d\\d-\\d\\d$/.test(d || "");
+  if (path === "/val/ledger" && req.method === "GET") { const s = (await vSnaps(db)).filter(x => !sess || x.session === sess); return J({versions: s}); }
+  if (path === "/val/ledger" && req.method === "PUT") {
+    if (!okD(sess)) return J({error: "session (YYYY-MM-DD) needed"}, 400);
+    const b = await body(); if (!b || !Array.isArray(b.rows)) return J({error: "bad body"}, 400);
+    const vers = (await vSnaps(db)).filter(x => x.session === sess), last = vers[vers.length - 1];
+    if (last && !b.correction) return J({exists: true, ver: last.ver, savedAt: last.saved_at, dev: last.name || last.dev, rulesVer: last.rules_ver}, 409);
+    const ver = last ? last.ver + 1 : 1, rows = JSON.stringify(b.rows), feed = String(b.feed || ""), ms = JSON.stringify(b.mapsrc || null);
+    if (rows.length + feed.length > 25e6) return J({error: "too big"}, 413);
+    const P = [...vSplit(rows).map((p, i) => ["rows", i, p]), ...vSplit(feed).map((p, i) => ["feed", i, p]), ["mapsrc", 0, ms], ["ctx", 0, JSON.stringify(b.ctx || null)]];
+    const st = P.map(([k, i, p]) => db.prepare("INSERT INTO led_part (session, ver, kind, i, data) VALUES (?, ?, ?, ?, ?)").bind(sess, ver, k, i, p));
+    st.push(db.prepare("INSERT INTO led_snap (session, ver, data_to, rules_ver, board_ver, dev, name, saved_at, correction, n_rows, parts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind(sess, ver, clip(b.dataTo, 10), clip(b.rulesVer, 60), clip(b.boardVer, 40), clip(b.dev, 40), clip(b.name, 60), Date.now(), b.correction ? 1 : 0, b.rows.length, P.length));
+    for (let i = 0; i < st.length; i += 40) await db.batch(st.slice(i, i + 40));
+    if (b.correction) await vLog(db, "ledger", "correction", clip(b.why || "", 300), {session: sess, ver, rows: b.rows.length});
+    return J({ok: true, ver, rows: b.rows.length});
+  }
+  if (path === "/val/maplist" && req.method === "PUT") {   // MAP's lists for the session, sent once MAP is imported (after the snapshot)
+    const b = await body(); const vers = (await vSnaps(db)).filter(x => x.session === sess); if (!b || !vers.length) return J({error: "no snapshot for that session"}, 404);
+    const v = vers[vers.length - 1].ver;
+    await db.batch([db.prepare("DELETE FROM led_part WHERE session = ? AND ver = ? AND kind = 'maplist'").bind(sess, v), db.prepare("INSERT INTO led_part (session, ver, kind, i, data) VALUES (?, ?, 'maplist', 0, ?)").bind(sess, v, JSON.stringify(b).slice(0, 200000))]);
+    return J({ok: true});
+  }
+  if (path === "/val/raw" && req.method === "GET") {     // the saved feed CSV / MAP Source list for a session
+    const kind = ["mapsrc", "ctx", "maplist"].includes(u.searchParams.get("kind")) ? u.searchParams.get("kind") : "feed", vers = (await vSnaps(db)).filter(x => x.session === sess); if (!vers.length) return J({error: "no snapshot"}, 404);
+    const v = vers[vers.length - 1].ver, r = (await db.prepare("SELECT i, data FROM led_part WHERE session = ? AND ver = ? AND kind = ? ORDER BY i").bind(sess, v, kind).all()).results || [];
+    return new Response(r.map(x => x.data).join(""), {headers: {...CORS, "content-type": kind === "feed" ? "text/csv" : "application/json"}});
+  }
+  if (path === "/val/presence" && req.method === "POST") {
+    const b = await body(); if (!b || !/^(online|offline)$/.test(b.kind || "")) return J({error: "kind online / offline"}, 400);
+    const at = +b.at || Date.now(), e = vET(at), s = okD(b.session) ? b.session : (e.m < 4 * 60 ? vAddDays(e.d, -1) : e.d);
+    await db.prepare("INSERT OR REPLACE INTO v_presence (session, at, kind, dev) VALUES (?, ?, ?, ?)").bind(s, at, b.kind, clip(b.dev, 60)).run();
+    return J({ok: true, session: s, at, offDefault: vOffAt(s)});
+  }
+  if (path === "/val/presence" && req.method === "GET") {
+    const s = okD(sess) ? sess : vET(Date.now()).d, r = (await db.prepare("SELECT at, kind, dev FROM v_presence WHERE session = ? ORDER BY at").bind(s).all()).results || [];
+    return J({session: s, offDefault: vOffAt(s), taps: r});
+  }
+  if (path === "/val/skips" && req.method === "GET") {
+    const {eps} = await vAllEpisodes(db), s = okD(sess) ? sess : vScoredTo(Date.now());
+    const L = eps.filter(e => e.res && e.res.trigger && e.res.trigger.session === s).map(e => ({sym: e.sym, id: e.id, set: e.set, barClose: e.res.trigger.barClose, group: e.join ? e.join.group : null, reason: e.join ? e.join.skipReason : null}));
+    return J({session: s, fillsIn: L.some(x => x.group && !/^Pending/.test(x.group)), triggered: L});
+  }
+  if (path === "/val/skip" && req.method === "POST") {
+    const b = await body(); if (!b || !okD(b.session) || !b.sym) return J({error: "session + sym"}, 400);
+    const why = String(b.reason || "").toUpperCase(); if (why && !/^(MARKET|GROUP|STOCK|RISK|OTHER)$/.test(why)) return J({error: "reason"}, 400);
+    if (!why) await db.prepare("DELETE FROM v_skip WHERE session = ? AND sym = ?").bind(b.session, vSym(b.sym)).run();
+    else await db.prepare("INSERT OR REPLACE INTO v_skip (session, sym, reason, at) VALUES (?, ?, ?, ?)").bind(b.session, vSym(b.sym), why, Date.now()).run();
+    return J({ok: true});
+  }
+  if (path === "/val/log" && req.method === "POST") { const b = await body() || {}; await vLog(db, b.job || "board", b.status || "info", b.note || "", b.counts || {}); return J({ok: true}); }
+  if (path === "/val/export.csv" && req.method === "GET") {
+    const {eps} = await vAllEpisodes(db); eps.sort((x, y) => (x.first < y.first ? -1 : x.first > y.first ? 1 : x.sym < y.sym ? -1 : 1));
+    return new Response(vCsv([V_COLS, ...eps.map(vRow)]), {headers: {...CORS, "content-type": "text/csv", "cache-control": "no-store"}});
+  }
+  if (path === "/val/run" && req.method === "POST") { if (!env.MASSIVE_KEY) return J({error: "add the secret MASSIVE_KEY"}, 500); return J(await vRun(env, Date.now())); }   // a manual nudge (same as the cron)
+  return J({error: "not found"}, 404);
+}
+async function mcpW(req, env){       // the write connector: same protocol as the read one
+  if (req.method !== "POST") return new Response(null, {status: 405, headers: {...CORS, Allow: "POST"}});
+  let m; try { m = await req.json(); } catch (e) { return J({jsonrpc: "2.0", id: null, error: {code: -32700, message: "Parse error"}}, 400); }
+  await init(env.DB); await initVal(env.DB);
+  const one = async x => {
+    if (!x || typeof x !== "object" || x.id === undefined || x.id === null) return null;
+    const ok = result => ({jsonrpc: "2.0", id: x.id, result}), no = (code, message) => ({jsonrpc: "2.0", id: x.id, error: {code, message}});
+    if (x.method === "initialize") { const v = x.params && x.params.protocolVersion; return ok({protocolVersion: PROTO.includes(v) ? v : PROTO[0], capabilities: {tools: {listChanged: false}}, serverInfo: {name: "deep-space-board-validation", title: "Deep Space Board — validation (write)", version: "1.0.0"}, instructions: "Write access to Eugene's Deep Space Board validation ledger (20-session test, 16 Nov - 14 Dec 2026). Use ingest_alerts / ingest_fills from the nightly Validation Feed job only; log_run for its run log. The read tools are the same as on the read connector."}); }
+    if (x.method === "ping") return ok({});
+    if (x.method === "tools/list") return ok({tools: [...V_WRITE, ...V_READ]});
+    if (x.method === "tools/call") { const p = x.params || {}; if (![...V_WRITE, ...V_READ].some(t => t.name === p.name)) return no(-32602, "Unknown tool " + p.name);
+      try { const r = await vTool(p.name, p.arguments, env); return ok({content: [{type: "text", text: r.text}], isError: !!r.isError}); } catch (e) { return ok({content: [{type: "text", text: "Failed: " + (e && e.message || e)}], isError: true}); } }
+    return no(-32601, "Method not found: " + x.method);
+  };
+  if (Array.isArray(m)) { const out = []; for (const x of m) { const r = await one(x); if (r) out.push(r); } return out.length ? J(out) : new Response(null, {status: 202, headers: CORS}); }
+  const r = await one(m); return r ? J(r) : new Response(null, {status: 202, headers: CORS});
+}
+
 export default {
   async fetch(req, env){
     if (req.method === "OPTIONS") return new Response(null, {status: 204, headers: CORS});
     const u = new URL(req.url), path = u.pathname.replace(/\\/+$/, "") || "/";
     if (path === "/") return J({ok: true, app: "deep-space-sync"});
+    if (path.startsWith("/mcpw/")) {                              // 14 Nov: the validation write connector — its own key, in the address
+      if (!env.WRITE_KEY || !env.DB) return J({error: "write connector not set up — add the secret WRITE_KEY"}, 404);
+      const k = path.slice(6), bearer = (req.headers.get("Authorization") || "").replace(/^Bearer /, "");
+      if (!same(k, env.WRITE_KEY) && !same(bearer, env.WRITE_KEY)) return J({error: "not found"}, 404);
+      return mcpW(req, env);
+    }
     if (path.startsWith("/mcp/") || path === "/mcp") {           // the Claude connector: its own read-only key, in the address
       if (!env.READ_KEY || !env.DB) return J({error: "connector not set up — add the secret READ_KEY"}, 404);
       const k = path.slice(5), bearer = (req.headers.get("Authorization") || "").replace(/^Bearer /, "");
@@ -13100,6 +13576,7 @@ export default {
     }
     if (!env.DB || !env.SYNC_KEY) return J({error: "worker not set up — add the D1 binding DB and the secret SYNC_KEY"}, 500);
     if (!same(req.headers.get("Authorization") || "", "Bearer " + env.SYNC_KEY)) return J({error: "wrong sync key"}, 401);
+    if (path.startsWith("/val/")) { await init(env.DB); return valHttp(req, env, u, path); }   // 14 Nov: validation ledger (board side)
     const slot = clip(u.searchParams.get("slot") || "us", 24).replace(/[^a-z0-9-]/gi, "") || "us";
     await init(env.DB);
     const meta = await env.DB.prepare("SELECT v, dev, name, hash, size, parts FROM meta WHERE slot = ?").bind(slot).first();
@@ -13138,6 +13615,12 @@ export default {
       return J({v});
     }
     return J({error: "not found"}, 404);
+  },
+  // 14 Nov: the overnight outcome engine (Cron Triggers "*/3 23 * * 1-5" + "*/3 0-2 * * 2-6" UTC; it does nothing before 18:30 ET
+  // or once every open episode is scored for the day). Needs the secret MASSIVE_KEY.
+  async scheduled(event, env, ctx){
+    if (!env.DB || !env.MASSIVE_KEY) return;
+    ctx.waitUntil(vRun(env, Date.now()).catch(e => vLog(env.DB, "engine", "failed", String(e && e.message || e), {})));
   }
 };
 `;
@@ -16896,9 +17379,9 @@ function mlCsv(){
   const n4 = v => v == null || !isFinite(v) ? "" : +v.toFixed(4);
   const KL = {A: "A list", B: "B list", S: "Stalk"};
   const src = S.snap.live && S.snap.live.dataMs ? `Live (Massive, ${lvDT()}) ${new Date(S.snap.live.dataMs).toISOString()}` : `File ${S.snap.asOf || ""}`;
-  const H = ["listed", "last_listed", "list", "ticker", "price_then", "adr_pct_then", "price_now", "now_from", "move_pct", "move_adr", "best_since_adr", "worst_since_adr", "sessions", "entry_check_list_now", "location_now", "in_current_file"];
+  const H = ["listed", "last_listed", "list", "ticker", "price_then", "adr_pct_then", "price_now", "now_from", "move_pct", "move_adr", "best_since_adr", "worst_since_adr", "sessions", "entry_check_list_now", "location_now", "in_current_file", "rules_version"];   // 14 Nov 2026: rules_version (validation ledger) appended last
   const rows = mlCsvRows(), L = [H.join(",")];
-  for (const o of rows) L.push([o.d, o.last, KL[o.k], o.s, n4(o.px), n4(o.adrPct), n4(o.now), o.now == null ? "" : src, n4(o.pct), n4(o.u), n4(o.best), n4(o.worst), o.sess, o.list, o.loc, o.inFile ? "yes" : "no"].map(q).join(","));
+  for (const o of rows) L.push([o.d, o.last, KL[o.k], o.s, n4(o.px), n4(o.adrPct), n4(o.now), o.now == null ? "" : src, n4(o.pct), n4(o.u), n4(o.best), n4(o.worst), o.sess, o.list, o.loc, o.inFile ? "yes" : "no", typeof valMlRv === "function" ? valMlRv(o.d) : ""].map(q).join(","));
   if (!rows.length) { toast("Nothing logged yet"); return; }
   download(`deep-space-map-lists-tracker-${fmtDate(new Date())}.csv`, L.join("\n"), "text/csv");
 }
@@ -21614,6 +22097,363 @@ document.head.insertAdjacentHTML("beforeend", `<style>td.dc{white-space:nowrap}.
 <script>
 "use strict";
 /* =====================================================================
+   VALIDATION FREEZE + RULES VERSION (14 Nov 2026) — TRACKING ONLY: no list, rank, Setup Quality, check, MAP import or alert
+   changes. Spec: docs/validation-2026-11-handover.md (20-session validation — protocol & Claude Code handover, approved by
+   Eugene 13 Nov 2026), handover item 1. Eugene (chat, 13 Nov 2026): "Measurement only. No change to any Spec61 check, list,
+   rank, Setup Quality, MAP import or alert logic."
+   WHAT IT DOES
+   - Until 14 Dec 2026 (ET) the board runs on the ruling values whatever a device's own settings say: RS weights Swing
+     (1W 15 · 1M 30 · 3M 35 · 6M 20), risk-adjust RS off, benchmark QQQ, groups = Our groups with ≥ 2 members, ADR floor
+     3.0 / $200B mega-cap exemption, stage-age touch tolerance 0. These are the board's defaults, so a device that never
+     changed them sees exactly the numbers it saw before. Enforced at the "compute" hook point (start of computeAll, before
+     any number is worked out) — a synced or bookmarked setting can't slip past it.
+   - Those settings are greyed out (Settings, Themes "Group by" / "Min members", ADR floor, the 21 EMA touch box).
+   - Banner on every page: "Validation freeze until 14 Dec — list rules locked", with the Online / Offline buttons (item 4).
+     Unlock = type UNLOCK; logged on this device (adrb.valLock.log) and in the worker's run log. While unlocked the feed's
+     Rules Version reads "…·UNLOCKED-<hash>" and the ledger saves nothing.
+   - Rules Version = the board version + a 6-character hash of every list-affecting value in force (the values above, the
+     Spec 6.1 constants S61, the stage-age, tradeable-liquidity and ADR-floor constants). New Deep Space feed column
+     "Rules Version" at the very end (FEED_EXT), on every row. Same column on the MAP lists tracker CSV.
+   NEVER CHANGES any number on a device running the default settings (the regression check proves it).
+   STORAGE NEW: adrb.valLock {unlocked, at, dev, log: [{at, what}]}. Hook points: "compute" (new, BOARD HOOKS list),
+   "settings", "tab", "all". No function overrides.
+   ===================================================================== */
+const VALF = {now: 0, until: "2026-12-14", key: "adrb.valLock", rule: {wPreset: "swing", normADR: false, bench: "QQQ", groupBy: "ds", minGroup: 2}, adrf: {floor: 3.0, megaB: 200}, lpTol: 0, toldAt: 0};
+const valLock = () => { try { return store.get(VALF.key, null) || {}; } catch (e) { return {}; } };
+const valToday = () => dET(VALF.now || Date.now());   // VALF.now: a fixed clock for the tests only (0 = the real time)
+function valFrozen(){ return valToday() <= VALF.until && !valLock().unlocked; }
+// force the ruling values (called at the start of every computeAll while frozen)
+function valEnforce(){
+  if (!valFrozen()) return [];
+  const ch = [];
+  for (const [k, v] of Object.entries(VALF.rule)) if (JSON.stringify(CFG[k]) !== JSON.stringify(v)) { CFG[k] = v; ch.push(k); }
+  const sw = W_PRESETS.swing.w; if (JSON.stringify(CFG.w) !== JSON.stringify(sw)) { CFG.w = {...sw}; if (!ch.includes("wPreset")) ch.push("weights"); }
+  try { const a = store.get("adrb.adrfCfg", null); if (a && (+a.floor !== VALF.adrf.floor || +a.megaB !== VALF.adrf.megaB)) { store.set("adrb.adrfCfg", null); ch.push("ADR floor"); } } catch (e) {}
+  try { const t = +store.get("adrb.lpTol", 0); if (t && t !== VALF.lpTol) { store.set("adrb.lpTol", VALF.lpTol); ch.push("21 EMA touch tolerance"); } } catch (e) {}
+  if (ch.length) { valLockLog("reset to the ruling values: " + ch.join(", ")); if (Date.now() - VALF.toldAt > 60000) { VALF.toldAt = Date.now(); setTimeout(() => toast("Validation freeze: " + ch.join(", ") + " put back to the ruling values"), 50); } }
+  return ch;
+}
+hookOn("compute", "validationFreeze", () => { valEnforce(); });
+function valLockLog(what){
+  try { const o = valLock(); o.log = [...(o.log || []), {at: new Date().toISOString(), what}].slice(-200); store.set(VALF.key, o); } catch (e) {}
+}
+// what's in force now, as one string (the hash input)
+function valRulesState(){
+  const g = n => { try { return n(); } catch (e) { return null; } };
+  return JSON.stringify({w: weightsNow(), normADR: !!CFG.normADR, bench: CFG.bench, groupBy: CFG.groupBy, minGroup: CFG.minGroup,
+    adrf: g(() => adrfCfgRaw()), adrfDef: g(() => ADRF_DEF), adrfT: g(() => ADRF_T), lpTol: g(() => lpTol()), S61, LP: g(() => LP), LIQ_T: g(() => LIQ_T)});
+}
+const valHash = s => { const h = syHash(s); return (typeof h === "number" ? h.toString(36) : String(h)).replace(/[^a-z0-9]/gi, "").slice(-6).padStart(6, "0"); };
+function valRulesVer(){
+  const v = typeof boardVerTxt === "function" ? boardVerTxt() : "v?", h = valHash(valRulesState());
+  return valLock().unlocked && valToday() <= VALF.until ? `${v}·UNLOCKED-${h}` : `${v}·${h}`;
+}
+FEED_EXT.push({h: ["Rules Version"], cells: () => [valRulesVer()]});
+// grey out the list-changing controls while frozen
+const VALF_SEL = '[data-s="wPreset"],[data-w],[data-s="normADR"],[data-s="bench"],[data-s="groupBy"],[data-s="minGroup"],#adrfFloor,#adrfMega,[data-lptol],#thBy button,#thMin';
+function valGrey(root){
+  if (!valFrozen()) return;
+  (root || document).querySelectorAll(VALF_SEL).forEach(el => { if (el.disabled) return; el.disabled = true; el.classList.add("valoff"); el.title = "Locked for the 20-session validation (until 14 Dec) — unlock from the banner"; });
+}
+hookOn("settings", "validationFreeze", () => valGrey($("settings")));
+hookOn("tab", "validationFreeze", () => valGrey());
+hookOn("all", "validationFreeze", ph => { if (ph === "after") { valGrey(); valBanner(); } });
+// ---- the banner (all pages, desktop + phone): freeze + online window + ledger status
+function valBanner(){
+  let b = $("valBar");
+  if (valToday() > VALF.until && !valOnlineWanted()) { if (b) b.remove(); return; }
+  if (!b) { const h = document.querySelector("header.top"); if (!h) return; h.insertAdjacentHTML("afterend", `<div id="valBar" class="valbar"></div>`); b = $("valBar");
+    b.onclick = e => { const x = e.target.closest("[data-valb]"); if (x) valBarClick(x.dataset.valb); }; }
+  const L = valLock(), on = typeof valOnlineState === "function" ? valOnlineState() : null, led = typeof valLedgerTxt === "function" ? valLedgerTxt() : "";
+  const fr = valToday() <= VALF.until;
+  const h = (fr ? (L.unlocked ? `<b class="valun">List rules UNLOCKED</b> — the feed is stamped UNLOCKED and the ledger saves nothing. <button class="btn sm" data-valb="lock">Lock again</button>`
+      : `<b>Validation freeze until 14 Dec</b> — list rules locked <button class="btn sm ghost" data-valb="unlock" title="Change a list rule during the test (typed confirmation, logged)">Unlock…</button>`) : "")
+    + (on ? ` <span class="valsep">·</span> <span class="valon ${on.online ? "on" : "off"}" title="${esc(on.tip)}">${esc(on.txt)}</span> ${on.online ? `<button class="btn sm" data-valb="offline">Going offline</button>` : `<button class="btn sm" data-valb="online">Back online</button>`}` : "")
+    + (led ? ` <span class="valsep">·</span> <span class="small">${led}</span>` : "");
+  if (b._h !== h) { b.innerHTML = h; b._h = h; }
+}
+function valBarClick(k){
+  if (k === "unlock") {
+    const t = prompt("Unlocking lets a device change list rules during the 20-session validation. It is logged, the feed is stamped UNLOCKED and the ledger saves nothing until you lock again.\n\nType UNLOCK to continue.");
+    if (String(t || "").trim() !== "UNLOCK") { toast("Still locked"); return; }
+    const o = valLock(); o.unlocked = true; o.at = new Date().toISOString(); o.dev = syName(); store.set(VALF.key, o); valLockLog("unlocked on " + syName());
+    valPost("/val/log", {job: "rule-lock", status: "unlocked", note: "unlocked on " + syName()}); valBanner(); renderSettingsSafe(); toast("List rules unlocked — logged");
+  } else if (k === "lock") {
+    const o = valLock(); o.unlocked = false; o.at = new Date().toISOString(); store.set(VALF.key, o); valLockLog("locked again on " + syName());
+    valPost("/val/log", {job: "rule-lock", status: "locked", note: "locked again on " + syName()});
+    computeAll(); renderAll(); toast("List rules locked — ruling values back");
+  } else if (k === "online" || k === "offline") valPresence(k);
+}
+function renderSettingsSafe(){ try { if (typeof renderSettings === "function" && $("settings") && !$("settings").classList.contains("hidden")) renderSettings(); } catch (e) {} }
+// worker calls (the sync link + key from Settings → Sync between devices)
+const valCan = () => !!(syUrl() && syKey());
+async function valFetch(path, opt){
+  if (!valCan()) throw new Error("no sync link");
+  const r = await fetch(syUrl() + path, {cache: "no-store", ...(opt || {}), headers: {"Authorization": "Bearer " + syKey(), ...(opt && opt.body ? {"Content-Type": "application/json"} : {})}});
+  return r;
+}
+async function valPost(path, body){ try { const r = await valFetch(path, {method: "POST", body: JSON.stringify(body)}); return r.ok ? await r.json() : null; } catch (e) { return null; } }
+document.head.insertAdjacentHTML("beforeend", `<style>.valbar{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;font-size:12px;padding:4px 10px;margin:-4px 0 8px;border:1px solid var(--line);border-radius:8px;background:color-mix(in oklab,var(--card) 85%,transparent)}
+.valbar .btn.sm{padding:1px 8px;font-size:11px}.valsep{opacity:.4}.valun{color:var(--crit)}.valon.on{color:var(--good,#2a8)}.valon.off{opacity:.75}input.valoff,select.valoff,button.valoff{opacity:.55;cursor:not-allowed}</style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   VALIDATION LEDGER — DAILY SNAPSHOT + MA CONFLUENCE (14 Nov 2026) — TRACKING ONLY. Handover items 2 and 3
+   (docs/validation-2026-11-handover.md, approved 13 Nov 2026). Reads the board's own numbers; never changes a list, rank,
+   check, Setup Quality, size, the feed's existing columns, MAP import or the Board log.
+   WHEN: once per US session, the first time a device has that session's snapshot ready — the trading day itself (ET), the
+   completed session before it as the data-to date (premarket files; a file holding today's bar is not a snapshot), price
+   history loaded, ADR-floor market caps / tradeable-liquidity fetches finished. Desktop or phone, whichever is first: the
+   worker keeps the first save and refuses the second (409). "Save a correction" re-saves as a new version with a reason
+   (both kept). Nothing is saved while the list rules are unlocked.
+   ROWS (whole file, filters ignored): set A = Ready to trade (incl. Ready-LATE), On deck L2 / L3 / one thing missing;
+   set N = near-miss — fails exactly one hard gate (1 liquidity, 1b tradeable liquidity, 1c ADR floor, 2 data integrity,
+   3 trend, 5 stretch, 7 group, 8 RS) and would be on an A list if that one gate passed. Every field of the protocol's
+   fields table that the board holds, as numbers (valRow); fields the board doesn't hold are left out and listed in
+   docs/validation-build-2026-11-14.md.
+   MA CONFLUENCE (item 3, measurement only — never fed into Setup Quality, ranks, lists or checks), from the same daily
+   bars as Spec 6.1 (dssBars): braid (existing), 9–21 gap in ADR, stack order, "reclaimed all three" = a close above the
+   9 EMA, 21 EMA and 50 SMA after at least one prior close below at least one of them, within the last 3 sessions
+   (sessions ago, 0 = the data-to session), the same for any two of the three, the 50 SMA 10-session slope (in ADR) at the
+   all-three reclaim, and the Zone Line label.
+   ALSO SAVED: the raw Deep Space feed CSV (with Rules Version) and the In MAP Source list. Later the same session the MAP
+   import's lists are added (they're not known at the premarket snapshot): PUT /val/maplist.
+   STORAGE NEW: adrb.valSaved {session: {ver, at, dev | refused}} (newest 60). Hook "all"; no override.
+   ===================================================================== */
+const VALL = {key: "adrb.valSaved", timer: null, tries: 0, busy: false, last: null, err: ""};
+const VAL_EC = ["A-eligible", "OnDeck-L2", "OnDeck-1blocker", "OnDeck-L3"];
+const valR = (v, dp = 4) => v == null || !isFinite(v) ? null : +(+v).toFixed(dp);
+// the session the loaded data is a snapshot for (null + why when it isn't one)
+function valSnapSession(){
+  if (!S.snap || !S.has || !S.has.hist || !HIST.nD) return {why: "no price history loaded"};
+  const today = valToday(); if (!isSess(today)) return {why: "not a trading day"};
+  const r0 = S.stocks.find(r => !r.etf && dssOf(r.sym) && dssOf(r.sym).s61); if (!r0) return {why: "no Entry Check values"};
+  const to = dssOf(r0.sym).s61.to, want = prevSess(today);
+  if (to === today) return {why: "the loaded data holds today's bar — the snapshot is taken from the premarket files"};
+  if (to !== want) return {why: `the data ends ${to}, the snapshot needs ${want}`};
+  return {session: today, dataTo: to};
+}
+// MA confluence on the daily bars (PURE given the bars)
+function valMA(b, D){
+  if (!b || b.n < 60 || !(D > 0)) return null;
+  const c = b.c, t = b.n - 1, e9 = PZ.ema(c, 9), e21 = PZ.ema(c, 21), s50 = PZ.sma(c, 50);
+  const L = k => [e9[k], e21[k], s50[k]];
+  const above = (k, idx) => idx.every(i => c[k] > L(k)[i]), below1 = (k, idx) => idx.some(i => c[k] < L(k)[i]);
+  const rec = idx => { for (let a = 0; a <= 2; a++) { const k = t - a; if (k < 1) break; if (above(k, idx) && below1(k - 1, idx)) return a; } return null; };
+  const all3 = rec([0, 1, 2]), pairs = [[0, 1], [0, 2], [1, 2]].map(rec).filter(v => v != null), any2 = pairs.length ? Math.min(...pairs) : null;
+  const ord = [["9", e9[t]], ["21", e21[t]], ["50", s50[t]]].sort((x, y) => y[1] - x[1]).map(x => x[0]).join(">");
+  const slopeAt = k => k >= 10 && isFinite(s50[k]) && isFinite(s50[k - 10]) ? (s50[k] - s50[k - 10]) / D : null;
+  return {gap921: valR((e9[t] - e21[t]) / D), stack: ord, stackOk: e9[t] > e21[t] && e21[t] > s50[t], reclaimAll3: all3 != null, reclaimAll3Ago: all3, reclaimAny2: any2 != null, reclaimAny2Ago: any2,
+    s50SlopeAtReclaim: all3 != null ? valR(slopeAt(t - all3)) : null, s50Slope10: valR(slopeAt(t)), e21Slope5: valR(t >= 5 ? (e21[t] - e21[t - 5]) / D : null), s50Slope5: valR(t >= 5 ? (s50[t] - s50[t - 5]) / D : null),
+    e9: valR(e9[t]), e21: valR(e21[t]), s50: valR(s50[t])};
+}
+// the gates a name fails (hard ones only) and the list it would be on if one gate passed
+function valGates(s){
+  const x = s.x, ck = s.ck, G = [];
+  if (!s.pine.liqOk) G.push("1 Liquidity"); if (ck["1b"] && ck["1b"].ok === false) G.push("1b Tradeable liquidity"); if (ck["1c"] && ck["1c"].ok === false) G.push("1c ADR floor");
+  if (x.brk) G.push("2 Data integrity"); if (!x.structOk) G.push("3 Trend"); if (!x.extOk) G.push("5 Stretch");
+  if (ck[7].ok !== true) G.push("7 Group"); if (ck[8].ok !== true) G.push("8 RS");
+  return G;
+}
+function valWouldBe(s, gate){
+  const x = s.x, C = S61; let loc = x.loc;
+  if (gate === "3 Trend") { const D = x.D; loc = !(x.close > x.e21) || !(D > 0) ? "BELOW21" : x.dB > C.above ? "ABOVE" : x.dB >= 0 ? "L1" : x.d9 >= C.l2 ? "L2" : "L3"; }
+  const soft = [4, 9].filter(n => s.ck[n].ok !== true).length;
+  if (loc == null || loc === "BELOW21") return "Out";
+  if (loc === "ABOVE") return soft >= 2 ? "Out" : "Background";
+  if (loc === "L2" || loc === "L3") return soft ? "Out" : loc === "L3" ? "OnDeck-L3" : "OnDeck-L2";
+  return soft === 0 ? "A-eligible" : soft === 1 ? "OnDeck-1blocker" : "Out";
+}
+function valCtx(){
+  const vs21 = sym => { try { const b = dssBars(sym); if (!b || b.n < 30) return null; const e = PZ.ema(b.c, 21), t = b.n - 1; return {px: valR(b.c[t]), e21: valR(e[t]), pct: valR((b.c[t] / e[t] - 1) * 100, 3), above: b.c[t] > e[t]}; } catch (e) { return null; } };
+  const reg = typeof s61Reg === "function" ? s61Reg() : {};
+  return {mapVerdict: (mapRegime() || {}).v || null, regime: reg.v || null, regimeSource: reg.src || null, tapeRead: S.tape ? S.tape.bucket : null, tapeScore: S.tape ? valR(S.tape.score, 2) : null, spyVs21: vs21("SPY"), qqqVs21: vs21("QQQ")};
+}
+function valMapList(sym){
+  const f = [...(LISTS.focus || [])], b = typeof MAPL !== "undefined" ? [...MAPL.b] : [], st = typeof MAPL !== "undefined" ? [...MAPL.stalk] : [];
+  return f.includes(sym) ? ["A", f.indexOf(sym) + 1] : b.includes(sym) ? ["B", b.indexOf(sym) + 1] : st.includes(sym) ? ["On deck", st.indexOf(sym) + 1] : ["none", null];
+}
+function valRow(r, s, set, gate, wouldBe, rank, groupRank){
+  const x = s.x, d = s.d, ck = s.ck, g = f => { try { return f(); } catch (e) { return null; } };
+  const lp = g(() => lpOf(r.sym)), af = g(() => adrfOf(r)), lq = g(() => liqOf(r.sym, x)), ll = g(() => llOf(r.sym)), zl = g(() => zlnOf(r)), ma = g(() => valMA(dssBars(r.sym), x.D)), ml = valMapList(r.sym);
+  const chk = {}; for (const k of Object.keys(ck)) chk["c" + k] = ck[k].ok === true ? 1 : ck[k].ok === false ? 0 : null;
+  return {sym: r.sym, set, list: s.list, rank, wouldBe: wouldBe || null, nearGate: gate || null, firstFail: s.ffTxt || "", nFails: [1, 2, 3, 4, 5, 6, 7, 8, 9].filter(n => ck[n].ok !== true).length,
+    sector: r.sector || "", industry: r.industry || "", dsGroup: g(() => dsGroupName(r)), group: r.group || "", mcap: valR(r.mcap, 0), source: af && af.mega ? "mega list" : "intake (file)",
+    mapList: ml[0], mapRank: ml[1], late: !!(lp && lp.tag === "LATE"), liquidLeader: !!(ll && ll.leader), inMapSource: g(() => inMapSrc(r.sym)),
+    dv20: valR(x.dv20, 0), close: valR(x.close), liqState: lq ? lq.state : null, liqReason: lq && lq.why ? lq.why[0] : null, trades20: lq ? valR(lq.trades, 0) : null, activeMinPct: lq ? valR(lq.am, 2) : null,
+    adr20: valR(x.adr, 3), adr50: af ? valR(af.a50, 3) : null, adrFloorValue: af ? valR(af.val, 3) : null, adrFloor: af ? af.floor : null, adrFloorStatus: af ? af.status || null : null, mega: !!(af && af.mega),
+    adrD: valR(x.D), e9: valR(x.e9), e21: valR(x.e21), s50: valR(x.s50), s200: valR(x.s200), e21Up: !!x.e21Up, s50Up: !!x.s50Up, e21Slope5: ma ? ma.e21Slope5 : null, s50Slope5: ma ? ma.s50Slope5 : null,
+    wkClose: valR(x.wk.c), wk10: valR(x.wk.s1), wk10Prev: valR(x.wk.s2), weeklyAbove10: !!x.k3wk, stage: s.stage ? s.stage.lab : null,
+    ext50ADR: valR(x.ext, 3), extReset: !!x.xr, loc: x.loc || null, dist9ADR: valR(x.d9, 3), dist21ADR: valR(x.d21, 3), distBandADR: valR(x.dB, 3), groupState: r.gState && r.gState !== "—" ? r.gState : null, groupRsRank: groupRank,
+    boardRS: r.rs ?? null, earningsIn: s.er ? s.er.n : null, exitBy: s.er ? s.er.exitBy || null : null, plannedEntry: valR(x.entry), firstRes: x.nh ? null : valR(x.fr), roomR: x.nh ? 99 : valR(x.room, 3), newHighs: !!x.nh,
+    stageTag: lp ? lp.tag : null, stageAge: lp ? lp.age : null, pullbackNo: lp ? lp.pb : null, ext200: lp ? valR(lp.ext, 3) : null, rsTurn: lp ? lp.rsTurn : null, rs1mChg: lp ? valR(lp.rs1m, 3) : null,
+    sq: s.sq, sqBraid: fin(x.braid) && x.braid <= S61.qBraid ? 1 : 0, sqRmv: d._ && d._.rmvPass ? 1 : 0, sqVdu: fin(d.vdu) && d.vdu <= S61.qVdu ? 1 : 0, sqDcr: fin(d.dcr) && d.dcr >= S61.qDcr ? 1 : 0, sqLeader: (d._ && d._.leader) || d.nh ? 1 : 0,
+    rsAccel: d.ra ? valR(d.ra.acc, 3) : null, rmv: valR(d.rmv, 2), dcr: valR(d.dcr, 2), vdu: valR(d.vdu, 2), daysOffHigh: d.doh ?? null, exceptional: !!s.exceptional,
+    braid: valR(x.braid, 3), ...(ma ? {gap921: ma.gap921, stack: ma.stack, stackOk: ma.stackOk, reclaimAll3: ma.reclaimAll3, reclaimAll3Ago: ma.reclaimAll3Ago, reclaimAny2: ma.reclaimAny2, reclaimAny2Ago: ma.reclaimAny2Ago, s50SlopeAtReclaim: ma.s50SlopeAtReclaim, s50Slope10: ma.s50Slope10} : {}),
+    zoneLine: zl || null, ...chk};
+}
+function valBuild(){
+  const L = s61Lists(true), rank = new Map(); for (const k of Object.keys(L)) L[k].forEach((s, i) => rank.set(s.r.sym, i + 1));
+  const gr = new Map(); (S.groups || []).filter(g => g.grs != null).sort((a, b) => b.grs - a.grs).forEach((g, i) => gr.set(g.name, i + 1));
+  const rows = [];
+  for (const r of S.stocks) {
+    if (r.etf) continue; let s = null; try { s = s61Of(r); } catch (e) {} if (!s) continue;
+    if (VAL_EC.includes(s.list)) { rows.push(valRow(r, s, "A", null, null, rank.get(r.sym) || null, gr.get(r.group) || null)); continue; }
+    const G = valGates(s); if (G.length !== 1) continue;
+    const wb = valWouldBe(s, G[0]); if (VAL_EC.includes(wb)) rows.push(valRow(r, s, "N", G[0], wb, null, gr.get(r.group) || null));
+  }
+  return rows;
+}
+const valSaved = () => { try { return store.get(VALL.key, {}) || {}; } catch (e) { return {}; } };
+function valMark(sess, o){ try { const m = valSaved(); m[sess] = o; const k = Object.keys(m).sort().slice(-60); store.set(VALL.key, Object.fromEntries(k.map(x => [x, m[x]]))); } catch (e) {} }
+const valBusy = () => (typeof ADRF !== "undefined" && (ADRF.capBusy || ADRF.wrapBusy)) || (typeof LIQ !== "undefined" && (LIQ.busy || LIQ.ntBusy));
+function valSchedule(){ clearTimeout(VALL.timer); VALL.timer = setTimeout(() => valTrySave().catch(e => { VALL.err = String(e && e.message || e); valBanner(); }), 15000); }
+async function valTrySave(correction, why){
+  const P = valSnapSession(); VALL.last = P;
+  if (!P.session || !valCan() || valLock().unlocked) { valBanner(); return; }
+  const done = valSaved()[P.session]; if (done && !correction) { valBanner(); return; }
+  if (VALL.busy) return; if (valBusy() && VALL.tries++ < 20) { valSchedule(); return; }
+  VALL.busy = true;
+  try {
+    const rows = valBuild(), ctx = valCtx(), rv = valRulesVer(), feed = typeof adrfFeedCSV === "function" ? adrfFeedCSV() : feedCSV();
+    const ms = typeof msrcCur === "function" ? msrcCur() : null;
+    const body = {dataTo: P.dataTo, rulesVer: rv, boardVer: typeof boardVerTxt === "function" ? boardVerTxt() : "", dev: store.get("adrb.syncDev", "") || "", name: syName(), correction: !!correction, why: why || "",
+      rows, ctx, feed, mapsrc: ms};
+    const res = await valFetch(`/val/ledger?session=${P.session}`, {method: "PUT", body: JSON.stringify(body)});
+    const j = await res.json().catch(() => ({}));
+    if (res.ok) { valMark(P.session, {ver: j.ver, at: Date.now(), dev: syName(), rows: rows.length, rv}); VALL.err = ""; if (correction) toast(`Correction saved (version ${j.ver})`); }
+    else if (res.status === 409) valMark(P.session, {ver: j.ver, at: j.savedAt, dev: j.dev, rv: j.rulesVer, other: true});
+    else VALL.err = j.error || `the worker answered ${res.status}` + (res.status === 404 ? " — paste the new worker code (Settings → Sync between devices → Copy the worker code)" : "");
+  } finally { VALL.busy = false; valBanner(); }
+}
+hookOn("all", "validationLedger", ph => { if (ph === "after" && S.snap && valFrozenOrWindow()) valSchedule(); });
+const valFrozenOrWindow = () => valToday() <= VALF.until;
+function valLedgerTxt(){
+  if (!valFrozenOrWindow()) return "";
+  if (!valCan()) return "Ledger: needs Sync between devices (Settings)";
+  const P = VALL.last || valSnapSession(); if (!P.session) return `Ledger: ${esc(P.why || "waiting")}`;
+  const m = valSaved()[P.session];
+  if (VALL.err) return `Ledger: <b class="valun">not saved</b> — ${esc(VALL.err)}`;
+  if (!m) return valLock().unlocked ? "Ledger: not saved while unlocked" : `Ledger: saving today's snapshot…`;
+  return `Ledger ✓ ${esc(P.session)} (data to ${esc(P.dataTo)})${m.other ? ` · saved by ${esc(m.dev || "another device")}` : ""}`;
+}
+// MAP's lists for the session, once imported (not known at the premarket snapshot)
+let valMapSent = "";
+hookOn("all", "validationMapLists", ph => {
+  if (ph !== "after" || !valCan()) return; const P = VALL.last; if (!P || !P.session || !valSaved()[P.session]) return;
+  const m = {A: [...(LISTS.focus || [])], B: typeof MAPL !== "undefined" ? [...MAPL.b] : [], onDeck: typeof MAPL !== "undefined" ? [...MAPL.stalk] : [], verdict: (mapRegime() || {}).v || null};
+  const k = P.session + JSON.stringify(m); if (k === valMapSent || (!m.A.length && !m.B.length && !m.onDeck.length)) return; valMapSent = k;
+  valFetch(`/val/maplist?session=${P.session}`, {method: "PUT", body: JSON.stringify({...m, at: Date.now(), name: syName()})}).catch(() => { valMapSent = ""; });
+});
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   VALIDATION — ONLINE WINDOW, SKIP REASONS, VALIDATION CSV, OLD TRACKER ARCHIVE (14 Nov 2026) — TRACKING ONLY. Handover
+   items 4, 5 (board button) and 7 (docs/validation-2026-11-handover.md, approved 13 Nov 2026).
+   - Online window: by default online from the open until 00:00 Asia/Singapore (11:00 ET now, 12:00 ET once US daylight
+     saving starts — stored as the Singapore instant, so it moves by itself). "Back online" / "Going offline" on the
+     banner (desktop + phone), timestamped to the worker (POST /val/presence); they override the default for that night.
+   - After the close: card "Validation — triggers and skip reasons" (Setups, at the bottom above the trigger shadow log): the engine's triggers for
+     the last scored session with Taken / Skipped / Offline, and for the skipped ones optional MARKET / GROUP / STOCK /
+     RISK / OTHER taps (tap again to clear). Never required. Plus "Download validation CSV" (every episode, whole window)
+     and "Save a correction" (re-saves today's snapshot as a new version with a reason).
+   - MAP lists tracker: "Archive + reset" downloads the whole old log (JSON + the CSV) then clears it; from then each
+     tracker date carries the Rules Version (adrb.mapLogRv), shown in a new last CSV column "rules_version".
+   STORAGE NEW: adrb.valOnline {session, kind, at} (this device's last tap), adrb.mapLogRv {date: rules version},
+   adrb.mapLogArch {at, n}. Hooks "s61Card", "tab", "all". No override.
+   ===================================================================== */
+const VALO = {key: "adrb.valOnline", skips: null, skipsAt: 0, skipsBusy: false};
+const valOffAt = d => Date.parse(addDays(d, 1) + "T00:00:00+08:00");
+const valOnlineWanted = () => false;
+setTimeout(() => { try { valBanner(); } catch (e) {} }, 0);
+setInterval(() => { try { if (!document.hidden) valBanner(); } catch (e) {} }, 60000);
+function valOnlineState(){
+  const now = Date.now(), d = valToday(), off = valOffAt(d), tap = (() => { try { return store.get(VALO.key, null); } catch (e) { return null; } })();
+  const sgt = ms => new Date(ms).toLocaleTimeString("en-GB", {timeZone: "Asia/Singapore", hour: "2-digit", minute: "2-digit"}), etT = ms => hhmm(etMin(ms)) + " ET";
+  if (tap && tap.session === d) return {online: tap.kind === "online", txt: tap.kind === "online" ? `Online (tapped ${sgt(tap.at)} SGT)` : `Offline (tapped ${sgt(tap.at)} SGT)`, tip: "Your tap overrides the default for tonight. Triggers while offline count as not at screen, not as skipped."};
+  return now <= off ? {online: true, txt: `Online until ${etT(off)} (${sgt(off)} SGT)`, tip: "Default: online from the open until midnight Singapore time. Tap Going offline if you leave earlier."}
+    : {online: false, txt: `Offline since ${etT(off)} (default)`, tip: "Default: offline after midnight Singapore time. Tap Back online if you're up late — triggers after this count as skipped if you don't take them."};
+}
+async function valPresence(kind){
+  const at = Date.now(), d = valToday();
+  try { store.set(VALO.key, {session: d, kind, at}); } catch (e) {}
+  valBanner();
+  const r = await valPost("/val/presence", {kind, at, session: d, dev: syName()});
+  toast(r ? (kind === "online" ? "Back online — logged" : "Going offline — logged") : "Saved on this device; the worker couldn't be reached (needs Sync between devices)");
+}
+// ---- the card
+async function valSkipsLoad(force){
+  if (!valCan() || VALO.skipsBusy || (!force && Date.now() - VALO.skipsAt < 5 * 60000)) return;
+  VALO.skipsBusy = true;
+  try { const r = await valFetch("/val/skips"); VALO.skips = r.ok ? await r.json() : {err: `worker ${r.status}`}; VALO.skipsAt = Date.now(); }
+  catch (e) { VALO.skips = {err: "worker not reached"}; } finally { VALO.skipsBusy = false; valCardPaint(); }
+}
+const VAL_WHY = ["MARKET", "GROUP", "STOCK", "RISK", "OTHER"];
+function valCardHTML(){
+  const hd = `<div class="hd"><h2>Validation — triggers and skip reasons</h2><span class="sub">20-session test (16 Nov – 14 Dec) · tagging is optional</span><span class="spacer"></span>
+    <button class="btn sm" data-valc="csv" title="Every episode, whole window: trigger, entry, stop, R, Taken / Skipped / Offline, alerts, fills">Download validation CSV</button>
+    <button class="btn sm ghost" data-valc="fix" title="Re-save today's snapshot as a new version (the first is kept) — only to fix broken data">Save a correction</button></div>`;
+  if (!valCan()) return hd + `<div class="bd"><div class="empty">Needs Sync between devices (Settings) — the ledger lives on your sync worker.</div></div>`;
+  const K = VALO.skips; if (!K) return hd + `<div class="bd"><div class="empty">Loading…</div></div>`;
+  if (K.err) return hd + `<div class="bd"><div class="empty">Couldn't read the ledger (${esc(K.err)}). If the worker is older than 14 Nov, paste the new worker code.</div></div>`;
+  const T = K.triggered || [];
+  if (!T.length) return hd + `<div class="bd"><div class="empty">No engine triggers for ${esc(K.session || "the last session")} yet (the worker scores after 18:30 ET).</div></div>`;
+  const rows = T.sort((a, b) => a.barClose - b.barClose).map(t => {
+    const skip = t.group === "Skipped";
+    return `<tr data-sym="${esc(t.sym)}"><td class="l"><b>${esc(t.sym)}</b> <span class="small dim">${t.set === "N" ? "near-miss" : ""}</span></td><td>${hhmm(t.barClose)} ET</td><td class="l">${esc(t.group || "—")}</td>
+      <td class="l">${skip ? VAL_WHY.map(w => `<button class="btn sm ${t.reason === w ? "primary" : "ghost"}" data-valw="${w}" data-vals="${esc(t.sym)}">${w}</button>`).join(" ") : ""}</td></tr>`; }).join("");
+  return hd + `<div class="bd"><div class="small dim" style="margin-bottom:4px">Session ${esc(K.session)} · the engine's 30-min triggers (Massive) · Taken = IBKR fill, Skipped = online with no fill, Offline = after you went offline${K.fillsIn ? "" : " · fills not in yet (Validation Feed runs 17:30 ET)"}</div>
+    <div class="tscroll"><table class="mini"><thead><tr><th class="l">Ticker</th><th>Trigger bar</th><th class="l">Read as</th><th class="l">Why skipped (optional)</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+}
+function valCardPaint(){
+  const tab = $("tab-plan"), at = $("s61Box"); if (!tab || !at || !valFrozenOrWindowLate()) return;
+  // at the bottom of Setups, just above the trigger shadow log (the cards that follow the Entry Check card keep their places)
+  let box = $("valBox"); if (!box) { tab.insertAdjacentHTML("beforeend", `<div class="card g1" id="valBox"></div>`); box = $("valBox"); }
+  const tsd = $("tsdBox"); if (tsd) { if (box.nextElementSibling !== tsd) tab.insertBefore(box, tsd); } else if (box !== tab.lastElementChild) tab.appendChild(box);
+  try { box.innerHTML = valCardHTML(); } catch (e) { console.error("validation card", e); }
+}
+const valFrozenOrWindowLate = () => valToday() <= "2026-12-31";        // the card stays while late episodes finish scoring
+hookOn("s61Card", "validationCard", () => { valCardPaint(); valSkipsLoad(); });
+document.addEventListener("click", async e => {
+  const t = e.target && e.target.closest ? e.target : null; if (!t || !t.closest("#valBox")) return;
+  const w = t.closest("[data-valw]");
+  if (w) { const K = VALO.skips, s = w.dataset.vals, cur = (K.triggered || []).find(x => x.sym === s), reason = cur && cur.reason === w.dataset.valw ? "" : w.dataset.valw;
+    const ok = await valPost("/val/skip", {session: K.session, sym: s, reason}); if (ok && cur) cur.reason = reason || null; valCardPaint(); if (!ok) toast("Couldn't save the reason"); return; }
+  const c = t.closest("[data-valc]"); if (!c) return;
+  if (c.dataset.valc === "csv") { try { const r = await valFetch("/val/export.csv"); if (!r.ok) throw new Error(r.status); download(`deep-space-validation-${valToday()}.csv`, await r.text(), "text/csv"); } catch (er) { toast("Couldn't download the validation CSV"); } }
+  if (c.dataset.valc === "fix") { const why = prompt("Save today's snapshot again as a correction (the first save is kept). Only for broken data. Why?"); if (why && why.trim()) { VALL.tries = 0; await valTrySave(true, why.trim()); } }
+});
+// ---- MAP lists tracker: archive + reset, and the rules version on each new date
+const VAL_RV = "adrb.mapLogRv";
+function valMlRv(d){ try { return (store.get(VAL_RV, {}) || {})[d] || ""; } catch (e) { return ""; } }
+hookOn("all", "validationTrackerRv", ph => {
+  if (ph !== "after") return;
+  try { const log = store.get(MLOG, {}) || {}, rv = store.get(VAL_RV, {}) || {}, arch = store.get("adrb.mapLogArch", null); let ch = false;
+    if (!arch) return;                                         // only rows logged after the archive + reset carry it
+    for (const d of Object.keys(log)) if (!rv[d] && d >= arch.from) { rv[d] = valRulesVer(); ch = true; }
+    if (ch) store.set(VAL_RV, rv); } catch (e) {}
+});
+function valArchBtn(){
+  const box = $("mapTrack"); if (!box) return; const hd = box.querySelector(".hd"); if (!hd || hd.querySelector("#valArch")) return;
+  hd.insertAdjacentHTML("beforeend", `<button class="btn sm ghost" id="valArch" title="Download the whole old tracker (JSON + CSV), then clear it — the 20-session test starts clean (new rows carry the Rules Version)">Archive + reset</button>`);
+}
+document.addEventListener("click", e => { const t = e.target && e.target.closest ? e.target : null; if (!t) return;
+  if (t.closest("#valArch")) {
+    const log = store.get(MLOG, {}) || {}, n = Object.keys(log).length;
+    if (!n) { toast("The tracker is already empty"); return; }
+    if (!confirm(`Archive and reset the MAP lists tracker? ${n} dates are downloaded (JSON + CSV), then the tracker is cleared on this device.`)) return;
+    download(`deep-space-map-lists-tracker-ARCHIVE-${valToday()}.json`, JSON.stringify({kind: "deep-space-map-lists-tracker-archive", at: new Date().toISOString(), log}, null, 1), "application/json");
+    const show = MAPL.show; MAPL.show = "all"; try { if (typeof mlCsv === "function") mlCsv(); } finally { MAPL.show = show; }
+    setTimeout(() => { store.set(MLOG, {}); store.set("adrb.mapLogArch", {at: new Date().toISOString(), from: valToday(), n}); store.set(VAL_RV, {}); toast(`Tracker archived (${n} dates) and cleared`); if (typeof renderMapTrack === "function") renderMapTrack(); setTimeout(valArchBtn, 0); }, 800);
+    return; }
+  if (t.closest("#mapTrack") || t.closest("#listsClear")) setTimeout(valArchBtn, 0); }, true);
+hookOn("tab", "validationTrackerArch", t => { if (t === "plan" && S.snap) valArchBtn(); });
+</script>
+<script>
+"use strict";
+/* =====================================================================
    BOARD VERSION LABEL (10 Nov 2026) — display only. On a 2-week trial (docs/trials.md).
    Eugene, 10 Nov 2026: "how do i know whether the board is the latest update" → "yes add the version label".
    - BOARD_VER = {date, n, what}: bumped in EVERY change to index.html (tools/board-version-test.js fails when index.html
@@ -21624,7 +22464,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>td.dc{white-space:nowrap}.
    - Never changes any number, list, feed column, storage key or setting. Storage: none. Hooks: "settings"; the chip is
      inserted once at load. No override.
    ===================================================================== */
-const BOARD_VER = {date: "2026-11-12", n: 4, what: "Day change ($ and %) next to the price in the Watchlist, Setups and every ticker table; MAP v4.11 import"};
+const BOARD_VER = {date: "2026-11-14", n: 1, what: "20-session validation: list rules locked until 14 Dec, Rules Version in the feed, daily ledger snapshot, online window, skip reasons, validation CSV"};
 const boardVerTxt = () => `v${BOARD_VER.date}.${BOARD_VER.n}`;
 (function verChip(){
   try {
