@@ -22493,6 +22493,75 @@ document.head.insertAdjacentHTML("beforeend", `<style>#drawer td.gpliq{font-weig
 <script>
 "use strict";
 /* =====================================================================
+   GROUPS HOLDING / FADING (14 Nov 2026) — DISPLAY ONLY. On a 2-week trial (docs/trials.md).
+   Eugene, 12 Nov 2026 (from the NEL comparison, item #2): "do #2 on Saturday" — a "holding / fading" label beside group
+   strength; 14 Nov 2026: "Go on both".
+   - Ranking used: each group's median-member 10-week RS vs the history benchmark (g.hx.hq[w].lg — the same number behind the
+     5-week squares and the "Strongest over 10 weeks" leaderboard), ranked against the other groups with history, week by
+     week over the HQ_W stored weeks (oldest → this week). Ties broken by name.
+   - "Held N wks" = in the top fifth of that ranking N weeks in a row up to this week; shown at 3+ (5 = as far back as the
+     squares go). "Fading N wks" = rank got worse N weeks in a row up to this week, starting from the top two-fifths; shown
+     at 2+. Thresholds are display choices (GHF), stated on screen.
+   - Where: a card on Themes right after "Group leaderboards", and one line in the group panel (click any group).
+   - Never changes group strength, group RS, states, rankings, lists, the feed, the Board log or anything MAP reads. Reads
+     g.hx only. Needs the price history. Storage: none. Hooks: "tab", "groupDrawer". No override.
+   ===================================================================== */
+const GHF = {top: 0.2, held: 3, fadeFrom: 0.4, fade: 2};
+function ghfCompute(){
+  const G = (S.groups || []).filter(g => g.hx && g.hx.hq && g.hx.hq.length === HQ_W), L = HQ_W - 1;
+  const rk = G.map(() => new Array(HQ_W).fill(null)), nW = new Array(HQ_W).fill(0);
+  for (let w = 0; w < HQ_W; w++) {
+    const idx = G.map((g, i) => [i, g.hx.hq[w].lg]).filter(x => x[1] != null && isFinite(x[1])).sort((a, b) => b[1] - a[1] || (G[a[0]].name < G[b[0]].name ? -1 : 1));
+    nW[w] = idx.length; idx.forEach(([i], k) => { rk[i][w] = k + 1; });
+  }
+  const cut = (w, f) => Math.max(1, Math.ceil(nW[w] * f)), out = new Map();
+  G.forEach((g, i) => {
+    const r = rk[i]; let held = 0, fade = 0;
+    for (let w = L; w >= 0 && r[w] != null && r[w] <= cut(w, GHF.top); w--) held++;
+    for (let w = L; w > 0 && r[w] != null && r[w - 1] != null && r[w] > r[w - 1]; w--) fade++;
+    if (fade && r[L - fade] > cut(L - fade, GHF.fadeFrom)) fade = 0;   // a slide among the laggards isn't "fading"
+    out.set(g.name, {g, ranks: r, n: nW, held, fade, dates: g.hx.hq.map(x => x.d)});
+  });
+  return out;
+}
+const ghfTag = x => (x.held >= GHF.held ? `<span class="chip ghf hold" title="In the top fifth of the 10-week RS ranking ${x.held} weeks in a row up to this week${x.held === HQ_W ? " (as far back as the stored weeks go)" : ""}">Held ${x.held} wks</span>` : "")
+  + (x.fade >= GHF.fade ? `<span class="chip ghf fade" title="Rank in the 10-week RS ranking got worse ${x.fade} weeks in a row up to this week, from #${x.ranks[HQ_W - 1 - x.fade]} to #${x.ranks[HQ_W - 1]}">Fading ${x.fade} wks</span>` : "");
+const ghfPath = (x, k) => x.ranks.slice(-(k + 1)).map(v => v == null ? "—" : "#" + v).join(" → ");
+const ghfTip = x => x.ranks.map((v, i) => `${i === HQ_W - 1 ? "this week" : (HQ_W - 1 - i) + "w ago"}${x.dates[i] ? " (" + x.dates[i] + ")" : ""}: ${v == null ? "no data" : "#" + v + " of " + x.n[i]}`).join("\n");
+function ghfHTML(){
+  const bs = HIST.bSym || CFG.bench;
+  const hd = `<div class="hd"><h2>Groups holding / fading</h2><span class="sub">rank of each group's 10-week RS vs ${esc(bs)} (median member), week by week · Held = top fifth ${GHF.held}+ weeks in a row · Fading = rank worse ${GHF.fade}+ weeks in a row, from the top two-fifths · a label only — group strength, states and lists are unchanged</span></div>`;
+  if (!S.has.hist) return hd + `<div class="bd"><div class="empty">Needs the price history (Screens tab → load price history).</div></div>`;
+  const M = [...ghfCompute().values()];
+  if (M.length < 5) return hd + `<div class="bd"><div class="empty">Too few groups with 5 weeks of history.</div></div>`;
+  const L = HQ_W - 1, drop = x => x.ranks[L] - x.ranks[L - x.fade];
+  const H = M.filter(x => x.held >= GHF.held).sort((a, b) => b.held - a.held || a.ranks[L] - b.ranks[L]);
+  const F = M.filter(x => x.fade >= GHF.fade).sort((a, b) => b.fade - a.fade || drop(b) - drop(a));
+  const row = (x, k) => `<div class="gr" data-ghf="${esc(x.g.name)}"><span class="nm" data-gopen="${esc(x.g.name)}" title="${esc(x.g.name)} · ${x.g.hx.n} names · file state: ${esc(x.g.state)}">${esc(x.g.name)}</span>${ghfTag(x)}<span class="small" title="${esc(ghfTip(x))}">${ghfPath(x, k)}</span>${hqHTML(x.g.hx.hq)}</div>`;
+  const col = (t, A, k, none) => `<div><h3>${t} <span class="small">(${A.length})</span></h3>${A.map(x => row(x, k(x))).join("") || `<div class="empty small">${none}</div>`}</div>`;
+  return hd + `<div class="bd"><div class="ghfcols">${col("Holding", H, x => Math.min(x.held, L), "No group has held the top fifth for " + GHF.held + "+ weeks.")}${col("Fading", F, x => x.fade, "No group is fading.")}</div>
+    <div class="small" style="margin-top:6px">Ranks of ${M.length} groups with 5 weeks of history (3+ names). Hover the ranks for every week. Click a group to open it.</div></div>`;
+}
+hookOn("tab", "groupHoldFade", t => {
+  if (t !== "themes" || !S.snap) return;
+  let box = $("ghfCard"); if (!box) { const at = $("glbCard"); if (!at) return; at.insertAdjacentHTML("afterend", `<div class="card" id="ghfCard"></div>`); box = $("ghfCard"); }
+  try { box.innerHTML = ghfHTML(); } catch (e) { console.error("groups holding / fading", e); box.innerHTML = `<div class="hd"><h2>Groups holding / fading</h2></div><div class="bd"><div class="empty">Couldn't be drawn (error logged).</div></div>`; }
+});
+hookOn("groupDrawer", "groupHoldFade", g => {
+  if (!S.has.hist) return; const x = ghfCompute().get(g.name), dr = $("drawer"), sub = dr && dr.querySelector(":scope > .small"); if (!x || !sub) return;
+  const L = HQ_W - 1, tag = ghfTag(x);
+  sub.insertAdjacentHTML("afterend", `<div class="small ghfline" title="${esc(ghfTip(x))}">10-week RS rank: ${x.ranks[L] == null ? "—" : "#" + x.ranks[L] + " of " + x.n[L]} · last 5 weeks ${ghfPath(x, L)} ${tag || `<span class="dim">· not holding or fading</span>`}</div>`);
+});
+document.head.insertAdjacentHTML("beforeend", `<style>.ghfcols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.ghfcols h3{font-size:12.5px;margin:0 0 6px;font-weight:650}
+#ghfCard .gr{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:8px;align-items:center;padding:3px 0;border-bottom:1px solid var(--line)}
+#ghfCard .gr .nm{cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#ghfCard .gr .nm:hover{color:var(--accent)}
+.chip.ghf{font-size:11px;padding:1px 7px}.chip.ghf.hold{background:var(--good-soft);color:var(--ink)}.chip.ghf.fade{background:var(--down-soft);color:var(--ink)}
+.ghfline{margin:3px 0 2px}.ghfline .chip{margin-left:4px}
+@media (max-width:1100px){.ghfcols{grid-template-columns:1fr}#ghfCard .gr{grid-template-columns:minmax(0,1fr) auto auto}#ghfCard .gr .hq{display:none}}</style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
    BOARD VERSION LABEL (10 Nov 2026) — display only. On a 2-week trial (docs/trials.md).
    Eugene, 10 Nov 2026: "how do i know whether the board is the latest update" → "yes add the version label".
    - BOARD_VER = {date, n, what}: bumped in EVERY change to index.html (tools/board-version-test.js fails when index.html
@@ -22503,7 +22572,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>#drawer td.gpliq{font-weig
    - Never changes any number, list, feed column, storage key or setting. Storage: none. Hooks: "settings"; the chip is
      inserted once at load. No override.
    ===================================================================== */
-const BOARD_VER = {date: "2026-11-14", n: 3, what: "Group panel wider (880 px) so the whole table fits without side-scrolling"};
+const BOARD_VER = {date: "2026-11-14", n: 4, what: "Groups holding / fading label (Themes card + group panel line)"};
 const boardVerTxt = () => `v${BOARD_VER.date}.${BOARD_VER.n}`;
 (function verChip(){
   try {
