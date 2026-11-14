@@ -22562,6 +22562,184 @@ document.head.insertAdjacentHTML("beforeend", `<style>.ghfcols{display:grid;grid
 <script>
 "use strict";
 /* =====================================================================
+   21 RECLAIM — LEADER PULLBACK, SMALL-SIZE SETUP (14 Nov 2026) — TRADING LOGIC (a new setup; no existing number moves).
+   Rule: Notion "Unified Spec 6.1 — Playbook 1 · Leader Pullback", green callout "14 Nov 2026 — 21 Reclaim, live at grade
+   C"; Command Reference "RULINGS — 14 Nov 2026 (21 Reclaim)". Eugene (chat, 14 Nov 2026): "I want the opportunity to buy
+   when we are just reclaiming the 21EMA Daily. while the 9/21 is still positively aligned." · "go. no to closes below the
+   21, separate small-size setup" · "after 1000et trigger … entry will be either breaking orh. or U&R of the 21 ema with a
+   30min candle reversal high as the trigger." · "1 rentry allowed" · "Yes" (trade through the level, not a 30-min close).
+   THE RULE AS WRITTEN THERE
+   - Names: every stock the Entry Check lists On deck as L2 Reclaim or L3 Deep reclaim (s61Lists(true)["OnDeck-L2"] /
+     ["OnDeck-L3"]: close below the daily 9 EMA, above a rising 21 EMA, every other gate passing). A daily close below
+     the 21 EMA stays out. Nothing is added to or taken off any list.
+   - Trigger, from 10:00 ET (bars that START at or after 10:00), price TRADING THROUGH either level:
+       ORH   the high of the 09:30–10:00 bar, while above the prior session's daily 21 EMA → level = max(ORH, that EMA);
+       U&R   a completed 30-min bar that traded below the prior session's daily 21 EMA and closed back above it (the
+             reversal candle; the 09:30 bar counts) → level = that candle's high. Void once a later bar trades below the
+             candle's low (a new reversal candle is then needed). The newest reversal candle is the one in force.
+     The lower of the two levels in force is the one price meets first. Entry = the level, or the bar's open if it opens
+     above it.
+   - Stop = the low of day at the trigger (lows of the bars before the trigger bar, and its open). Entry no more than
+     0.6 ADR$ above it — further = no trade ("blocked"), and that level is then spent.
+   - Size: grade C (0.10% NLV) always. One re-entry per name per session after a stop, on a fresh trigger (a new trade
+     through the opening range high, or a new reversal candle formed from the stop bar on); a second stop ends the name.
+   - 9/21 gap = (9 EMA − 21 EMA) ÷ ADR$ on the prior session: logged, the card sorts tightest first. Never a gate.
+   - Scored as its own arm "21R"; first entries and re-entries apart.
+   PAPER SCORING on the card (r21Run, PURE, COMPLETED 30-min bars only — TradingView's alert is the live signal): from
+   the trigger bar on, low ≤ stop = −1R (a bar that does both = the stop, also on the trigger bar), high ≥ entry + 2R =
+   +2R, else open with R marked at the last completed close. Same session only. Before costs.
+   WHAT IT NEVER CHANGES: check 6 and every location, the Entry Check lists and their order, sizes, the 30-min 21 EMA
+   trigger, the L2 / L3 promotion route (reclaim of the prior day's 9 EMA), the Daily Plan, the Board log, both feeds,
+   the MAP import, the validation freeze / ledger / Rules Version rule, the trigger shadow log.
+   ON SCREEN: card #r21Box "21 Reclaim" on Setups (Leader Pullback switch only), in the bottom group above the validation
+   card (hook "s61Card"; the cards right after the Entry Check card keep their places). Without Live mode it is the
+   watch list (names, 9/21 gap, the daily 21 EMA to reclaim); in Live mode's regular session it adds the levels and the
+   paper entries. Download CSV.
+   STORAGE (new key, per viewer, try/catch): adrb.r21Log = {v: 1, d: {session: {sym: {l, gap, e21, orh, blk,
+   e: [[entry no, route, trigger bar start minute ET, entry, stop, outcome, R]]}}}} — today's entries are rewritten on
+   every paint while Live mode runs; the last 90 sessions are kept.
+   Also: a "21R" badge after the ticker on the Watchlist, Entry Check lists, Daily Plan, MAP lists and Focus rows of
+   those names (display only, 2-week trial; see r21Badges at the end of this script). Hooks: "s61Card", "tab", "watchPage".
+   No function overrides. Self-check: not extended (the trigger needs intraday bars the self-check doesn't hold);
+   tools/board-21-reclaim-test.js recomputes every entry separately.
+   ===================================================================== */
+const R21 = {first: 600, cap: 0.6, pct: 0.1, max: 2, keep: 90, key: "adrb.r21Log", lists: [["OnDeck-L2", "just under the 9"], ["OnDeck-L3", "deep under the 9"]]};
+const R21_RT = {orh: "Opening range high", ur: "Undercut + reclaim of the 21", both: "Opening range high = reversal candle"};
+// PURE. bars = [{t, o, h, l, c}] 30-min (any order; other days / outside 09:30–16:00 ignored); o = {date, asOf, e21 (the
+// prior session's daily 21 EMA), adrD (ADR $)}. Returns {n, lod, orh, lvlOrh, rev, blk, e: [{n, route, i, t, bm, entry,
+// stop, risk, out, r}], done, watch}.
+function r21Run(bars, o){
+  o = o || {}; const ms = 18e5, asOf = fin(o.asOf) ? o.asOf : Infinity, e21 = o.e21, capD = fin(o.adrD) && o.adrD > 0 ? R21.cap * o.adrD : NaN;
+  const B = (bars || []).filter(x => x && fin(x.t) && fin(x.o) && fin(x.h) && fin(x.l) && fin(x.c) && isRTH(x.t) && (!o.date || dET(x.t) === o.date)).sort((a, z) => a.t - z.t);
+  const done = B.filter(x => x.t + ms <= asOf), out = {n: done.length, lod: NaN, orh: NaN, lvlOrh: NaN, rev: null, blk: null, e: [], done: false, watch: null};
+  if (!fin(e21)) return out;
+  let lod = Infinity, orh = NaN, orhOk = true, rev = null, pos = null, last = NaN;
+  const close = (g, how, r) => { g.out = how; g.r = r; pos = null; if (how === "stop") { rev = null; orhOk = true; if (out.e.length >= R21.max) out.done = true; } else out.done = true; };
+  done.forEach((x, i) => {
+    const bm = etMin(x.t); last = x.c;
+    if (pos) { if (x.l <= pos.stop) close(pos, "stop", -1); else if (x.h >= pos.entry + 2 * pos.risk) close(pos, "2R", 2); }
+    else if (!out.done && out.e.length < R21.max && bm >= R21.first && i >= 1) {
+      // a reversal candle whose low this bar trades under is void before it can trigger (same bar both = void)
+      const rv = rev && !(x.l < rev.lo) ? rev : null;
+      const lA = orhOk && fin(orh) ? Math.max(orh, e21) : NaN, lB = rv ? rv.hi : NaN;
+      const hitA = fin(lA) && x.h > lA, hitB = fin(lB) && x.h > lB;
+      if (hitA || hitB) {
+        const lvl = hitA && hitB ? Math.min(lA, lB) : hitA ? lA : lB, route = hitA && hitB && lA === lB ? "both" : hitA && (!hitB || lA < lB) ? "orh" : "ur";
+        const entry = Math.max(lvl, x.o), stop = Math.min(lod, x.o), risk = entry - stop;
+        if (!(risk > 0)) { /* no trade */ }
+        else if (fin(capD) && risk > capD + 1e-9) { if (!out.blk) out.blk = {route, bm, entry, stop, adr: risk / o.adrD}; if (route !== "ur") orhOk = false; if (route !== "orh") rev = null; }
+        else { pos = {n: out.e.length + 1, route, i, t: x.t, bm, entry, stop, risk, out: "open", r: NaN}; out.e.push(pos);
+          if (x.l <= stop) close(pos, "stop", -1); else if (x.h >= entry + 2 * risk) close(pos, "2R", 2); }
+      }
+    }
+    lod = Math.min(lod, x.l);
+    if (i === 0 && bm === 570) orh = x.h;
+    if (rev && x.l < rev.lo) rev = null;
+    if (x.l < e21 && x.c > e21) rev = {hi: x.h, lo: x.l, i, bm};
+  });
+  if (pos) pos.r = fin(last) ? (last - pos.entry) / pos.risk : NaN;
+  out.lod = lod; out.orh = orh; out.lvlOrh = orhOk && fin(orh) ? Math.max(orh, e21) : NaN; out.rev = rev;
+  if (!pos && !out.done && out.e.length < R21.max) { const a = out.lvlOrh, b = rev ? rev.hi : NaN; out.watch = fin(a) && fin(b) ? Math.min(a, b) : fin(a) ? a : fin(b) ? b : null; }
+  return out;
+}
+// the prior session's daily 9 / 21 EMA and ADR $ for a stock (the Entry Check's own numbers); when the stored history
+// already carries today's bar (date = session), the 21 EMA is stepped back one bar exactly and the 9 EMA is e9p
+function r21Lv(r, session){
+  let s = null; try { s = s61Of(r); } catch (e) { s = null; }
+  const x = s && s.x; if (!x || !fin(x.e21) || !fin(x.e9) || !(x.D > 0)) return null;
+  const today = !!session && x.to === session, k = 2 / 22;
+  const e21 = today ? (x.e21 - k * x.close) / (1 - k) : x.e21, e9 = today ? x.e9p : x.e9;
+  return fin(e21) && fin(e9) ? {e21, e9, D: x.D, gap: (e9 - e21) / x.D, close: x.close, list: s.list} : null;
+}
+function r21Load(){ let v = null; try { v = JSON.parse(localStorage.getItem(R21.key) || "null"); } catch (e) { v = null; } return v && v.v === 1 && v.d ? v : {v: 1, d: {}}; }
+function r21Save(L){ try { const ks = Object.keys(L.d).sort(); for (const k of ks.slice(0, Math.max(0, ks.length - R21.keep))) delete L.d[k]; localStorage.setItem(R21.key, JSON.stringify(L)); } catch (e) { console.warn("21 reclaim log", e); } }
+const r21R4 = v => fin(v) ? +v.toFixed(4) : null;
+// the watch list (always) + today's levels and paper entries (Live mode, regular session); records them in the log
+function r21Today(){
+  if (!S.snap || typeof s61Lists !== "function") return null;
+  const live = typeof LV !== "undefined" && LV.cfg && LV.cfg.on && LV.frame && LV.frame.phase === "rth", F = live ? LV.frame : null;
+  const Ls = s61Lists(true), rows = [], seen = new Set(), L = r21Load(), logged = F ? L.d[F.date] || {} : {};
+  const add = (r, lab) => { if (!r || r.etf || seen.has(r.sym)) return; const v = r21Lv(r, F ? F.date : null); if (!v) return; seen.add(r.sym);
+    const T = F ? LV.today.get(r.sym) : null, run = T && T.d === F.date && T.bars ? r21Run(T.bars, {date: F.date, asOf: F.dataMs, e21: v.e21, adrD: v.D}) : null;
+    rows.push({sym: r.sym, l: lab, v, run}); };
+  for (const [k, lab] of R21.lists) for (const s of Ls[k] || []) add(s.r, lab);
+  // a name logged earlier today stays on the card after it leaves On deck (e.g. its live price is back over the 9)
+  for (const sym of Object.keys(logged)) add(S.rowBySym && S.rowBySym.get(sym), logged[sym].l);
+  rows.sort((a, z) => a.v.gap - z.v.gap || (a.sym < z.sym ? -1 : 1));
+  if (F) { const day = {};
+    for (const r of rows) if (r.run && (r.run.e.length || r.run.blk)) day[r.sym] = {l: r.l, gap: +r.v.gap.toFixed(3), e21: r21R4(r.v.e21), orh: r21R4(r.run.orh), blk: r.run.blk ? [r.run.blk.route, r.run.blk.bm, r21R4(r.run.blk.entry), r21R4(r.run.blk.stop)] : null,
+      e: r.run.e.map(g => [g.n, g.route, g.bm, r21R4(g.entry), r21R4(g.stop), g.out, fin(g.r) ? +g.r.toFixed(3) : null])};
+    if (Object.keys(day).length) { L.d[F.date] = {...(L.d[F.date] || {}), ...day}; r21Save(L); } }
+  return {live, date: F ? F.date : null, asOf: F ? F.dataMs : null, rows};
+}
+// every logged paper entry: first entries and re-entries apart
+function r21Tally(L){
+  const t = {1: {n: 0, r: [], win: 0, stop: 0, open: 0}, 2: {n: 0, r: [], win: 0, stop: 0, open: 0}};
+  for (const d of Object.keys(L.d)) for (const s of Object.keys(L.d[d])) for (const e of L.d[d][s].e || []) { const x = t[e[0] === 1 ? 1 : 2]; x.n++; if (fin(e[6])) x.r.push(e[6]); if (e[5] === "2R") x.win++; else if (e[5] === "stop") x.stop++; else x.open++; }
+  return t;
+}
+const r21Sh = risk => CFG.nlv && risk > 0 ? Math.floor(CFG.nlv * R21.pct / 100 / risk) : null;
+function r21Cell(r){
+  const u = r.run; if (!u) return `<span class="small dim">no 30-min bars yet</span>`;
+  const parts = u.e.map(g => { const sh = r21Sh(g.risk); return `<b>${g.n === 1 ? "Entry" : "Re-entry"}</b> ${hhmm(g.bm)} bar · ${esc(R21_RT[g.route])} <span class="small">in ${p2(g.entry)} · stop ${p2(g.stop)}${sh != null ? ` · ${sh.toLocaleString()} sh` : ""} · ${g.out === "2R" ? `<b class="pos">+2R</b>` : g.out === "stop" ? `<b class="neg">stop</b>` : `${fin(g.r) ? (g.r >= 0 ? "+" : "") + g.r.toFixed(2) + "R" : "—"} open`}</span>`; });
+  if (u.blk && !u.e.length) parts.push(`<span class="small"><b class="neg">Blocked</b> ${hhmm(u.blk.bm)} bar · ${p2(u.blk.entry)} is ${u.blk.adr.toFixed(2)} ADR over the low ${p2(u.blk.stop)} (limit ${R21.cap})</span>`);
+  const lastE = u.e[u.e.length - 1];
+  if (u.done) parts.push(`<span class="small dim">${lastE && lastE.out === "stop" ? "second stop — done for today" : "done for today"}</span>`);
+  else if (!lastE || lastE.out === "stop") {
+    const w = []; if (fin(u.lvlOrh)) w.push(`over <b>${p2(u.lvlOrh)}</b> (opening range high${u.lvlOrh > u.orh ? ", lifted to the daily 21 EMA" : ""})`); if (u.rev) w.push(`over <b>${p2(u.rev.hi)}</b> (the ${hhmm(u.rev.bm)} reversal candle's high; void under ${p2(u.rev.lo)})`);
+    parts.push(`<span class="small">${u.n < 1 ? "Waiting for the 09:30–10:00 bar" : w.length ? `${u.e.length ? "One re-entry left: buy" : "Buy"} a trade ${w.join(" or ")} · stop = low of day ${p2(u.lod)}` : `No level in force — needs a 30-min bar that dips under the daily 21 EMA ${p2(r.v.e21)} and closes back over it`}</span>`); }
+  return parts.join("<br>");
+}
+function r21CardHTML(){
+  const L = r21Load(), T = r21Tally(L), nS = Object.keys(L.d).length, today = r21Today();
+  const tx = x => { const av = mean(x.r); return `${x.n} (${x.win} +2R · ${x.stop} stop · ${x.open} open${av != null ? ` · avg ${av >= 0 ? "+" : ""}${av.toFixed(2)}R` : ""})`; };
+  const hd = `<div class="hd"><h2>21 Reclaim</h2><span class="sub">live · smallest size, ${R21.pct.toFixed(2)}% NLV always · On deck names bought at the daily 21 EMA, no wait for the 9</span><span class="spacer"></span><button class="btn sm" id="r21Csv" title="Every logged session, name and paper entry">Download CSV</button></div>`;
+  const rule = `<div class="small" style="margin-bottom:6px">From <b>10:00 ET</b>, buy a trade through either level: the <b>opening range high</b> (09:30–10:00 bar) while above yesterday's daily 21 EMA, or the high of a 30-min <b>reversal candle</b> that dipped under yesterday's daily 21 EMA and closed back over it. Stop = low of day, entry no more than ${R21.cap} ADR above it. One re-entry after a stop, same size. The normal Leader Pullback trigger and sizes are unchanged. Tightest 9/21 first (a sort, not a filter).</div>`;
+  const tl = `<div class="small" style="margin-bottom:6px">Paper log in this browser: ${nS} session${nS === 1 ? "" : "s"} · <b>first entries</b> ${tx(T[1])} · <b>re-entries</b> ${tx(T[2])}. Before costs, same-session only.</div>`;
+  let body;
+  if (!today || (!today.rows.length && !(S.has && S.has.hist))) body = `<div class="empty" style="padding:4px 0">Needs the stored price history.</div>`;
+  else if (!today.rows.length) body = `<div class="empty" style="padding:4px 0">No On deck name is sitting between its daily 9 and 21 EMA today.</div>`;
+  else body = `<div class="tscroll"><table class="mini r21t"><thead><tr><th class="l">Ticker</th><th class="l">On deck as</th><th title="(9 EMA − 21 EMA) ÷ ADR $, prior session. Smaller = the two lines are closer together.">9/21 gap</th><th title="The prior session's daily 21 EMA — the line to hold or reclaim">Daily 21 EMA</th><th title="Prior close above the daily 21 EMA, in ADR">Close over 21</th><th class="l">${today.live ? "Today" : "Watch for"}</th></tr></thead><tbody>${today.rows.map(r => `<tr data-sym="${esc(r.sym)}"><td class="l sym">${esc(r.sym)}</td><td class="l small">${esc(r.l)}</td><td>${r.v.gap.toFixed(2)} ADR</td><td>${p2(r.v.e21)}</td><td>${((r.v.close - r.v.e21) / r.v.D).toFixed(2)} ADR</td><td class="l">${today.live ? r21Cell(r) : `<span class="small">from 10:00 ET: a trade over the opening range high, or over a 30-min reversal candle that dips under ${p2(r.v.e21)} and closes back over it</span>`}</td></tr>`).join("")}</tbody></table></div>`
+    + (today.live ? `<div class="small dim" style="margin-top:4px">${today.date} · completed 30-min bars to ${hhmm(etMin(today.asOf - 1) + 1)} ET (Massive, ${lvDT()}) · the paper log reads completed bars, so it trails the TradingView alert · times = the start of the bar price traded through the level</div>` : `<div class="small dim" style="margin-top:4px">Levels and paper entries appear in Live mode during the regular session. The TradingView alert "21 Reclaim BUY" (Leader Pullback indicator) is the live signal.</div>`);
+  return hd + `<div class="bd">${rule}${tl}${body}</div>`;
+}
+function r21Paint(){
+  const tab = $("tab-plan"); if (!tab || !$("s61Box") || !S.snap) return;
+  let box = $("r21Box"); if (!box) { tab.insertAdjacentHTML("beforeend", `<div class="card g1" id="r21Box"></div>`); box = $("r21Box"); }
+  // bottom group: above the validation card (else above the trigger shadow log, else last)
+  const nx = $("valBox") || $("tsdBox"); if (nx && nx.parentElement === tab) { if (box.nextElementSibling !== nx) tab.insertBefore(box, nx); } else if (box !== tab.lastElementChild) tab.appendChild(box);
+  try { box.innerHTML = r21CardHTML(); } catch (e) { console.error("21 reclaim", e); box.innerHTML = `<div class="hd"><h2>21 Reclaim</h2></div><div class="bd"><div class="empty">Couldn't be drawn (error logged).</div></div>`; }
+}
+hookOn("s61Card", "reclaim21", r21Paint);
+const R21_CSV_H = ["session", "ticker", "on_deck_as", "gap_9_21_adr", "daily_21_ema", "opening_range_high", "entry_no", "route", "trigger_bar_et", "entry", "stop", "outcome", "r"];
+function r21CsvText(L){
+  const out = [R21_CSV_H.join(",")];
+  for (const d of Object.keys(L.d).sort()) for (const s of Object.keys(L.d[d]).sort()) { const v = L.d[d][s], hd = [d, s, v.l, v.gap ?? "", v.e21 ?? "", v.orh ?? ""];
+    for (const e of v.e || []) out.push([...hd, e[0], R21_RT[e[1]] || e[1], hhmm(e[2]), e[3] ?? "", e[4] ?? "", e[5], e[6] ?? ""].map(csvCell).join(","));
+    if (v.blk && !(v.e || []).length) out.push([...hd, "", R21_RT[v.blk[0]] || v.blk[0], hhmm(v.blk[1]), v.blk[2] ?? "", v.blk[3] ?? "", "blocked", ""].map(csvCell).join(",")); }
+  return out.join("\n");
+}
+document.addEventListener("click", e => {
+  const t = e.target && e.target.closest ? e.target : null; if (!t || !t.closest("#r21Box")) return;
+  if (t.closest("#r21Csv")) { e.preventDefault(); download(`deep-space-21-reclaim-${fmtDate(new Date())}.csv`, r21CsvText(r21Load()), "text/csv"); return; }
+  const tr = t.closest("tr[data-sym]"); if (tr && S.rowBySym && S.rowBySym.has(tr.dataset.sym)) openDrawer(tr.dataset.sym);
+});
+// "21R" badge (14 Nov 2026, Eugene: "On the watchlist page is the deep space board updated as well?") — DISPLAY ONLY, on a
+// 2-week trial (docs/trials.md). Every row of a name the 21 Reclaim covers today (On deck L2 / L3) gets a small badge
+// after the ticker on the Watchlist, the Entry Check lists, the Daily Plan, the MAP lists card and Focus. Painted on the
+// drawn rows (the liquid-leader badge's pattern); no list, text, plan line, feed cell or CSV changes.
+function r21Set(){ const out = new Map(); if (typeof s61Lists !== "function") return out; let L = null; try { L = s61Lists(true); } catch (e) { return out; }
+  for (const [k] of R21.lists) for (const x of L[k] || []) { const v = x.r && !x.r.etf ? r21Lv(x.r, null) : null; if (v) out.set(x.r.sym, v); } return out; }
+function r21BadgePaint(root, M){ if (!root || !M.size) return; root.querySelectorAll("tr[data-sym] td.sym").forEach(td => { if (td.querySelector(".r21b") || td.closest("#r21Box")) return; const v = M.get(td.closest("tr").dataset.sym); if (!v) return;
+  td.insertAdjacentHTML("beforeend", ` <span class="r21b" title="${esc(`21 Reclaim (0.10% NLV): from 10:00 ET, buy a trade over the opening range high, or over a 30-min reversal candle that dips under the daily 21 EMA ${p2(v.e21)} and closes back over it. Stop = low of day. 9/21 gap ${v.gap.toFixed(2)} ADR. See Setups → 21 Reclaim.`)}">21R</span>`); }); }
+function r21Badges(){ if (!S.snap) return; let M; try { M = r21Set(); } catch (e) { return; } for (const id of ["s61Box", "dpBox", "watchBody", "listsBox", "focusBox"]) try { r21BadgePaint($(id), M); } catch (e) {} }
+hookOn("tab", "reclaim21Badge", r21Badges);
+hookOn("watchPage", "reclaim21Badge", r21Badges);
+document.head.insertAdjacentHTML("beforeend", `<style>#r21Box tr[data-sym]{cursor:pointer} .r21t td{vertical-align:top} .r21b{display:inline-block;font-size:10px;line-height:1.35;padding:0 5px;border-radius:8px;font-weight:700;white-space:nowrap;vertical-align:1px;border:1px solid #42a5f5;color:#42a5f5;background:transparent;cursor:help}</style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
    BOARD VERSION LABEL (10 Nov 2026) — display only. On a 2-week trial (docs/trials.md).
    Eugene, 10 Nov 2026: "how do i know whether the board is the latest update" → "yes add the version label".
    - BOARD_VER = {date, n, what}: bumped in EVERY change to index.html (tools/board-version-test.js fails when index.html
@@ -22572,7 +22750,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>.ghfcols{display:grid;grid
    - Never changes any number, list, feed column, storage key or setting. Storage: none. Hooks: "settings"; the chip is
      inserted once at load. No override.
    ===================================================================== */
-const BOARD_VER = {date: "2026-11-14", n: 4, what: "Groups holding / fading label (Themes card + group panel line)"};
+const BOARD_VER = {date: "2026-11-14", n: 6, what: "21 Reclaim: small-size setup for On deck names at the daily 21 EMA (Setups card + 21R badge on the Watchlist and lists)"};
 const boardVerTxt = () => `v${BOARD_VER.date}.${BOARD_VER.n}`;
 (function verChip(){
   try {
