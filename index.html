@@ -2816,9 +2816,12 @@ function renderThemes(){
   const G = S.groups.filter(g => g.grs != null && (!S.ui.thState || g.state === S.ui.thState) && (!S.ui.thSetup || g.buy > 0) && (!q || g.name.toLowerCase().includes(q) || g.members.some(r => r.sym.toLowerCase() === q)));
   // spotlight
   const spot = [...S.groups].filter(g => g.grs != null && g.mom != null && g.grs >= 40).sort((a, b) => b.mom - a.mom).slice(0, 5);
-  $("spotlight").innerHTML = spot.length ? `<div class="card"><div class="hd"><h2>Spotlight — fastest improving groups</h2><span class="sub">short-term RS minus longer-term RS, groups ranked 40+</span></div><div class="bd" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px">${spot.map((g, i) => {
+  // 14 Nov 2026 (Eugene: "can you add like a bracket that says the period of comparison. for spotlight"; display only): the
+  // periods behind short − long, from the file's own timeframe columns (the same SHORT_HZ / LONG_HZ the number uses)
+  const spHz = K => S.hzAvail.filter(h => K.includes(h.k)).map(h => h.short).join(" · ") || "—";
+  $("spotlight").innerHTML = spot.length ? `<div class="card"><div class="hd"><h2>Spotlight — fastest improving groups</h2><span class="sub">short-term RS (${spHz(SHORT_HZ)}) minus longer-term RS (${spHz(LONG_HZ)}), groups ranked 40+</span></div><div class="bd" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px">${spot.map((g, i) => {
     const top = g.leaders.slice(0, 4);
-    return `<div><div class="small">${String(i + 1).padStart(2, "0")} · ${esc(g.sector || "")}</div><div style="font-weight:650;cursor:pointer" data-gopen="${esc(g.name)}">${esc(g.name)}</div><div class="small" style="margin:3px 0 4px">Group RS ${g.grs} (${g.state.toLowerCase()}), short-term ${sg(g.mom, 0)} vs longer-term. ${g.n} names, ${pct0(g.a21)} above the 21 EMA, ${g.buy ?? "—"} in the buy zone.</div>${top.map(r => tkChip(r, r.rs ?? "", ecsOf(r) === 1 ? "buy" : "")).join("")}</div>`;
+    return `<div><div class="small">${String(i + 1).padStart(2, "0")} · ${esc(g.sector || "")}</div><div style="font-weight:650;cursor:pointer" data-gopen="${esc(g.name)}">${esc(g.name)}</div><div class="small" style="margin:3px 0 4px">Group RS ${g.grs} (${g.state.toLowerCase()}), short-term (${spHz(SHORT_HZ)}) ${sg(g.mom, 0)} vs longer-term (${spHz(LONG_HZ)}). ${g.n} names, ${pct0(g.a21)} above the 21 EMA, ${g.buy ?? "—"} in the buy zone.</div>${top.map(r => tkChip(r, r.rs ?? "", ecsOf(r) === 1 ? "buy" : "")).join("")}</div>`;
   }).join("")}</div></div>` : "";
   // rotation plot
   const pts = thin(G.filter(g => g.lvl != null && g.mom != null), g => g.grs);
@@ -22488,9 +22491,19 @@ hookOn("groupDrawer", "groupLiquidity", g => {
   const w = document.createElement("div"); w.className = "tscroll gpscroll"; t.before(w); w.appendChild(t);
   dr.classList.add("gpw");   // 14 Nov 2026 (Eugene: "widen the margins … so everything is displayed in 1 page without need to side scroll"): a wider panel for groups only
 });
+// 14 Nov 2026 (Eugene: "it would make sense to have a group RS composite number just beside the group name and the leading
+// label. instead of a small text under it stating group RS 85, maybe even the short - long as a different colour like the group
+// table instead of the muted text"): the composite group RS badge (rsBadge, as in the Themes group table) goes after the state
+// label in the title; the line under it keeps sector and names, and short − long is coloured like the group table (cls). The
+// "group RS NN" words leave that line (the badge carries the number). Same numbers (g.grs, g.mom); display only.
+hookOn("groupDrawer", "groupHeader", g => {
+  const dr = $("drawer"), h = dr && dr.querySelector(":scope > h3"), sub = h && h.nextElementSibling; if (!h || h.dataset.gph) return; h.dataset.gph = 1;
+  h.insertAdjacentHTML("beforeend", ` <span class="gphrs" title="Composite group RS (1–99, same as the group table's RS column)">${rsBadge(g.grs)}</span>`);
+  if (sub && sub.classList.contains("small")) sub.innerHTML = `${esc(g.sector || "")} · ${g.n} names${g.mom != null ? ` · <span class="${cls(g.mom)} gphmom" title="Short − long: short-term group RS minus long-term (positive = improving)">short − long ${sg(g.mom, 0)}</span>` : ""}`;
+});
 // a stock panel opened after a group takes its own width back (its "tp" / "invp" class wins too)
 hookOn("drawerShown", "groupWidthOff", () => { const dr = $("drawer"); if (dr) dr.classList.remove("gpw"); });
-document.head.insertAdjacentHTML("beforeend", `<style>#drawer td.gpliq{font-weight:700}#drawer .gpscroll{overflow-x:auto}#drawer .gpscroll > table{min-width:100%}#drawer.gpw:not(.tp):not(.invp){width:min(880px,96vw)}</style>`);
+document.head.insertAdjacentHTML("beforeend", `<style>#drawer td.gpliq{font-weight:700}#drawer .gpscroll{overflow-x:auto}#drawer .gpscroll > table{min-width:100%}#drawer.gpw:not(.tp):not(.invp){width:min(880px,96vw)}#drawer h3 .gphrs{vertical-align:middle;font-size:15px;margin-left:4px}#drawer .gphmom{font-weight:600}</style>`);
 </script>
 <script>
 "use strict";
@@ -22788,7 +22801,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>#r21Box tr[data-sym]{curso
    - Never changes any number, list, feed column, storage key or setting. Storage: none. Hooks: "settings"; the chip is
      inserted once at load. No override.
    ===================================================================== */
-const BOARD_VER = {date: "2026-11-14", n: 9, what: "21 Reclaim in the ticker panel; the word paper removed; Former Leader Short lines one per route"};
+const BOARD_VER = {date: "2026-11-14", n: 11, what: "Group panel RS badge + coloured short − long; Spotlight shows its comparison periods"};
 const boardVerTxt = () => `v${BOARD_VER.date}.${BOARD_VER.n}`;
 (function verChip(){
   try {
