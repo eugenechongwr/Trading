@@ -23357,6 +23357,81 @@ document.head.insertAdjacentHTML("beforeend", `<style>#cfxBox{margin-bottom:12px
 <script>
 "use strict";
 /* =====================================================================
+   SCREENS · BEARISH SIDE BUILT OUT (15 Nov 2026) — display / tracking only. On a 2-week trial (docs/trials.md).
+   Eugene, 15 Nov 2026: "build out the bearish side screens next" (after the confluence card showed 5 bearish kinds of
+   screen against 9 bullish; his own note: he leans long and wants the short side flagged on Defensive days).
+   Eleven research screens under "Weakness (shorts)" — each the mirror of a bullish screen that had no bearish twin. They
+   show on the Screens page and in the Shorts page's "Weakness scans" card (it lists that heading). The lines mirror the
+   bullish screens' own numbers; they are NOT Notion rules, block nothing and feed nothing. The Former Leader Short
+   playbook, its card, checks and lists are untouched — these are context, never a short signal.
+     Trend broken      ws4      "Stage 4 — declining"                    (mirror of Stage 2A / Weekly Stage 2; stageOf)
+                       below10  "Under a falling 10 SMA"                 (mirror of Above a rising 10 SMA)
+     Relative weakness decel    "RS fading"                              (mirror of RS accelerating)
+                       laggard  "Group laggards"                         (mirror of Theme leaders)
+                       weakstr  "Weak in a strong group"                 (mirror of Strong in a weak group)
+     Bounce spot       sbounce  "Bounced into a falling line"            (mirror of the buy-zone screens; the board's own
+                                                                          short location r.sLoc, bounce cases only)
+     Selling volume    distr    "Distribution"                           (mirror of Accumulation)
+                       bigdn    "4%+ down days, closing weak"            (mirror of 4%+ up days, closing strong)
+                       lostma   "Lost the 50 SMA or 21 EMA"              (mirror of Reclaimed the 50 SMA or 21 EMA)
+                       hvdn     "Big volume on a down day"               (mirror of Big volume HV1 / HVE)
+     Today's action    gapdn    "Gap down and go"                        (mirror of Gap and go)
+   bigdn / lostma / hvdn read the stored bars (cfxBearEvFrom, pure; cfxBearEvOf memo per row) with the same windows and
+   averages as the bullish events in tsfExtra (EV_LB sessions; 21 EMA and 50 SMA from the closes; 200+ sessions behind
+   a volume high).
+   Confluence card: the eleven are placed in CFX_F.bear (two new kinds: "Bounce spot", "Selling volume") — 7 bearish kinds.
+   Never changes: any screen that was there, the short score, the short watch, a list, state, rank, the feed, MAP's lists.
+   Storage: none. Hooks: none (screens only). No override. Self-check: none (no trading number).
+   Test: tools/board-bear-screens-test.js (each gate and edge; placement is in tools/board-confluence-test.js).
+   ===================================================================== */
+const CFXB_T = {mom: -20, rsMax: 50, lagRs: 20, lagQ: 0.75, lagN: 4, off: -10, distr: 1 / 1.3, bigPct: -0.04, bigClose: 0.25, bigLook: 3, evLook: 10, hvBack: 251, hvMin: 200};
+// ---- selling events from one symbol's bars (pure; oldest first). Sessions ago of the latest event, or null.
+function cfxBearEvFrom(b){
+  const o = {big: null, l50: null, l21: null, hvd: null}; if (!b || !(b.n >= 60)) return o;
+  const n = b.n, c = b.c, h = b.h, l = b.l, v = b.v, last = n - 1; if (!(c[last] > 0)) return o;
+  const e21 = new Float64Array(n).fill(NaN), s50 = new Float64Array(n).fill(NaN); let a21 = null, sum = 0; const q = [];
+  for (let t = 0; t < n; t++) { const ct = c[t]; if (ct > 0) { a21 = a21 == null ? ct : a21 + (ct - a21) * (2 / 22); q.push(ct); sum += ct; if (q.length > 50) sum -= q.shift(); if (q.length === 50) s50[t] = sum / 50; } e21[t] = a21 ?? NaN; }
+  const lost = L => { if (!(c[last] < L[last])) return null; for (let t = last; t > Math.max(0, last - CFXB_T.evLook); t--) if (c[t] > 0 && c[t - 1] > 0 && c[t] < L[t] && c[t - 1] >= L[t - 1]) return last - t; return null; };
+  o.l50 = lost(s50); o.l21 = lost(e21);
+  for (let t = last; t > Math.max(0, last - CFXB_T.evLook); t--) {
+    if (!(c[t] > 0) || !(c[t - 1] > 0)) continue;
+    if (o.big == null && h[t] > l[t] && c[t] / c[t - 1] - 1 <= CFXB_T.bigPct && (c[t] - l[t]) / (h[t] - l[t]) <= CFXB_T.bigClose) o.big = last - t;
+    if (o.hvd == null && v[t] > 0 && c[t] < c[t - 1]) { let cnt = 0, w = 0; for (let k = Math.max(0, t - CFXB_T.hvBack); k < t; k++) if (v[k] > 0) { cnt++; if (v[k] > w) w = v[k]; } if (cnt >= CFXB_T.hvMin && v[t] > w) o.hvd = last - t; }
+  }
+  return o;
+}
+const CFXB_EV = new WeakMap();
+function cfxBearEvOf(r){
+  if (!r || r.etf || !S.has || !S.has.hist || typeof dssBars !== "function") return null;
+  const hit = CFXB_EV.get(r); if (hit && hit.last === r.last && hit.nD === HIST.nD) return hit.v;
+  let v = null; try { v = cfxBearEvFrom(dssBars(r.sym)); } catch (e) { v = null; }
+  CFXB_EV.set(r, {last: r.last, nD: HIST.nD, v}); return v;
+}
+const cfxbBounce = r => typeof r.sLoc === "string" && /^Bounced /.test(r.sLoc);
+for (const sc of [
+  {k: "ws4", t: "Stage 4 — declining", d: "Below falling 10- and 40-week averages, confirmed by closes under the 50-day. The stage to stay out of on the long side. Deepvue-style label — a reference, not a signal.", need: ["hist"], f: r => { const s = stageOf(r); return !!s && s.lab === "4"; }},
+  {k: "below10", t: "Under a falling 10 SMA", d: `Price under the 10 SMA, 10 SMA under the 20 SMA (falling), more than ${-CFXB_T.off}% off the 52-week high. On strong days, what can't get off the floor is the weak stock.`, need: ["s10", "s20"], f: r => r.a10 === false && r.s10rising === false && r.offHigh != null && r.offHigh < CFXB_T.off},
+  {k: "decel", t: "RS fading", d: `Short-term RS (1W/1M/WTD/MTD) at least ${-CFXB_T.mom} points under longer-term RS (3M/6M/1Y), RS under ${CFXB_T.rsMax}.`, need: [], f: r => r.rsMom != null && r.rsMom <= CFXB_T.mom && r.rs != null && r.rs < CFXB_T.rsMax},
+  {k: "laggard", t: "Group laggards", d: `Bottom quarter of its group (groups of ${CFXB_T.lagN}+) and behind the group's median over both 1M and 3M, with RS ${CFXB_T.lagRs} or lower.`, need: ["perf1m", "perf3m"], f: r => !!r.gRank && r.gN >= CFXB_T.lagN && r.gRank > r.gN * CFXB_T.lagQ && r.vsGroup1m != null && r.vsGroup3m != null && r.vsGroup1m < 0 && r.vsGroup3m < 0 && r.rs != null && r.rs <= CFXB_T.lagRs},
+  {k: "weakstr", t: "Weak in a strong group", d: "The group is Leading or Improving, but the stock is under its 50 SMA (and its 10 SMA when the file has it) — what's being left behind in a strong theme.", need: [], f: r => (r.gState === "Leading" || r.gState === "Improving") && r.a50 === false && (r.s10 == null || r.last < r.s10)},
+  {k: "sbounce", t: "Bounced into a falling line", d: "The board's own short location: within 0.5 ADR under to 0.25 ADR over a falling daily 21 EMA with the 9 under the 21, or the same band around the 50 SMA from below. Where a weak stock runs out of room — context, never a short signal on its own.", need: [], f: r => !r.etf && cfxbBounce(r)},
+  {k: "distr", t: "Distribution", d: "Selling volume at least 1.3× buying volume over 20 sessions, behind the benchmark over 4 weeks, under the 50 SMA.", need: ["hist"], f: r => !!r.hx && r.hx.accum != null && r.hx.accum <= CFXB_T.distr && r.hx.rs4w != null && r.hx.rs4w < 0 && r.a50 === false},
+  {k: "bigdn", t: "4%+ down days, closing weak", d: `Down 4% or more and closed in the bottom quarter of the day's range in the last ${CFXB_T.bigLook} sessions. Sort by Group to see where the money is leaving.`, need: ["hist"], f: r => { const e = cfxBearEvOf(r); return !!e && e.big != null && e.big < CFXB_T.bigLook; }},
+  {k: "lostma", t: "Lost the 50 SMA or 21 EMA", d: `Closed back under the 50 SMA or the 21 EMA in the last ${CFXB_T.evLook} sessions and is still under it.`, need: ["hist"], f: r => { const e = cfxBearEvOf(r); return !!e && ((e.l50 != null && e.l50 < CFXB_T.evLook) || (e.l21 != null && e.l21 < CFXB_T.evLook)); }},
+  {k: "hvdn", t: "Big volume on a down day", d: `Highest volume in a year on a day that closed lower, in the last ${CFXB_T.evLook} sessions, and under the 50 SMA. Someone large was selling.`, need: ["hist"], f: r => { const e = cfxBearEvOf(r); return !!e && e.hvd != null && e.hvd < CFXB_T.evLook && r.a50 === false; }},
+  {k: "gapdn", t: "Gap down and go", d: "Gapped down at least the gapper threshold and still red from the open (premarket: down that much with the daily 9 under the 21 under the 50).", need: [], f: r => S.mode === "pm" ? (r.pmU ?? 0) <= -CFG.gapTh && r.trend === "Lag" : (r.gapU ?? 0) <= -CFG.gapTh && (r.openU ?? 1) < 0}
+]) { SCREENS.push(sc); SC_CAT[sc.k] = "Weakness (shorts)"; }
+// ---- confluence card: place the eleven (two new bearish kinds, after "Relative weakness")
+(function(){
+  if (typeof CFX_F === "undefined") return;
+  const add = (k, keys) => { const f = CFX_F.bear.find(x => x.k === k); if (f) for (const s of keys) if (!f.s.includes(s)) f.s.push(s); };
+  add("trend", ["ws4", "below10"]); add("rs", ["decel", "laggard", "weakstr"]); add("today", ["gapdn"]);
+  if (!CFX_F.bear.some(x => x.k === "spot")) CFX_F.bear.splice(2, 0, {k: "spot", n: "Bounce spot", s: ["sbounce"]}, {k: "vol", n: "Selling volume", s: ["distr", "bigdn", "lostma", "hvdn"]});
+})();
+</script>
+<script>
+"use strict";
+/* =====================================================================
    BOARD VERSION LABEL (10 Nov 2026) — display only. On a 2-week trial (docs/trials.md).
    Eugene, 10 Nov 2026: "how do i know whether the board is the latest update" → "yes add the version label".
    - BOARD_VER = {date, n, what}: bumped in EVERY change to index.html (tools/board-version-test.js fails when index.html
@@ -23367,7 +23442,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>#cfxBox{margin-bottom:12px
    - Never changes any number, list, feed column, storage key or setting. Storage: none. Hooks: "settings"; the chip is
      inserted once at load. No override.
    ===================================================================== */
-const BOARD_VER = {date: "2026-11-15", n: 1, what: "Screens: In several screens card (names counted by kind of screen) + five new screens (growth, earnings reaction, crowded shorts)"};
+const BOARD_VER = {date: "2026-11-15", n: 2, what: "Screens: eleven more bearish screens (trend, relative weakness, bounce spot, selling volume, gap down) — the bearish side of In several screens now has 7 kinds"};
 const boardVerTxt = () => `v${BOARD_VER.date}.${BOARD_VER.n}`;
 (function verChip(){
   try {
