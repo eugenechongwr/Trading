@@ -23204,6 +23204,159 @@ document.head.insertAdjacentHTML("beforeend", `<style>#r21Box tr[data-sym]{curso
 <script>
 "use strict";
 /* =====================================================================
+   SCREENS · CONFLUENCE CARD + FIVE NEW SCREENS (15 Nov 2026) — display / tracking only. On a 2-week trial (docs/trials.md).
+   Eugene, 15 Nov 2026: "is there a way to download all the results of the individual screeners from the board for
+   comparison. sort of like identifying the tickers with the most confluence across different screeners … something that
+   can be done a click of a button" → "by group, scrutinise if the screens that are currently in use are optimal … are
+   there any gaps we havent covered. or something that is repeating. consider factors across fundamentals, sentiment,
+   technicals, analysts, earnings etc. … if you can add screens just add it if its something different".
+   A. Five research screens for the kinds of evidence no screen covered (category "Fundamentals, earnings & short
+      interest" on the Screens page). The lines are Claude's common rules of thumb (CFX_T) — NOT Notion rules; they block
+      nothing and feed nothing:
+      - fgrow   "Growing — sales and earnings both up 25%+"  (file columns EPS / Revenue growth %, quarterly YoY)
+      - fshrink "Shrinking — sales and earnings both down"
+      - ergu    "Earnings gap up, still holding"   — reported in the last 20 sessions, opened at least 1 ADR (and 3%)
+                 above the prior close on the reaction day, last price still at or above that day's low
+      - ergd    "Earnings gap down, not recovered" — the mirror (last price at or under that day's high)
+      - sqz     "Crowded short in an uptrend"      — short interest crowded (the SHORT INTEREST section's own line),
+                 RS 80+, above the 50 SMA
+      The reaction day = the first stored day on / after the "Recent earnings date", or the day after it (a report after
+      the close) — whichever opened with the bigger gap.
+   B. Card "In several screens" at the top of the Screens page (#cfxBox): for every name on the Screens page (the same
+      names the screen cards count: your group filter and the ETF setting), how many different KINDS of screen it is in,
+      bullish and bearish kept apart. Kinds = CFX_F below — not the page's own headings, because several screens repeat
+      one fact (the buy-zone screens all need the buy zone; the highs screens all fire on a name that has run). A kind
+      counts once however many of its screens hit. "At least 2 / 3 / 4 / 5 kinds" switch, Copy for TradingView (each side),
+      Download CSV (every name × every screen, 1 / 0, blank = the screen can't run on this file).
+      Screens in CFX_F.skip are not a signal either way and are never counted. A screen in neither list is shown as
+      "not counted yet" in the card's fold (tools/board-confluence-test.js fails until it is placed).
+   Never changes: any screen that was there, a rank, state, list, zone, stop, the plan, the feed, MAP's lists.
+   Storage NEW: adrb.cfxMin (2 | 3 | 4 | 5, default 3). Hooks: "tab" (draw on the Screens page). No override.
+   Self-check: none (no trading number). Test: tools/board-confluence-test.js (a separate recount).
+   ===================================================================== */
+const CFX_T = {grow: 25, erLook: 20, erPct: 3, erAdr: 1, rs: 80, show: 25};
+const CFX_CAT = "Fundamentals, earnings & short interest";
+// ---- earnings reaction (pure: bars oldest first, the earnings date, ADR %)
+function cfxErFrom(b, D, adr){
+  if (!b || !(b.n >= 3) || !/^\d{4}-\d\d-\d\d$/.test(D || "") || !(adr > 0)) return null;
+  const last = b.n - 1; let i = b.n; while (i > 0 && b.dates[i - 1] >= D) i--;
+  if (i >= b.n || i === 0 || last - i > CFX_T.erLook || b.dates[i] > addDays(D, 4)) return null;   // not reported yet · older than the bars · too long ago · a hole in the bars
+  let t = -1, gap = null;
+  for (const u of [i, i + 1]) { if (u > last || !(b.c[u - 1] > 0) || !fin(b.o[u]) || !(b.o[u] > 0)) continue; const g = (b.o[u] / b.c[u - 1] - 1) * 100; if (gap == null || Math.abs(g) > Math.abs(gap)) { gap = g; t = u; } }
+  if (t < 0) return null;
+  const need = Math.max(CFX_T.erPct, CFX_T.erAdr * adr), dir = gap >= need ? 1 : gap <= -need ? -1 : 0, px = b.c[last];
+  return {date: b.dates[t], ago: last - t, gap, need, dir, lo: b.l[t], hi: b.h[t], held: dir > 0 ? px >= b.l[t] : dir < 0 ? px <= b.h[t] : false};
+}
+const CFX_ER = new WeakMap();
+function cfxErOf(r){
+  if (!r || r.etf || !r.err || !S.has || !S.has.hist || typeof dssBars !== "function") return null;
+  const hit = CFX_ER.get(r); if (hit && hit.last === r.last && hit.nD === HIST.nD) return hit.v;
+  let v = null; try { v = cfxErFrom(dssBars(r.sym), String(r.err).slice(0, 10), r.adr); } catch (e) { v = null; }
+  CFX_ER.set(r, {last: r.last, nD: HIST.nD, v}); return v;
+}
+const cfxSiNote = () => typeof SI !== "undefined" && SI.m && SI.m.size ? ` Short interest: FINRA, settled ${typeof siD === "function" ? siD(SI.sd) : SI.sd} (twice a month, about a week late).` : " No short-interest data loaded yet — it loads with your Massive key (Data check shows its status).";
+for (const sc of [
+  {k: "fgrow", t: `Growing — sales and earnings both up ${CFX_T.grow}%+`, d: `Latest quarter against the same quarter a year ago: earnings per share and revenue both up at least ${CFX_T.grow}%. A rule of thumb for real growth behind a move — not a board rule.`, need: ["epsg", "revg"], f: r => !r.etf && r.epsg != null && r.revg != null && r.epsg >= CFX_T.grow && r.revg >= CFX_T.grow},
+  {k: "fshrink", t: "Shrinking — sales and earnings both down", d: "Latest quarter against the same quarter a year ago: earnings per share and revenue both lower. Weak business behind the chart — context for shorts, a warning on longs.", need: ["epsg", "revg"], f: r => !r.etf && r.epsg != null && r.revg != null && r.epsg < 0 && r.revg < 0},
+  {k: "ergu", t: "Earnings gap up, still holding", d: `Reported in the last ${CFX_T.erLook} sessions, opened at least ${CFX_T.erAdr} ADR (and ${CFX_T.erPct}%) above the prior close on the reaction day, and the last price is still at or above that day's low. Buyers kept what the report gave them.`, need: ["hist"], f: r => { const x = cfxErOf(r); return !!x && x.dir > 0 && x.held; }},
+  {k: "ergd", t: "Earnings gap down, not recovered", d: `Reported in the last ${CFX_T.erLook} sessions, opened at least ${CFX_T.erAdr} ADR (and ${CFX_T.erPct}%) under the prior close on the reaction day, and the last price is still at or under that day's high. A warning on longs, context for shorts.`, need: ["hist"], f: r => { const x = cfxErOf(r); return !!x && x.dir < 0 && x.held; }},
+  {k: "sqz", t: "Crowded short in an uptrend", d: () => `Short interest at least ${typeof SI_T !== "undefined" ? SI_T.pct : 20}% of the float or ${typeof SI_T !== "undefined" ? SI_T.dtc : 5}+ days to cover, with RS ${CFX_T.rs}+ and price above the 50 SMA — shorts leaning against a strong stock. A rule of thumb, not a board rule.${esc(cfxSiNote())}`, need: [], f: r => { if (r.etf || typeof siOf !== "function") return false; const q = siOf(r.sym); return !!q && q.si != null && q.crowded && (r.rs ?? 0) >= CFX_T.rs && r.a50 === true; }}
+]) { SCREENS.push(sc); SC_CAT[sc.k] = CFX_CAT; }
+if (!SC_ORDER.includes(CFX_CAT)) SC_ORDER.splice(SC_ORDER.indexOf("Other") >= 0 ? SC_ORDER.indexOf("Other") : SC_ORDER.length, 0, CFX_CAT);
+
+// ---- kinds of evidence: every screen sits in one kind on one side, or in skip
+const CFX_F = {
+  bull: [
+    {k: "trend", n: "Trend and highs", s: ["near", "newhi", "above10", "stage2", "ws2a"]},
+    {k: "rs", n: "Relative strength", s: ["rsnh", "rsbp", "accel", "rsspeed", "hqturn", "since", "weakgrp", "reaccel"]},
+    {k: "grp", n: "Group leader", s: ["leader"]},
+    {k: "spot", n: "Pullback spot", s: ["pb", "weak", "lod", "narrow", "dry", "coil", "vcoil", "washret", "pb21", "pb9w", "wrspb", "avhrc", "rcma", "fpR", "fpD", "r1arm", "r1camp", "obc", "obur", "ws4b"]},
+    {k: "today", n: "Today's action", s: ["strong", "factor", "inplay", "reclaim", "gapgo", "vwap", "trigger", "ep9"]},
+    {k: "vol", n: "Buying volume", s: ["accum", "hvol", "bigup", "ep9r"]},
+    {k: "fund", n: "Growth", s: ["fgrow"]},
+    {k: "er", n: "Earnings reaction", s: ["ergu"]},
+    {k: "pos", n: "Short interest", s: ["sqz"]}],
+  bear: [
+    {k: "trend", n: "Trend broken", s: ["crack", "ws3a", "newlo"]},
+    {k: "rs", n: "Relative weakness", s: ["shortw", "rsnl"]},
+    {k: "today", n: "Today's action", s: ["weakup", "breakdn", "reject", "gapfade"]},
+    {k: "fund", n: "Shrinking", s: ["fshrink"]},
+    {k: "er", n: "Earnings reaction", s: ["ergd"]}],
+  skip: ["vwild", "fpN", "fpW"]
+};
+const CFX = {min: (() => { const v = +store.get("adrb.cfxMin", 3); return [2, 3, 4, 5].includes(v) ? v : 3; })(), all: {bull: false, bear: false}, res: null};
+const cfxBase = () => (CFG.inclETF ? S.rows : S.stocks).filter(gOK);
+function cfxRun(){
+  const base = cfxBase(), on = [], off = [], hit = new Map(), T = new Map(SCREENS.map(sc => [sc.k, sc]));
+  for (const sc of SCREENS) {
+    if (sc.need.some(k => !S.has[k])) { off.push(sc.k); continue; }
+    let rows = []; try { rows = base.filter(sc.f); } catch (e) { console.warn("confluence: screen " + sc.k, e); off.push(sc.k); continue; }
+    on.push(sc.k); for (const r of rows) { let s = hit.get(r.sym); if (!s) hit.set(r.sym, s = new Set()); s.add(sc.k); }
+  }
+  const side = (h, F) => { const kinds = []; let nS = 0; for (const f of F) { const sc = f.s.filter(k => h.has(k)); if (sc.length) { kinds.push({k: f.k, n: f.n, sc}); nS += sc.length; } } return {kinds, nK: kinds.length, nS}; };
+  const rows = []; for (const r of base) { const h = hit.get(r.sym); if (!h) continue; rows.push({r, h, bull: side(h, CFX_F.bull), bear: side(h, CFX_F.bear)}); }
+  const placed = new Set([...CFX_F.bull, ...CFX_F.bear].flatMap(f => f.s).concat(CFX_F.skip));
+  return {n: base.length, on, off, rows, T, unplaced: SCREENS.filter(sc => !placed.has(sc.k)).map(sc => sc.k)};
+}
+const cfxSort = sd => (a, b) => b[sd].nK - a[sd].nK || b[sd].nS - a[sd].nS || (b.r.rs ?? -1) - (a.r.rs ?? -1) || (a.r.sym < b.r.sym ? -1 : 1);
+const cfxList = (R, sd) => R.rows.filter(x => x[sd].nK >= CFX.min).sort(cfxSort(sd));
+const cfxT = (R, k) => { const sc = R.T.get(k); return sc ? sc.t : k; };
+function cfxSideHTML(R, sd){
+  const L = cfxList(R, sd), other = sd === "bull" ? "bear" : "bull", cap = CFX.all[sd] ? L.length : CFX_T.show, word = sd === "bull" ? "Bullish" : "Bearish";
+  const head = `<div class="cfx-h"><b>${word}</b> <span class="dim">· ${L.length} name${L.length === 1 ? "" : "s"} in ${CFX.min}+ kinds of ${CFX_F[sd].length}</span>${L.length ? ` <button class="btn sm" data-cfx="copy:${sd}" title="Copies these ${L.length} tickers as one line — paste into TradingView's Add symbol box">Copy for TradingView</button>` : ""}</div>`;
+  if (!L.length) return `<div class="cfx-side">${head}<div class="empty small">No name is in ${CFX.min} or more kinds of ${word.toLowerCase()} screen right now.</div></div>`;
+  const row = x => {
+    const s = x[sd], r = x.r, o = x[other];
+    const tags = (sd === "bull" && r.state === 4 ? ` <span class="cfx-x" title="Past the Entry Check's stretch limit over its 9/21 EMA zone. A high count here usually means it has already run — wait for the pullback.">extended</span>` : "")
+      + (o.nK >= 2 ? ` <span class="cfx-m" title="${esc(`Also in ${o.nK} kinds of ${other === "bull" ? "bullish" : "bearish"} screen: ${o.kinds.map(q => q.n).join(", ")}`)}">mixed</span>` : "");
+    return `<tr data-sym="${esc(r.sym)}"><td class="cfx-s"><b>${esc(r.sym)}</b>${tags}</td><td class="num"><b>${s.nK}</b></td><td class="num dim">${s.nS}</td><td class="num">${r.rs != null ? Math.round(r.rs) : "—"}</td><td class="cfx-w">${s.kinds.map(q => `<span class="cfx-k"><b>${esc(q.n)}</b> ${esc(q.sc.map(k => cfxT(R, k)).join(" · "))}</span>`).join("")}</td></tr>`;
+  };
+  return `<div class="cfx-side">${head}<table class="cfx-t"><thead><tr><th>Ticker</th><th class="num" title="How many different kinds of screen it is in">Kinds</th><th class="num" title="How many screens in all">Screens</th><th class="num">RS</th><th>Which</th></tr></thead><tbody>${L.slice(0, cap).map(row).join("")}</tbody></table>`
+    + (L.length > cap ? `<div class="small" style="margin-top:4px"><button class="btn sm" data-cfx="all:${sd}">Show all ${L.length}</button></div>` : "") + `</div>`;
+}
+function cfxHowHTML(R){
+  const line = f => `<div class="cfx-l"><b>${esc(f.n)}</b> <span class="dim">${f.s.map(k => `${R.off.includes(k) ? "<s>" : ""}${esc(cfxT(R, k))}${R.off.includes(k) ? "</s>" : ""}`).join(" · ")}</span></div>`;
+  return `<details class="cfx-how"><summary>How it's counted</summary><div class="small">`
+    + `<p>Each screen sits in one kind. A name scores one for each <b>kind</b> it shows up in, however many screens of that kind it hits — so five screens that all need the buy zone count once, not five times. Bullish and bearish are counted apart.</p>`
+    + `<div class="cfx-h"><b>Bullish kinds</b></div>${CFX_F.bull.map(line).join("")}<div class="cfx-h" style="margin-top:6px"><b>Bearish kinds</b></div>${CFX_F.bear.map(line).join("")}`
+    + `<div class="cfx-l" style="margin-top:6px"><b>Never counted</b> <span class="dim">${CFX_F.skip.map(k => esc(cfxT(R, k))).join(" · ")} — not a signal either way</span></div>`
+    + (R.unplaced.length ? `<div class="cfx-l"><b>Not counted yet</b> <span class="dim">${R.unplaced.map(k => esc(cfxT(R, k))).join(" · ")} — new screens that haven't been given a kind</span></div>` : "")
+    + (R.off.length ? `<p><s>Struck through</s> = can't run on this file (${R.off.length} of ${SCREENS.length}: a column or the price history is missing — the screen's own card says which), so it adds nothing to the count.</p>` : "")
+    + `</div></details>`;
+}
+function cfxDraw(){
+  const host = $("screens"); if (!host || !S.snap) return;
+  let box = $("cfxBox"); if (!box) { box = document.createElement("div"); box.className = "card"; box.id = "cfxBox"; host.before(box); }
+  let R; try { R = CFX.res = cfxRun(); } catch (e) { console.warn("confluence card", e); box.innerHTML = ""; return; }
+  box.innerHTML = `<div class="hd"><h2>In several screens</h2><span class="sub">${R.n.toLocaleString()} names on this page · ${R.on.length} of ${SCREENS.length} screens running · counted by kind of screen, not by screen</span>`
+    + `<span class="cfx-ctl"><span class="small dim">At least</span><span class="seg" id="cfxMin">${[2, 3, 4, 5].map(n => `<button data-cfx="min:${n}" class="${CFX.min === n ? "on" : ""}">${n} kinds</button>`).join("")}</span><button class="btn sm" data-cfx="csv" title="Every name that is in at least one screen, with a 1 / 0 column for every screen and the bullish and bearish counts">Download CSV</button></span></div>`
+    + `<div class="bd"><div class="note small" style="margin-bottom:8px">Several different things lining up on one name — a research shortlist, <b>not a buy signal</b>. The Entry Check and MAP's lists still decide. A high bullish count often means the stock has already run: names marked <span class="cfx-x">extended</span> are for waiting, not chasing.</div>`
+    + `<div class="cfx-cols">${cfxSideHTML(R, "bull")}${cfxSideHTML(R, "bear")}</div>${cfxHowHTML(R)}</div>`;
+}
+function cfxCSV(R){
+  const scs = SCREENS.filter(sc => !CFX_F.skip.includes(sc.k)), names = s => s.kinds.map(q => q.n).join("; ");
+  const head = ["Ticker", "RS", "Bullish kinds", "Bullish screens", "Bullish kinds hit", "Bearish kinds", "Bearish screens", "Bearish kinds hit", ...scs.map(sc => sc.t)];
+  const rows = R.rows.slice().sort(cfxSort("bull")).map(x => [x.r.sym, x.r.rs != null ? Math.round(x.r.rs) : "", x.bull.nK, x.bull.nS, names(x.bull), x.bear.nK, x.bear.nS, names(x.bear), ...scs.map(sc => R.off.includes(sc.k) ? "" : x.h.has(sc.k) ? 1 : 0)]);
+  return [head, ...rows].map(a => a.map(csvCell).join(",")).join("\n");
+}
+document.addEventListener("click", e => {
+  const b = e.target && e.target.closest ? e.target.closest("#cfxBox [data-cfx]") : null;
+  if (b) {
+    const [act, v] = b.dataset.cfx.split(":");
+    if (act === "min") { CFX.min = +v; CFX.all.bull = CFX.all.bear = false; try { store.set("adrb.cfxMin", CFX.min); } catch (err) {} cfxDraw(); }
+    else if (act === "all") { CFX.all[v] = true; cfxDraw(); }
+    else if (act === "copy" && CFX.res) tvCopy(cfxList(CFX.res, v).map(x => x.r.sym), `${v === "bull" ? "bullish" : "bearish"}, in ${CFX.min}+ kinds of screen`);
+    else if (act === "csv" && CFX.res) download(`Screens_confluence_${S.snap.asOf}_${zoneTag()}.csv`, cfxCSV(CFX.res), "text/csv");
+    return;
+  }
+  const tr = e.target && e.target.closest ? e.target.closest("#cfxBox tr[data-sym]") : null; if (tr) openDrawer(tr.dataset.sym);
+});
+hookOn("tab", "confluence", t => { if (t !== "screens") return; try { cfxDraw(); } catch (e) { console.warn("confluence card", e); } });
+document.head.insertAdjacentHTML("beforeend", `<style>#cfxBox{margin-bottom:12px} #cfxBox .hd{flex-wrap:wrap;gap:6px} .cfx-ctl{margin-left:auto;display:flex;align-items:center;gap:6px;flex-wrap:wrap} .cfx-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:14px;align-items:start} .cfx-side{min-width:0} .cfx-h{margin-bottom:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap} .cfx-t{width:100%;border-collapse:collapse;font-size:12px} .cfx-t th{text-align:left;font-weight:600;color:var(--ink-3);padding:3px 6px;border-bottom:1px solid var(--line, rgba(128,128,128,.3))} .cfx-t td{padding:4px 6px;vertical-align:top;text-align:left;white-space:normal;border-bottom:1px solid var(--line, rgba(128,128,128,.15))} .cfx-t th.num, .cfx-t td.num{text-align:right;font-variant-numeric:tabular-nums} .cfx-t tr[data-sym]{cursor:pointer} .cfx-s{white-space:nowrap} .cfx-w{word-break:normal;overflow-wrap:anywhere;width:99%} .cfx-k{display:block;color:var(--ink-3)} .cfx-k b{color:var(--ink, inherit);font-weight:600} .cfx-x, .cfx-m{font-size:10px;padding:0 5px;border-radius:8px;margin-left:4px;border:1px solid #f0a020;color:#f0a020;white-space:nowrap} .cfx-m{border-color:var(--ink-3);color:var(--ink-3)} .cfx-how{margin-top:10px} .cfx-how summary{cursor:pointer;font-size:12px;color:var(--ink-3)} .cfx-l{margin:2px 0}</style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
    BOARD VERSION LABEL (10 Nov 2026) — display only. On a 2-week trial (docs/trials.md).
    Eugene, 10 Nov 2026: "how do i know whether the board is the latest update" → "yes add the version label".
    - BOARD_VER = {date, n, what}: bumped in EVERY change to index.html (tools/board-version-test.js fails when index.html
@@ -23214,7 +23367,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>#r21Box tr[data-sym]{curso
    - Never changes any number, list, feed column, storage key or setting. Storage: none. Hooks: "settings"; the chip is
      inserted once at load. No override.
    ===================================================================== */
-const BOARD_VER = {date: "2026-11-14", n: 11, what: "Group panel RS badge + coloured short − long; Spotlight shows its comparison periods"};
+const BOARD_VER = {date: "2026-11-15", n: 1, what: "Screens: In several screens card (names counted by kind of screen) + five new screens (growth, earnings reaction, crowded shorts)"};
 const boardVerTxt = () => `v${BOARD_VER.date}.${BOARD_VER.n}`;
 (function verChip(){
   try {
