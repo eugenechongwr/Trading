@@ -14263,6 +14263,7 @@ function xcols(root = document){
   try { asPaint(root); } catch (e) { console.warn("AS", e); }
   try { ehPaint(root); } catch (e) { console.warn("ext hours", e); }
   try { if (typeof dcPaint === "function") dcPaint(root); } catch (e) { console.warn("day change", e); }   // 12 Nov 2026: Day chg after Last (DAY CHANGE script) — after Ext. hours so it lands between Last and Ext. hours
+  try { if (typeof x50Paint === "function") x50Paint(root); } catch (e) { console.warn("from 50", e); }   // 17 Nov 2026: From 50 on the Watchlist / Setups tables (FROM 50 COLUMN script)
 }
 hookOn("tab", "xcols", () => xcols());
 hookOn("panel", "xcols", (r, dr) => xcols(dr || document));
@@ -23019,6 +23020,53 @@ for (const sc of [
 <script>
 "use strict";
 /* =====================================================================
+   FROM 50 COLUMN ON THE WATCHLIST AND SETUPS (17 Nov 2026) — DISPLAY ONLY. On a 2-week trial (docs/trials.md).
+   Eugene, 17 Nov 2026: "the watchlist/setup page of deep space board doesnt show ADR% ext from the 50 SMA, which is actually
+   a critical part of decision making. add that column in. this information is available in the today page".
+   - One "From 50" cell (ADR above the daily 50 SMA, 1 decimal) painted into the small list tables after drawing:
+     · Watchlist groups (table.wlt with a "Location" column — the Today page's Held table has none, so it is left alone);
+     · Setups → Entry Check lists (table.s61t, right after "9 ADR");
+     · the MAP lists / held tables built by ecListHTML (table.ecl, right after "Location").
+   - Number: the Entry Check's own extension (check 5, x.ext: (close − daily 50 SMA) ÷ 20-day ADR from the stored bars) —
+     the same value the ticker panel and the row tooltip show; without the price history (or for ETFs) the file's r.extU,
+     which is what the Table's "From 50" column shows. Red bold when check 5 fails (over the 4 ADR cap); "↺" when over the cap
+     but reset by a recent gap (the check passes).
+   - Never changes: any row value, rank, state, list, check, size, the feeds, the Board log, snapshots. Storage: none.
+     Hooks: none new — one guarded call in xcols() (like Day chg), so every page / panel draw and the fallback watcher paint it.
+     No override.
+   ===================================================================== */
+function x50Val(r){
+  const s = r && !r.etf && S.has.hist && typeof s61Of === "function" ? s61Of(r) : null;
+  if (s && s.x && fin(s.x.ext)) return {v: s.x.ext, fail: s.ck && s.ck[5] ? s.ck[5].ok === false : s.x.ext > S61.ext, reset: !!s.x.xr, src: "ec"};
+  if (r && fin(r.extU)) return {v: r.extU, fail: !r.etf && r.extU > CFG.extCap, reset: false, src: "file"};
+  return null;
+}
+function x50HTML(r){
+  const x = x50Val(r); if (!x) return `<span class="dim">—</span>`;
+  const over = x.v > S61.ext, tip = `${sg(x.v, 2)} ADR above the daily 50 SMA${x.src === "ec" ? " (Entry Check, 20-day ADR)" : " (from the file)"} · limit 4${x.fail ? " — too stretched" : over && x.reset ? " — over, but reset by a recent gap (check passes)" : ""}${r && r.etf ? " · ETF: the limit doesn't apply" : ""}`;
+  return `<span class="${x.fail ? "neg" : ""}" style="font-weight:${x.fail ? 650 : 400}" title="${esc(tip)}">${sg(x.v, 1)}${over && x.reset && !x.fail ? " ↺" : ""}</span>`;
+}
+function x50Paint(root = document){
+  root.querySelectorAll("table.wlt:not([data-x50]), table.s61t:not([data-x50]), table.ecl:not([data-x50])").forEach(t => {
+    const hs = [...t.querySelectorAll(":scope > thead > tr > th")]; if (!hs.length) return;
+    const nm = h => h.textContent.trim();
+    let i = t.classList.contains("s61t") && !t.classList.contains("ecl") ? hs.findIndex(h => nm(h) === "9 ADR") : hs.findIndex(h => nm(h) === "Location");
+    if (i < 0) return;
+    t.dataset.x50 = 1;
+    hs[i].insertAdjacentHTML("afterend", `<th class="x50h" title="ADR above the daily 50 SMA (Entry Check check 5, limit 4). Red = too stretched; ↺ = over but reset by a recent gap">From 50</th>`);
+    t.querySelectorAll(":scope > tbody > tr").forEach(tr => {
+      const cs = tr.querySelector(":scope > td[colspan]"); if (cs) { cs.colSpan = cs.colSpan + 1; return; }
+      if (!tr.dataset.sym || tr.children.length !== hs.length) return;
+      const r = S.rowBySym && S.rowBySym.get(tr.dataset.sym);
+      tr.children[i].insertAdjacentHTML("afterend", `<td class="x50">${x50HTML(r)}</td>`);
+    });
+  });
+}
+document.head.insertAdjacentHTML("beforeend", `<style>td.x50{white-space:nowrap;font-variant-numeric:tabular-nums}</style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
    BOARD VERSION LABEL (10 Nov 2026) — display only. On a 2-week trial (docs/trials.md).
    Eugene, 10 Nov 2026: "how do i know whether the board is the latest update" → "yes add the version label".
    - BOARD_VER = {date, n, what}: bumped in EVERY change to index.html (tools/board-version-test.js fails when index.html
@@ -23029,7 +23077,7 @@ for (const sc of [
    - Never changes any number, list, feed column, storage key or setting. Storage: none. Hooks: "settings"; the chip is
      inserted once at load. No override.
    ===================================================================== */
-const BOARD_VER = {date: "2026-11-15", n: 2, what: "Screens: eleven more bearish screens (trend, relative weakness, bounce spot, selling volume, gap down) — the bearish side of In several screens now has 7 kinds"};
+const BOARD_VER = {date: "2026-11-17", n: 1, what: "Watchlist and Setups: From 50 column (ADR above the daily 50 SMA)"};
 const boardVerTxt = () => `v${BOARD_VER.date}.${BOARD_VER.n}`;
 (function verChip(){
   try {
