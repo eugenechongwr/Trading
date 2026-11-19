@@ -23067,6 +23067,59 @@ document.head.insertAdjacentHTML("beforeend", `<style>td.x50{white-space:nowrap;
 <script>
 "use strict";
 /* =====================================================================
+   MAP · INDEX LOCATION TABLE (19 Nov 2026) — DISPLAY ONLY. On a 2-week trial (docs/trials.md).
+   Eugene, 19 Nov 2026: "Can our deep space board read everything in terms of the daily import template provided by map
+   and output it properly in the setups/ watchlist section?" → (plan: a table for the four index WATCH lines) "build it".
+   Spec: MAP page (MAP v4.11 + BRIEF v3.5, refreshed 19 Nov 2026), S1.1a "Index location block" and §9 paste block: "print
+   one WATCH line per index — WATCH {INDEX} | {verdict} · zone {low}–{high} · break {level} · kill {level} · vehicle
+   {wrapper}". Those lines were already read (OUT / WATCH notes, adrb.mapImp.notes) but shown only as one run-on
+   "MAP watching: …" sentence.
+   What it adds: card #mixBox "MAP · Index location" on the Watchlist, right after the ETF setups card — one row per
+   QQQ / SPY / IWM / SOXX WATCH line, in MAP's order: Index | MAP's verdict (red short zone / green long zone / grey no
+   trade) | Zone (★3 kept) | Break | Kill | Vehicle | anything else MAP wrote. Shown only for the current MAP import
+   (mpsCur); hidden when the import has no index lines.
+   Never changes: the parse (mapParse / the OUT / WATCH notes, the import report and its counts), "MAP says", any list,
+   rank, state, check, stop, size, the ETF setups card or its "MAP watching" line, the feeds, the Board log, snapshots.
+   MAP's text is shown as MAP wrote it — nothing is recomputed. Storage: none. Hooks: "watchPage". No override.
+   Test: tools/board-map-index-loc-test.js.
+   ===================================================================== */
+const MIX_IDX = ["QQQ", "SPY", "IWM", "SOXX"];
+// one WATCH note → {t, verdict, zone, brk, kill, vehicle, more}; MAP's words kept as written
+function mixParse(n){
+  const o = {t: n.t, verdict: "", zone: "", brk: "", kill: "", vehicle: "", more: []};
+  String(n.note || "").split(/\s+·\s+|\s*\|\s*/).map(x => x.trim()).filter(Boolean).forEach((seg, i) => {
+    const m = seg.match(/^(zone|break|kill|vehicle)\s*:?\s*(.*)$/i);
+    if (m) { const k = m[1].toLowerCase(); o[k === "break" ? "brk" : k] = m[2].trim(); }
+    else if (i === 0 && !o.verdict) o.verdict = seg; else o.more.push(seg);
+  });
+  return o;
+}
+function mixRows(){
+  const m = typeof mpsCur === "function" ? mpsCur() : null; if (!m || !Array.isArray(m.notes)) return [];
+  return m.notes.filter(n => n && n.kind === "watch" && MIX_IDX.includes(String(n.t || "").toUpperCase())).map(mixParse);
+}
+const mixCls = v => /short\s*zone/i.test(v) ? "neg" : /long\s*zone/i.test(v) ? "pos" : "dim";
+function mixHTML(R){
+  return `<div class="hd"><h2>MAP · Index location</h2><span class="sub">MAP's read of QQQ, SPY, IWM, SOXX — where each index sits, not a setup</span></div><div class="bd">
+    <table class="mix"><thead><tr><th class="l">Index</th><th class="l">MAP's verdict</th><th class="l">Zone</th><th class="l">Break</th><th class="l">Kill</th><th class="l">Vehicle</th><th class="l">Other</th></tr></thead><tbody>
+    ${R.map(r => `<tr data-sym="${esc(r.t)}"><td class="l sym"><b>${esc(r.t)}</b></td><td class="l"><b class="${mixCls(r.verdict)}">${esc(r.verdict || "—")}</b></td><td class="l">${esc(r.zone || "—")}</td><td class="l">${esc(r.brk || "—")}</td><td class="l">${esc(r.kill || "—")}</td><td class="l">${esc(r.vehicle || "—")}</td><td class="l small dim">${esc(r.more.join(" · "))}</td></tr>`).join("")}
+    </tbody></table>
+    <div class="small dim" style="padding-top:4px">A zone is a location, not a trade: the ETF rules (50 SMA side, extension, RS vs RSP, the $20M vehicle floor) and the 30-min trigger from 10:00 ET still decide. Levels are read on the index, the trigger and stop on the instrument traded. One index trade at a time (advisory).</div></div>`;
+}
+function mixRender(){
+  const box = $("watchBody"); if (!box) return;
+  let c = $("mixBox"); const R = mixRows();
+  if (!R.length) { if (c) c.remove(); return; }
+  if (!c) { box.insertAdjacentHTML("afterbegin", `<div class="card g1" id="mixBox"></div>`); c = $("mixBox"); }
+  const at = $("esBox"); if (at && at.nextElementSibling !== c) at.after(c);
+  c.innerHTML = mixHTML(R);
+}
+hookOn("watchPage", "mapIndexLoc", () => { if (!S.snap) return; try { mixRender(); } catch (e) { console.warn("MAP index location", e); } });
+document.head.insertAdjacentHTML("beforeend", `<style>table.mix td,table.mix th{white-space:nowrap;font-variant-numeric:tabular-nums}table.mix td.small{white-space:normal}</style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
    BOARD VERSION LABEL (10 Nov 2026) — display only. On a 2-week trial (docs/trials.md).
    Eugene, 10 Nov 2026: "how do i know whether the board is the latest update" → "yes add the version label".
    - BOARD_VER = {date, n, what}: bumped in EVERY change to index.html (tools/board-version-test.js fails when index.html
@@ -23077,7 +23130,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>td.x50{white-space:nowrap;
    - Never changes any number, list, feed column, storage key or setting. Storage: none. Hooks: "settings"; the chip is
      inserted once at load. No override.
    ===================================================================== */
-const BOARD_VER = {date: "2026-11-17", n: 1, what: "Watchlist and Setups: From 50 column (ADR above the daily 50 SMA)"};
+const BOARD_VER = {date: "2026-11-19", n: 1, what: "Watchlist: MAP · Index location table (MAP's QQQ / SPY / IWM / SOXX lines)"};
 const boardVerTxt = () => `v${BOARD_VER.date}.${BOARD_VER.n}`;
 (function verChip(){
   try {
