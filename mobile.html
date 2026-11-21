@@ -12782,7 +12782,7 @@ mapApply = function(P){
 const _mapImpHTMLPB = mapImpHTML;
 mapImpHTML = function(){
   const h = _mapImpHTMLPB(), m = mapImp(), n = m && m.O ? m.O.length : 0;
-  const note = `<div class="small dim" style="margin-top:4px">Floor Bounce watch (Playbook 3): <code>O1 SOXL | level: 81.5 | test: first | why: … | kill: …</code> — up to three O lines; they show on the Floor Bounce card and the Watchlist, never on the A / B lists.${n ? ` Last import: ${n} O line${n > 1 ? "s" : ""} (${m.O.map(o => esc(o.t)).join(", ")}).` : ""}</div>`;
+  const note = `<div class="small dim" data-pbcut="1" style="margin-top:4px">Floor Bounce watch (Playbook 3): <code>O1 SOXL | level: 81.5 | test: first | why: … | kill: …</code> — up to three O lines; they show on the Floor Bounce card and the Watchlist, never on the A / B lists.${n ? ` Last import: ${n} O line${n > 1 ? "s" : ""} (${m.O.map(o => esc(o.t)).join(", ")}).` : ""}</div>`;
   const i = h.lastIndexOf("</div>"); return i < 0 ? h + note : h.slice(0, i) + note + h.slice(i);
 };
 
@@ -14950,7 +14950,7 @@ function TVL_SECS(C){
       {k: "poolM", n: "MAP source universe (Deep Space Screener export)", def: 0, f: () => { const m = msrcCur(); return m ? [...m.set].sort().map(s => tvlE(s, `MAP source universe ${m.date}`)) : null; }},
       {k: "poolS", n: "Whole stock file", def: 0, f: () => S.stocks.map(r => r.sym).sort().map(s => tvlE(s, "Stock file"))},
       {k: "poolE", n: "Whole ETF file", def: 0, f: () => S.etfs.map(r => r.sym).sort().map(s => tvlE(s, "ETF file"))}]}];
-  return secs;
+  return typeof pbCutTvl === "function" ? pbCutTvl(secs) : secs;   // 21 Nov 2026: PLAYBOOK CUT (at the end) drops the retired playbooks' sections while the cut is on
 }
 // presets: DS Daily = every item's default; a playbook preset = that playbook's stock + ETF defaults (shorts: all their items)
 const TVL_PRE = {"DS Daily": null, "Leader Pullback": ["p1", "p1e"], "First Pullback": ["fp"], "Shakeout Reclaim": ["r1"], "Floor Bounce": ["ob", "obe"], "Short research": ["sh", "she"], "Held & campaigns": ["held", "camp"], "Research pool": ["pool"]};
@@ -17257,10 +17257,17 @@ function dpWhyHTML(e){
      bar (Massive 15 min delayed, or the file), labelled as such; never "live".
    Storage NEW: adrb.itSel (selected ETF), adrb.itAll (1 = every ETF group), IndexedDB dsb-idxhist. No CFG / hash keys.
    Hook points: pageOn("itrend") only — no override. On trial (docs/trials.md).
+   21 NOV 2026 — 20 YEARS OF HISTORY. DISPLAY ONLY. Eugene (chat, 21 Nov 2026): "index trend move it to 10 years so it covers
+   some bear markets as well. 20 years if its not difficult to download the data on the board." IT_YEARS 5 → 20: the same one
+   call per ETF, with a start date 20 years back (about 5,000 daily bars; an ETF listed later returns what it has). A stored
+   record carries the years it was fetched for (rec.y); one fetched for fewer years is fetched again once, so a browser that
+   already holds the 5-year pull upgrades by itself. The stretch scores (σ), rarity counts, histograms and "this run vs past
+   runs" now read the longer history, so they move — that is the point. States, lines and levels are unchanged (they need
+   only the recent bars). No storage key added (rec.y lives inside the existing IndexedDB record).
    ===================================================================== */
 const IT = {recs: new Map(), loaded: false, busy: false, prog: null, errs: [], tried: new Map(), calc: new Map(), chart: null, msg: ""};
 const IT_DB = {name: "dsb-idxhist", ver: 1, store: "bars"};
-const IT_SIG = 1.5, IT_YEARS = 5;
+const IT_SIG = 1.5, IT_YEARS = 20;   // 21 Nov 2026 (Eugene): 20 years so the history covers bear markets (was 5) — see "21 NOV 2026" in the header
 const IT_ST = {
   on: {n: "Risk on", cls: "iton", d: "Above both lines. The trend is working on the daily and the weekly."},
   pb: {n: "Pullback", cls: "itpb", d: "Above the 10-week, below the 21-day. A dip inside the longer uptrend."},
@@ -17282,7 +17289,7 @@ async function itDbPut(recs){ if (!recs.length) return; const db = await itDb();
 // still reading, find nothing stored and fetch all 19 ETFs again on every reload with this page open
 function itRestore(){
   if (IT.restoring) return IT.restoring; IT.loaded = true;
-  IT.restoring = (async () => { try { (await itDbAll()).forEach(r => { if (r && r.sym && Array.isArray(r.d)) IT.recs.set(r.sym, r); }); } catch (e) { IT.msg = "This browser blocked local storage, so the 5-year history can't be kept."; } })();
+  IT.restoring = (async () => { try { (await itDbAll()).forEach(r => { if (r && r.sym && Array.isArray(r.d)) IT.recs.set(r.sym, r); }); } catch (e) { IT.msg = `This browser blocked local storage, so the ${IT_YEARS}-year history can't be kept.`; } })();
   return IT.restoring;
 }
 
@@ -17291,11 +17298,11 @@ async function itFetch(sym){
   const to = lastDoneSession(), from = addDays(to, -Math.round(365.25 * IT_YEARS) - 7);
   const j = await mget(`/v2/aggs/ticker/${encodeURIComponent(sym)}/range/1/day/${from}/${to}`, {adjusted: "true", sort: "asc", limit: 50000});
   const R = (j.results || []).filter(x => x && x.c > 0 && x.h > 0 && x.l > 0 && fin(x.t));
-  const rec = {sym, d: [], o: [], h: [], l: [], c: [], fetched: to};
+  const rec = {sym, d: [], o: [], h: [], l: [], c: [], fetched: to, y: IT_YEARS};
   for (const x of R) { const d = etParts(x.t).d; if (rec.d.length && d <= rec.d[rec.d.length - 1]) continue; rec.d.push(d); rec.o.push(x.o > 0 ? x.o : x.c); rec.h.push(x.h); rec.l.push(x.l); rec.c.push(x.c); }
   return rec;
 }
-// the stored 5 years + the board's own bars after them (and tonight's bar); copies finished sessions into the record
+// the stored history (20 years from 21 Nov 2026, was 5) + the board's own bars after them (and tonight's bar); copies finished sessions into the record
 function itBars(sym){
   const rec = IT.recs.get(sym), b = typeof dssBars === "function" ? dssBars(sym) : null;
   if (!rec || !rec.d.length) return b && b.n ? {d: b.dates.slice(), o: [...b.o], h: [...b.h], l: [...b.l], c: [...b.c], today: b.today, src: "board", grew: 0, split: false} : null;
@@ -17319,7 +17326,8 @@ async function itLoad(){
   for (const s of want) {
     const rec = IT.recs.get(s), bb = rec ? itBars(s) : null;
     const lastDone = bb ? bb.d[bb.d.length - (bb.today ? 2 : 1)] : null;
-    const need = !rec || (bb && bb.split) || (lastDone && lastDone < done), why = `${done}|${bb && bb.split ? "split" : "gap"}`;
+    const short = !!rec && (rec.y || 5) < IT_YEARS;   // 21 Nov 2026: a record fetched for fewer years (the old 5-year pull) is fetched again once
+    const need = !rec || (bb && bb.split) || (lastDone && lastDone < done) || short, why = `${done}|${bb && bb.split ? "split" : short ? "years" + IT_YEARS : "gap"}`;
     if (need && IT.tried.get(s) !== why) todo.push([s, why]);
   }
   if (!todo.length || !newsKey()) { itSave(); return; }
@@ -17423,10 +17431,10 @@ function itHeadHTML(){
   const recs = itSyms().map(s => IT.recs.get(s)).filter(Boolean), first = recs.length ? recs.map(r => r.d[0]).sort()[0] : null;
   const seg = `<span class="seg" title="Which ETFs the grid shows — changes what you see only">${[[0, "Indexes & sectors"], [1, "+ every ETF group"]].map(([k, t]) => `<button data-itall="${k}" class="${itAll() === k ? "on" : ""}">${t}</button>`).join("")}</span>`;
   let st = "";
-  if (IT.prog) st = `Fetching 5 years of daily bars from Massive… ${IT.prog.done} of ${IT.prog.n}`;
-  else if (!newsKey() && !recs.length) st = `Add your Massive key in Settings to fetch the 5-year history (one call per ETF, once).`;
+  if (IT.prog) st = `Fetching ${IT_YEARS} years of daily bars from Massive… ${IT.prog.done} of ${IT.prog.n}`;
+  else if (!newsKey() && !recs.length) st = `Add your Massive key in Settings to fetch the ${IT_YEARS}-year history (one call per ETF, once).`;
   else if (recs.length) st = `Massive daily bars (${lvDT()}), stored in this browser from ${itDt(first)} · new sessions copied from the board's own price history`;
-  else if (HIST.nD) st = `Using the board's own price history (${HIST.nD} sessions) until the 5-year pull runs — stretch scores are against that shorter history.`;
+  else if (HIST.nD) st = `Using the board's own price history (${HIST.nD} sessions) until the ${IT_YEARS}-year pull runs — stretch scores are against that shorter history.`;
   return `<div class="hd"><h2>Index trend</h2><span class="sub">price vs the 21-day and the 10-week line · extended past ±${IT_SIG}σ of its own history</span></div>
     <div class="bd"><span><b>MAP says:</b> <span class="${v === "Supportive" ? "pos" : v === "Defensive" ? "neg" : ""}">${esc(v || "not set")}</span> <span class="small">— this page is a second opinion and never changes the call</span></span>${seg}
     <span class="small">${esc(st)}</span>${IT.msg ? `<span class="small neg">${esc(IT.msg)}</span>` : ""}${IT.errs.length ? `<span class="small neg" title="${esc(IT.errs.join("\n"))}">${IT.errs.length} ETF(s) couldn't be fetched (hover)</span>` : ""}</div>`;
@@ -19704,7 +19712,7 @@ WL_SRC.mfp = "MAP First Pullback"; WL_SRC.mfs = "MAP Short";
 function mppWlGroups(mk){
   const c = mppCur(); if (!c) return []; const out = [], by = S.rowBySym || new Map();
   const mline = (kind, x) => `MAP: ${[kind === "FS" && x.route ? "route " + x.route : "", kind === "FS" && x.level ? "level " + x.level : "", x.now, kind === "FP" && x.trigger ? "trigger " + x.trigger : "", x.why].filter(Boolean).join(" · ") || "no notes"}`;
-  if (c.FP.length) out.push(["MAP · First Pullback", c.FP.map(x => { const e = mk(x.t, "mfp"), r = by.get(x.t); let f = null; try { f = r && pbHH() ? fpOf(r) : null; } catch (er) { f = null; }
+  if (c.FP.length && !(typeof PBCUT !== "undefined" && PBCUT.on)) out.push(["MAP · First Pullback", c.FP.map(x => { const e = mk(x.t, "mfp"), r = by.get(x.t); let f = null; try { f = r && pbHH() ? fpOf(r) : null; } catch (er) { f = null; }
     return {...e, note: `${mline("FP", x)} — board: ${f ? `First Pullback ${FP_L[f.list].n}${f.list === "O" && f.ffTxt ? " (" + f.ffTxt + ")" : ""}` : pbHH() ? "no First Pullback read" : "needs the price history"}`}; })]);
   if (c.FS.length) { let R = null; try { R = pbHH() ? flsRun() : null; } catch (er) { R = null; }
     out.push(["MAP · Short", c.FS.map(x => { const e = mk(x.t, "mfs"), o = R ? R.by.get(x.t) : null, cl = R && o ? mppFsCells(R, x.t) : null;
@@ -19793,7 +19801,7 @@ function mppCsvRows(kind){
   return out;
 }
 if (typeof MSC_X !== "undefined") MSC_X.push(
-  {k: "mfp", l: "MAP · First Pullback", sub: "MAP's FP lines · over the 09:30–10:00 high, stop = its low (the First Pullback tracker's rule) · +1R before the stop", show: mppShow, agg: w => mppAgg("FP", w), csv: () => mppCsvRows("FP")},
+  {k: "mfp", l: "MAP · First Pullback", sub: "MAP's FP lines · over the 09:30–10:00 high, stop = its low (the First Pullback tracker's rule) · +1R before the stop", show: () => mppShow() && !(typeof PBCUT !== "undefined" && PBCUT.on) /* 21 Nov 2026: PLAYBOOK CUT hides the row; the CSV keeps its rows */, agg: w => mppAgg("FP", w), csv: () => mppCsvRows("FP")},
   {k: "mfs", l: "MAP · Short", sub: "MAP's FS lines · the early route's entry (green → next-open fill) · fill − 1R before the stop", show: mppShow, agg: w => mppAgg("FS", w), csv: () => mppCsvRows("FS")});
 
 /* ---------------- Deep Space feed: seven FS columns at the very end ---------------- */
@@ -20387,7 +20395,7 @@ hookOn("tab", "formerLeaderShortPage", t => {
 });
 document.head.insertAdjacentHTML("beforeend", `<style>
 #tab-plan.pbFls.on{display:flex;flex-direction:column}
-#tab-plan.pbFls > :not(#planLede):not(#pbTop):not(#sfcBox):not(#flsBox):not(#fltBox):not(#shGate):not(#shortBox):not(#invBox):not(#shEtf){display:none!important}
+#tab-plan.pbFls > :not(#planLede):not(#pbTop):not(#sfcBox):not(#flsBox):not(#fltBox):not(#shGate):not(#shortBox):not(#invBox):not(#shEtf):not(#sflBox):not(#sflTrackBox){display:none!important}
 #tab-plan.pbFls > #planLede{order:1} #tab-plan.pbFls > #pbTop{order:2} #tab-plan.pbFls > #flsBox{order:3} #tab-plan.pbFls > #fltBox{order:3} #tab-plan.pbFls > #shGate{order:4}
 #tab-plan.pbFls > #shortBox{order:5} #tab-plan.pbFls > #invBox{order:6} #tab-plan.pbFls > #shEtf{order:7}
 #tab-plan:not(.pbFls) > #flsBox, #tab-plan:not(.pbFls) > #fltBox, #tab-plan:not(.pbFls) > #shGate, #tab-plan:not(.pbFls) > #shEtf, #tab-plan:not(.pbFls) > #shortBox, #tab-plan:not(.pbFls) > #invBox{display:none!important}
@@ -21410,7 +21418,8 @@ document.head.insertAdjacentHTML("beforeend", `<style>
    + mega-cap exemption" (items 1–8, incl. the wrapper map) and Command Reference "RULINGS — 10 Nov 2026 (ADR floor)". Handover
    "Deep Space Board: ADR floor + mega-cap exemption + wrapper map (MAP v4.11, 10 Nov 2026)". Notes: docs/adr-floor-mega-2026-11-10.md.
    - RULE: a stock long on the Entry Check lists (Ready / On deck) or the First Pullback lists needs ADR% ≥ 3.0, measured as
-     the higher of ADR 20D and ADR 50D (protects a coiling base). Market cap ≥ $200B = MEGA: never removed by the floor.
+     the higher of ADR 20D and ADR 50D (protects a coiling base). Market cap ≥ $500B = MEGA: never removed by the floor
+     ($200B until 21 Nov 2026 — see "21 NOV 2026" at the end of this header).
      Held names are never dropped on ADR (badge "low ADR" only). ETFs (no ADR filter), Former leader shorts: untouched.
    - FORMULA: ADR 20D = the Entry Check's own ADR% (s61Calc: mean of (high − low) ÷ close × 100 over S61.adrN = 20 bars on
      dssBars — the feed's "ADR%" column). ADR 50D = the same formula over 50 bars ending on the same bar. Floor value =
@@ -21432,7 +21441,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
      last finished sessions) from Massive daily bars, cached per session date in this browser (adrb.adrfWrap); without one
      the wrapper's volume is "not checked" and the vehicle reads "stock / options". Wrapper OK = ≥ $20M/day (the ETF floor) → vehicle "<wrapper> (2x)", else
      "stock / options". Setup, levels and stop always on the underlying.
-   - SETTINGS (adrb.adrfCfg {floor, megaB}; defaults = the ruling 3.0 / $200B) move the on-screen lists only: the Deep Space
+   - SETTINGS (adrb.adrfCfg {floor, megaB}; defaults = the ruling 3.0 / $500B, was $200B until 21 Nov 2026) move the on-screen lists only: the Deep Space
      feed is always built at the ruling values (adrfFeedCSV, one guarded call in feedExport) — the Strict-preset principle.
    - FEED: eight columns appended at the very end (FEED_EXT): ADR 50D, ADR Floor Value, ADR Floor (PASS / FAIL / MEGA / HELD),
      Mega (Y/N), Market Cap $B, Wrapper, Wrapper $Vol20 $M, Wrapper OK (Y/N). Stock rows only; ETF feed unchanged.
@@ -21446,18 +21455,36 @@ document.head.insertAdjacentHTML("beforeend", `<style>
    Storage NEW: adrb.adrfCfg, adrb.adrfCap {date, m: {SYM: cap}}, adrb.adrfWrap {date, m: {WRAPPER: $vol20}}.
    Hook points "tab", "all", "panel", "s61Card", "settings"; guarded in-place calls in s61Of (cache key), s61Build, ecWhy,
    fpBuild, fpRankR / fpRankRS, dvRec, feedExport. No override. Test: tools/board-adr-floor-test.js.
+   21 NOV 2026 — MEGA-CAP EXEMPTION $500B + WRAPPER MAP REFRESH. TRADING LOGIC (check 1c: who is exempt from the ADR floor).
+   Notion, Unified Spec 6.1 top callout (page last edited 19 Nov 2026): "19 Nov 2026 — Check 1c mega-cap exemption raised to $500B
+   (Eugene: "$500B"). (4) Mega-cap exemption (check 1c): market cap ≥ $500B (was $200B). ... (5) Wrapper map: the 2x wrapper is
+   an optional vehicle for any mapped name that is listed — exempt at ≥ $500B or passing the 3.0 floor on its own; a mapped
+   name under $500B that fails the floor is not listed, so its wrapper is not used. (6) The 3.0 floor itself (higher of the
+   20- and 50-session ADR%) is unchanged. (7) Board build: pending — the feed still exports the exemption at $200B". Same text
+   in Command Reference "RULINGS — 19 Nov 2026" items (4)–(7). This change is that pending Board build.
+   Eugene, 21 Nov 2026 (chat, on the MAP handover "Deep Space Board wrapper map"): "map edits and move board to 500B".
+   - ADRF_DEF.megaB 200 → 500, and the validation freeze's ruling value (VALF.adrf.megaB) with it. A stock with a market cap
+     of $200B–$500B is no longer MEGA: it now needs ADR ≥ 3.0 like any other stock long (FAIL → first fail "1c ADR floor");
+     held names stay HELD. The feed's ADR Floor / Mega columns follow (the feed is always built at ADRF_DEF).
+   - The Rules Version hash changes (it reads ADRF_DEF) — inside the 20-session validation window (16 Nov – 14 Dec 2026);
+     sessions saved from this version on carry the new hash.
+   - Wrapper map: + SNDK → SNXX; + ANT on the no-wrapper list (mega, no wrapper); no removals. Tickers only, no market data.
+   - Never changes: the 3.0 floor, the ADR formula, checks 1–11, check 1b, First Pullback / Former Leader Short rules, the ETF
+     feed, the $20M wrapper check (still live from Massive), feed column headers, storage keys.
    ===================================================================== */
-const ADRF_DEF = {floor: 3.0, megaB: 200};
+const ADRF_DEF = {floor: 3.0, megaB: 500};   // 21 Nov 2026: mega-cap exemption $500B (was $200B) — see "21 NOV 2026" in the header
 const ADRF_T = {n50: 50, wrapMin: 20e6, wrapN: 20, wrapMinBars: 15, capCap: 80};
-const ADRF_WRAP_CHECKED = "2026-11-11";
+const ADRF_WRAP_CHECKED = "2026-11-21";
 // underlying → its 2x wrapper (MAP v4.11 callout item 4). Monthly refresh 11 Nov 2026 (Eugene): + SPCX→SPCH, INTC→INTW,
 // SKHY→SKUU, DELL→DLLL; − CRM→CRMG (CRM below $200B); PLTR → PTIR (was PLTU; Eugene: "Switch to PTIR"); + GOOG→GGLL
-// (Eugene: "Add GOOG → GGLL"). Map membership never makes a name mega (that is market cap ≥ $200B only), and OK is never
-// set here: it is always the live ≥ $20M check from Massive.
+// (Eugene: "Add GOOG → GGLL"). 21 Nov 2026 (MAP handover "Deep Space Board wrapper map"; Eugene: "map edits and move board
+// to 500B"): + SNDK→SNXX; + ANT on the no-wrapper list; no removals. Map membership never makes a name mega (that is
+// market cap ≥ the exemption only — $500B from 21 Nov 2026, was $200B), and OK is never set here: it is always the live
+// ≥ $20M check from Massive.
 const ADRF_WRAP = {NVDA: "NVDL", TSLA: "TSLL", MU: "MUU", AMD: "AMDL", GOOGL: "GGLL", GOOG: "GGLL", META: "METU", AMZN: "AMZU", MSFT: "MSFU", TSM: "TSMX", AVGO: "AVL",
   AAPL: "AAPU", PLTR: "PTIR", ORCL: "ORCX", UNH: "UNHG", LLY: "LLYX", NFLX: "NFXL", "BRK.B": "BRKU",
-  SPCX: "SPCH", INTC: "INTW", SKHY: "SKUU", DELL: "DLLL"};   // tickers only — no market data in the code
-const ADRF_NOWRAP = new Set(["JPM", "WMT", "V", "MA", "COST"]);   // no trading wrapper found (10 Nov 2026)
+  SPCX: "SPCH", INTC: "INTW", SKHY: "SKUU", DELL: "DLLL", SNDK: "SNXX"};   // tickers only — no market data in the code
+const ADRF_NOWRAP = new Set(["JPM", "WMT", "V", "MA", "COST", "ANT"]);   // no trading wrapper found (10 Nov 2026; + ANT 21 Nov 2026)
 const ADRF_H = ["ADR 50D", "ADR Floor Value", "ADR Floor", "Mega", "Market Cap $B", "Wrapper", "Wrapper $Vol20 $M", "Wrapper OK"];
 const ADRF = {feed: false, ver: 0, key: "", map: new Map(), cap: null, wrap: null, capBusy: false, wrapBusy: false, capTried: "", wrapTried: "", errs: []};
 const ADRX = {key: "", map: new Map()};
@@ -21602,7 +21629,7 @@ function adrfCount(){
   }
   return {drop, mega};
 }
-// Deep Space feed: always the ruling values (3.0 / $200B), whatever the on-screen settings say
+// Deep Space feed: always the ruling values (ADRF_DEF: 3.0 / $500B from 21 Nov 2026, was $200B), whatever the on-screen settings say
 function adrfFeedCSV(){
   if (adrfIsDef()) return feedCSV();
   const keep = S.plan; ADRF.feed = true;
@@ -21646,7 +21673,7 @@ hookOn("all", "adrFloor", ph => { if (ph === "after") adrfPaintAll(); });
 hookOn("s61Card", "adrFloor", () => {
   const box = $("s61Box"); if (!box || !S.has.hist) return; const hd = box.querySelector(".hd"); if (!hd || hd.querySelector(".adfc")) return;
   const c = adrfCount(), C = adrfCfg(), t = esc(`ADR floor ${C.floor.toFixed(1)} (higher of ADR 20D / 50D) on the Entry Check and First Pullback lists; market cap ≥ $${C.megaB}B exempt (MEGA); held names never dropped. Whole file, filter bar off.`
-    + (c.drop.length ? `\nDropped: ${c.drop.join("; ")}` : "") + (c.mega.length ? `\nMega exempt (under the floor, still listed): ${c.mega.join("; ")}` : "") + (adrfIsDef() ? "" : "\nSettings differ from the ruling (3.0 / $200B) — the Deep Space feed still uses the ruling."));
+    + (c.drop.length ? `\nDropped: ${c.drop.join("; ")}` : "") + (c.mega.length ? `\nMega exempt (under the floor, still listed): ${c.mega.join("; ")}` : "") + (adrfIsDef() ? "" : "\nSettings differ from the ruling (${ADRF_DEF.floor.toFixed(1)} / $${ADRF_DEF.megaB}B) — the Deep Space feed still uses the ruling."));
   const sub = hd.querySelector(".sub"); const h = `<span class="adfc small" title="${t}">ADR floor: dropped ${c.drop.length} · mega exempt ${c.mega.length}${adrfIsDef() ? "" : ` <b>(floor ${C.floor} · mega $${C.megaB}B)</b>`}</span>`;
   if (sub) sub.insertAdjacentHTML("afterend", h); else hd.insertAdjacentHTML("beforeend", h);
 });
@@ -21658,10 +21685,10 @@ hookOn("settings", "adrFloor", () => {
   const reset = $("sReset"); if (!reset) return; const c = adrfCfgRaw(), box = document.createElement("div");
   box.innerHTML = `<h4>ADR floor (stock longs)</h4>
     <div class="row"><div>ADR floor, %<div class="d">Leader Pullback (Entry Check) and First Pullback stock longs need the higher of ADR 20D and ADR 50D at or above this (MAP v4.11; ruling 3.0). Held names, ETFs and shorts are never dropped. The Deep Space feed always uses the ruling values.</div></div><div><input type="number" id="adrfFloor" step="0.1" min="0" max="20" value="${c.floor}" style="width:80px"></div></div>
-    <div class="row"><div>Mega caps exempt from, $B<div class="d">Market cap at or above this skips the floor and gets the MEGA tag with its 2x wrapper (ruling $200B).</div></div><div><input type="number" id="adrfMega" step="10" min="1" value="${c.megaB}" style="width:80px"></div></div>`;
+    <div class="row"><div>Mega caps exempt from, $B<div class="d">Market cap at or above this skips the floor and gets the MEGA tag with its 2x wrapper (ruling $${ADRF_DEF.megaB}B).</div></div><div><input type="number" id="adrfMega" step="10" min="1" value="${c.megaB}" style="width:80px"></div></div>`;
   reset.parentElement.before(box);
   const save = () => { const f = +$("adrfFloor").value, m = +$("adrfMega").value; try { store.set("adrb.adrfCfg", f === ADRF_DEF.floor && m === ADRF_DEF.megaB ? null : {floor: f, megaB: m}); } catch (e) {}
-    if (typeof s61Reset === "function") s61Reset(); if (S.snap) { computeAll(); renderAll(); } toast(`ADR floor ${adrfCfgRaw().floor} · mega $${adrfCfgRaw().megaB}B (on screen; the feed keeps 3.0 / $200B)`); };
+    if (typeof s61Reset === "function") s61Reset(); if (S.snap) { computeAll(); renderAll(); } toast(`ADR floor ${adrfCfgRaw().floor} · mega $${adrfCfgRaw().megaB}B (on screen; the feed keeps ${ADRF_DEF.floor.toFixed(1)} / $${ADRF_DEF.megaB}B)`); };
   $("adrfFloor").onchange = save; $("adrfMega").onchange = save;
 });
 
@@ -22526,7 +22553,8 @@ document.head.insertAdjacentHTML("beforeend", `<style>td.dc{white-space:nowrap}.
    WHAT IT DOES
    - Until 14 Dec 2026 (ET) the board runs on the ruling values whatever a device's own settings say: RS weights Swing
      (1W 15 · 1M 30 · 3M 35 · 6M 20), risk-adjust RS off, benchmark QQQ, groups = Our groups with ≥ 2 members, ADR floor
-     3.0 / $200B mega-cap exemption, stage-age touch tolerance 0. These are the board's defaults, so a device that never
+     3.0 / $500B mega-cap exemption (was $200B until 21 Nov 2026 — Eugene's ruling inside the window, see the ADR FLOOR
+     header; the Rules Version hash changes with it), stage-age touch tolerance 0. These are the board's defaults, so a device that never
      changed them sees exactly the numbers it saw before. Enforced at the "compute" hook point (start of computeAll, before
      any number is worked out) — a synced or bookmarked setting can't slip past it.
    - Those settings are greyed out (Settings, Themes "Group by" / "Min members", ADR floor, the 21 EMA touch box).
@@ -22540,7 +22568,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>td.dc{white-space:nowrap}.
    STORAGE NEW: adrb.valLock {unlocked, at, dev, log: [{at, what}]}. Hook points: "compute" (new, BOARD HOOKS list),
    "settings", "tab", "all". No function overrides.
    ===================================================================== */
-const VALF = {now: 0, until: "2026-12-14", key: "adrb.valLock", rule: {wPreset: "swing", normADR: false, bench: "QQQ", groupBy: "ds", minGroup: 2}, adrf: {floor: 3.0, megaB: 200}, lpTol: 0, toldAt: 0};
+const VALF = {now: 0, until: "2026-12-14", key: "adrb.valLock", rule: {wPreset: "swing", normADR: false, bench: "QQQ", groupBy: "ds", minGroup: 2}, adrf: {floor: 3.0, megaB: 500}, lpTol: 0, toldAt: 0};   // 21 Nov 2026: megaB 500 (was 200) — Eugene's ruling, see the ADR FLOOR header
 const valLock = () => { try { return store.get(VALF.key, null) || {}; } catch (e) { return {}; } };
 const valToday = () => dET(VALF.now || Date.now());   // VALF.now: a fixed clock for the tests only (0 = the real time)
 function valFrozen(){ return valToday() <= VALF.until && !valLock().unlocked; }
@@ -23533,6 +23561,248 @@ document.head.insertAdjacentHTML("beforeend", `<style>table.mix td,table.mix th{
 <script>
 "use strict";
 /* =====================================================================
+   SHORT LIST — SELECTIVE + TRACKER (21 Nov 2026) — TRADING LOGIC for the short side's PAPER list (which names are put
+   forward, and when) + a tracker (tracking only). Watch / paper only: never sized, no order, nothing in the feeds.
+   Eugene, 21 Nov 2026 (chat): "I would also like to build in a former leader shorts tracker. but its surfacing way too many
+   names. how would you make it more selective … similar to how it would work on the other end with my leader pullback" and
+   "the former leader shorts is useful, but the way the page is built is confusing, if it can be done in a similar
+   presentation as leader pullback then we can work on it effectively". Proposal (same chat): "Show shorts only on Defensive
+   days. Use one route: the failed rally under a falling 50-day. Require $500M a day in volume and no earnings inside five
+   sessions. Cap it at three names, with the inverse ETF first. Track each name from first listing to +1R or stop."
+   Eugene: "agree with 4." Written in Notion: Command Reference "RULINGS — 21 Nov 2026". This supersedes, for this list only,
+   "regime is context, never a gate" (7 / 11 Nov) — the older cards keep that behaviour and their own settings.
+   THE LIST (sflPick, pure):
+   - Open only when MAP says Defensive (mapRegime().v). Any other call, or none: no names — the card says so and counts how
+     many would have been listed.
+   - Names = the Daily failed rally route's passes exactly as flsRun() ranks them (checks 2–10: former leader, under a
+     falling 50 SMA, bounce into resistance, not extended, stop ≤ 1.5 ADR, room ≥ 2R, no earnings inside 5 sessions,
+     tradeable liquidity; earliest in the decline first) — stocks only — that also trade ≥ $500M a day (20-session average
+     dollar volume, the Liquid Leader number llDv). At most 3.
+   - Inverse ETF first: when 3 or more qualifying names sit in one group that has a mapped inverse fund (SFC_INV), the fund is
+     named first choice above the table.
+   - Early retest and Top failure are not routes of this list. Their cards, the old "Former leader, lower high" card, the
+     Short focus card and the short watch are still drawn and still computed — folded away by default behind
+     "Research cards: Hidden / Show" on this card (the toggle back to the old page, CLAUDE.md §4).
+   THE TRACKER (sflResult, pure; daily bars only): a name is logged the first time it makes the list on closing data
+   (fpDataDate — never from an intraday bar). Paper short from that close; stop = the first tick above the bounce high;
+   1R = stop − close. Each later session: high ≥ stop → stopped (−1R), else low ≤ close − 1R → +1R. Both in one bar = stopped.
+   Still open → marked at the last close. A name is logged again only after its last episode has ended. It is a daily-bar
+   approximation: the real entry is the 30-min trigger on TradingView, so read the tally as "did the idea work", not fills.
+   NEVER CHANGES: flsRun, the Former Leader Short / Early retest / Top failure lists, checks, ranks, CSVs, the seven FS feed
+   columns, the MAP FS import, the Short focus card's own content, Leader Pullback, any feed, snapshot or Board-log field.
+   STORAGE NEW: adrb.sflLog {v, d: {date: {SYM: [close, stop, support, ADR $, rank]}}} (120 dates), adrb.sflMore (1 = show
+   the research cards). Hook points "tab", "all"; one in-place edit of the short page's CSS list (FORMER LEADER SHORT
+   PLAYBOOK) to let the two new cards show. Self-check sflSelf in SC_X. No override. Test: tools/board-short-list-test.js.
+   Tests only: with window.__DSB_SHOW_RETIRED (tools/pw-show-retired.js) the research cards default to shown, so the older
+   short-page tests see the page they were written for.
+   ===================================================================== */
+const SFL = {dvMin: 500e6, top: 3, cluster: 3, key: "adrb.sflLog", moreK: "adrb.sflMore", logDays: 120, js: ""};
+const sflMore = () => { let v = null; try { v = store.get(SFL.moreK, null); } catch (e) {} return v === 1 || v === "1" ? true : v === 0 || v === "0" ? false : !!window.__DSB_SHOW_RETIRED; };
+const sflDv = sym => { try { const q = typeof llDv === "function" ? llDv(sym) : null; return q && fin(q.dv) ? q.dv : NaN; } catch (e) { return NaN; } };
+// pure: F = flsRun()'s result, dvOf = sym → 20-session average dollar volume, mapV = MAP's call
+function sflPick(F, dvOf, mapV){
+  const open = mapV === "Defensive", cand = F ? F.pass.filter(o => !o.r.etf) : [];
+  const rows = cand.map(o => ({o, dv: dvOf(o.r.sym)})), ok = rows.filter(x => fin(x.dv) && x.dv >= SFL.dvMin), thin = rows.filter(x => !(fin(x.dv) && x.dv >= SFL.dvMin));
+  const by = new Map(); for (const x of ok) { const g = typeof dsGroupName === "function" ? dsGroupName(x.o.r) : x.o.r.group || ""; if (!by.has(g)) by.set(g, []); by.get(g).push(x.o.r.sym); }
+  const clusters = [...by].filter(([, s]) => s.length >= SFL.cluster).map(([g, s]) => { let th = ""; try { const d = dsgOf(s[0]); th = d ? d[3] : ""; } catch (e) { th = ""; } return {group: g, etf: (typeof SFC_INV !== "undefined" && SFC_INV[th]) || null, syms: s.slice().sort()}; });
+  return {open, mapV: mapV || "", ok, thin, top: open ? ok.slice(0, SFL.top) : [], clusters: open ? clusters : []};
+}
+function sflRun(){ let F = null; try { F = pbHH() ? flsRun() : null; } catch (e) { F = null; } if (!F) return null; return {F, ...sflPick(F, sflDv, mapRegime().v || "")}; }
+// pure: bars b = {h, l, c, dates, n}, i0 = the listing bar; a paper short from `entry` with the stop above it
+function sflResult(b, i0, entry, stop){
+  const R1 = stop - entry; if (!b || !(i0 >= 0) || !(R1 > 0)) return {k: "none", r: null, n: 0, date: null};
+  const tgt = entry - R1;
+  for (let t = i0 + 1; t < b.n; t++) { if (b.h[t] >= stop) return {k: "stop", r: -1, n: t - i0, date: b.dates[t]}; if (b.l[t] <= tgt) return {k: "1R", r: 1, n: t - i0, date: b.dates[t]}; }
+  const last = b.n - 1; return {k: last > i0 ? "open" : "new", r: last > i0 ? (entry - b.c[last]) / R1 : 0, n: last - i0, date: b.dates[last]};
+}
+/* ---------------- the log ---------------- */
+function sflLogGet(){ let o = null; try { o = store.get(SFL.key, null); } catch (e) {} if (!o || typeof o !== "object" || !o.d || typeof o.d !== "object") o = {v: 1, d: {}}; return o; }
+function sflLogSet(o){ const keep = Object.keys(o.d).sort().slice(-SFL.logDays), v = {v: 1, d: Object.fromEntries(keep.map(k => [k, o.d[k]]))}, js = JSON.stringify(v); if (js === SFL.js) return; SFL.js = js; try { store.set(SFL.key, v); } catch (e) { console.warn("short tracker", e); } }
+// episodes from the log, oldest first: a name starts a new one only when its last one has ended (stop / +1R)
+function sflEpisodes(barsOf){
+  const log = sflLogGet(), eps = [], openBy = new Map();
+  for (const d of Object.keys(log.d).sort()) for (const [sym, a] of Object.entries(log.d[d])) {
+    const prev = openBy.get(sym); if (prev && (prev.res.k === "open" || prev.res.k === "new" || prev.res.k === "none" || prev.res.date >= d)) continue;
+    const b = barsOf(sym), i0 = b ? b.dates.lastIndexOf(d) : -1, entry = a[0], stop = a[1];
+    const ep = {sym, d, entry, stop, support: a[2], adrD: a[3], rank: a[4], res: b && i0 >= 0 ? sflResult(b, i0, entry, stop) : {k: "none", r: null, n: 0, date: null}, last: b && b.n ? b.c[b.n - 1] : NaN};
+    eps.push(ep); openBy.set(sym, ep);
+  }
+  return eps;
+}
+function sflTally(eps){ const w = eps.filter(e => e.res.k === "1R").length, s = eps.filter(e => e.res.k === "stop").length, o = eps.filter(e => e.res.k === "open" || e.res.k === "new").length, R = eps.filter(e => fin(e.res.r));
+  return {n: eps.length, won: w, stopped: s, open: o, hit: w + s ? w / (w + s) : null, avgR: R.length ? R.reduce((a, e) => a + e.res.r, 0) / R.length : null}; }
+function sflRecord(){
+  const d = typeof fpDataDate === "function" ? fpDataDate() : null; if (!d) return;
+  const q = sflRun(); if (!q || !q.open || !q.top.length) return;
+  const log = sflLogGet(), day = log.d[d] || {}; let ch = false;
+  q.top.forEach((x, i) => { const o = x.o, fr = o.x.fr, s = o.r.sym; if (day[s] || !fr || !fin(fr.frHi) || !fin(o.x.close)) return;
+    day[s] = [+o.x.close.toFixed(4), flsTickAbove(fr.frHi, flsTick(o.x.close)), fin(fr.support) ? +fr.support.toFixed(4) : null, fin(fr.adrD) ? +fr.adrD.toFixed(4) : null, i + 1]; ch = true; });
+  if (ch) { log.d[d] = day; sflLogSet(log); }
+}
+/* ---------------- the cards ---------------- */
+const SFL_RES = {"1R": ["+1R first", "go"], stop: ["Stopped", "bad"], open: ["Open", "wait"], new: ["Listed today", "wait"], none: ["No bars", "wait"]};
+function sflCardHTML(){
+  const more = sflMore();
+  const hd = `<div class="hd"><h2>Shorts today — up to ${SFL.top}, Defensive days only</h2><span class="sub">paper / watch only · failed rally under a falling 50-day · $500M+ a day · no earnings inside 5 sessions</span><span class="spacer"></span>
+    <span class="small dim">Research cards</span> <span class="seg" id="sflMoreSeg"><button data-sflmore="0" class="${more ? "" : "on"}" title="Only this list, its tracker and the inverse ETF cards">Hidden</button><button data-sflmore="1" class="${more ? "on" : ""}" title="Also show Short focus, Former leader lower high (with Early retest), Top failure and the short watch">Show</button></span></div>`;
+  if (!pbHH()) return hd + `<div class="bd"><div class="empty">Needs the stored price history.</div></div>`;
+  const q = sflRun(); if (!q) return hd + `<div class="bd"><div class="empty">Load the files first.</div></div>`;
+  const tk = s => `<span class="sfctk" data-sym="${esc(s)}">${esc(s)}</span>`;
+  const mapLine = `<div class="small" style="margin-bottom:6px">MAP says <b>${esc(q.mapV || "nothing yet")}</b> — ${q.open ? "shorts are on." : "shorts are off today (this list opens only on Defensive days)."}</div>`;
+  if (!q.open) return hd + `<div class="bd">${mapLine}<div class="empty"><b>No shorts listed.</b> ${q.ok.length ? `${q.ok.length} name${q.ok.length === 1 ? "" : "s"} would be on the list on a Defensive day.` : "Nothing would qualify today either."}</div></div>`;
+  const by = S.rowBySym || new Map();
+  const inv = q.clusters.filter(c => c.etf).map(c => `<div class="sfcinv"><b class="sfcetf">${esc(c.etf)}</b> <span class="pill go">first choice</span> — ${c.syms.length} qualifying shorts in <b>${esc(c.group)}</b>: ${c.syms.map(tk).join(" ")} · ${by.get(c.etf) && by.get(c.etf).etf ? "in your ETF file" : "not in your ETF file"}</div>`).join("");
+  const row = (x, i) => { const o = x.o, fr = o.x.fr;
+    return `<tr data-sym="${esc(o.r.sym)}"><td>${i + 1}</td><td class="l sym">${esc(o.r.sym)}</td><td>${rsBadge(o.r.rs)}</td><td class="l small">${esc(o.r.group || "—")}</td>
+      <td class="l"><span class="pill ${FR_ST[fr.st].c}">${fr.st === "test" ? "Testing" : "Rejected"}</span>${fr.testDate ? ` <span class="small dim">test ${esc(fr.testDate)}</span>` : ""}</td><td class="l small">${esc(fr.kind || "—")} <b>${p2(fr.lv)}</b></td>
+      <td><b>${p2(fr.frHi)}</b></td><td>${fin(fr.stopA) ? fr.stopA.toFixed(2) : "—"}</td><td>${p2(fr.support)}</td><td>${fin(fr.room) ? fr.room.toFixed(1) + "R" : "—"}</td><td>$${money(x.dv)}</td><td class="l small">${esc(o.x.ck[9].v.replace(/^earnings /, ""))}</td></tr>
+      <tr class="flsnxr"><td></td><td colspan="11" class="l small"><b>Next:</b> ${esc(FLS_NEXT)} <b>${p2(fr.frHi)}</b></td></tr>`; };
+  const tbl = q.top.length ? `<div class="tscroll" style="max-height:none"><table class="mini flst"><thead><tr><th>#</th><th class="l">Ticker</th><th>RS</th><th class="l">Group</th><th class="l">State</th><th class="l">Resistance</th><th title="Highest high since the test — the stop goes above it">Bounce high (stop)</th><th>Stop, ADR</th><th>First support</th><th>Room</th><th>$ volume, 20d</th><th class="l">Earnings</th></tr></thead><tbody>${q.top.map(row).join("")}</tbody></table></div>`
+    : `<div class="empty" style="padding:4px 0"><b>No short today.</b> Nothing passes the failed-rally checks with $500M+ a day.</div>`;
+  const foot = `<div class="small dim" style="margin-top:6px">${q.ok.length > SFL.top ? `${q.ok.length - SFL.top} more qualify beyond the ${SFL.top} shown. ` : ""}${q.thin.length ? `${q.thin.length} passing the checks but under $500M a day — left out. ` : ""}Ranked earliest in the decline first.</div>`;
+  return hd + `<div class="bd">${mapLine}${inv}${tbl}${foot}</div>`;
+}
+function sflTrackHTML(){
+  const hd = `<div class="hd"><h2>Short tracker — from first listing to +1R or the stop</h2><span class="sub">paper · daily bars · short from the listing close, stop above the bounce high</span><span class="spacer"></span><button class="btn sm" id="sflCsv">Download CSV</button></div>`;
+  let eps = []; try { eps = sflEpisodes(s => { try { return dssBars(s); } catch (e) { return null; } }); } catch (e) { console.warn("short tracker", e); }
+  if (!eps.length) return hd + `<div class="bd"><div class="empty">Nothing tracked yet. A name is logged the first time it makes the list above on closing data.</div></div>`;
+  const T = sflTally(eps), rows = eps.slice().reverse().map(e => { const [nm, cls] = SFL_RES[e.res.k] || [e.res.k, "wait"];
+    return `<tr data-sym="${esc(e.sym)}"><td class="l">${esc(e.d)}</td><td class="l sym">${esc(e.sym)}</td><td>${p2(e.entry)}</td><td>${p2(e.stop)}</td><td>${p2(e.stop - e.entry)}</td><td>${e.res.n || ""}</td><td class="l"><span class="pill ${cls}">${nm}</span>${e.res.date && (e.res.k === "1R" || e.res.k === "stop") ? ` <span class="small dim">${esc(e.res.date)}</span>` : ""}</td><td class="${fin(e.res.r) ? (e.res.r > 0 ? "pos" : e.res.r < 0 ? "neg" : "") : ""}">${fin(e.res.r) ? (e.res.r > 0 ? "+" : "") + e.res.r.toFixed(2) + "R" : "—"}</td><td>${p2(e.last)}</td></tr>`; }).join("");
+  return hd + `<div class="bd"><div class="small" style="margin-bottom:6px"><b>${T.n}</b> tracked · <b>${T.won}</b> reached +1R first · <b>${T.stopped}</b> stopped · ${T.open} open · hit rate ${T.hit == null ? "—" : Math.round(T.hit * 100) + "%"} · average ${T.avgR == null ? "—" : (T.avgR > 0 ? "+" : "") + T.avgR.toFixed(2) + "R"} (open ones marked at the last close)</div>
+    <div class="tscroll" style="max-height:420px"><table class="mini"><thead><tr><th class="l">Listed</th><th class="l">Ticker</th><th>Entry (close)</th><th>Stop</th><th>1R</th><th>Sessions</th><th class="l">Result</th><th>R</th><th>Last close</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+}
+const SFL_CSV_H = ["listed", "ticker", "rank", "entry_close", "stop", "one_r", "first_support", "adr_usd", "result", "result_date", "sessions", "r", "last_close"];
+function sflCsvText(){ const q = v => { const s = v == null ? "" : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }, n4 = v => fin(v) ? +(+v).toFixed(4) : "";
+  const eps = sflEpisodes(s => { try { return dssBars(s); } catch (e) { return null; } });
+  return [SFL_CSV_H.join(","), ...eps.map(e => [e.d, e.sym, e.rank, n4(e.entry), n4(e.stop), n4(e.stop - e.entry), n4(e.support), n4(e.adrD), (SFL_RES[e.res.k] || [e.res.k])[0], e.res.date || "", e.res.n || 0, n4(e.res.r), n4(e.last)].map(q).join(","))].join("\n") + "\n"; }
+function sflPaint(){
+  const tab = $("tab-plan"); if (!tab || !S.snap) return;
+  tab.classList.toggle("sflLess", !sflMore());
+  for (const [id, html] of [["sflBox", sflCardHTML], ["sflTrackBox", sflTrackHTML]]) {
+    let box = $(id); if (!box) { tab.insertAdjacentHTML("beforeend", `<div class="card g1" id="${id}"></div>`); box = $(id); }
+    try { box.innerHTML = html(); } catch (e) { console.error("short list", id, e); box.innerHTML = `<div class="bd"><div class="empty">Couldn't be drawn (error logged).</div></div>`; }
+  }  // page order = screen order (the side jump list reads the page): both cards right before the first of the older short cards
+  const a = $("sflBox"), b = $("sflTrackBox"), ref = [$("sfcBox"), $("flsBox")].find(e => e && e.parentElement === tab), onS = typeof pbCur === "function" && pbCur() === "fls";   // only on S: the Leader Pullback page keeps its own card order
+  if (onS && a && b && ref && (a.nextElementSibling !== b || b.nextElementSibling !== ref)) { tab.insertBefore(a, ref); tab.insertBefore(b, ref); }
+  if (typeof pbCur === "function" && pbCur() === "fls") { const lede = $("planLede"); if (lede && !/Research cards/.test(lede.textContent)) { lede.innerHTML = `<b>S · Former Leader Short</b> (watch only) — on a Defensive day, a former leader that broke down bounces into resistance under its falling 50-day and fails. Short the failure, never a name already far down. Below: today's list (up to 3, inverse ETF first when three sit in one group), its tracker and the inverse ETF cards. The older research cards are behind "Research cards".`; } }
+}
+hookOn("tab", "shortList", t => { if (t !== "plan" || !S.snap) return; try { sflRecord(); } catch (e) { console.warn("short tracker", e); } sflPaint(); });
+hookOn("all", "shortList", ph => { if (ph !== "after" || !S.snap) return; try { sflRecord(); } catch (e) { console.warn("short tracker", e); } if (S.ui && S.ui.tab === "plan") sflPaint(); });
+document.addEventListener("click", e => { const t = e.target && e.target.closest ? e.target : null; if (!t) return;
+  const m = t.closest("[data-sflmore]"); if (m) { try { store.set(SFL.moreK, m.dataset.sflmore === "1" ? 1 : 0); } catch (er) {} sflPaint(); if (typeof buildSecs === "function") try { buildSecs("plan"); } catch (er) {} return; }
+  if (t.closest("#sflCsv")) { try { download(`deep-space-short-tracker-${typeof valToday === "function" ? valToday() : new Date().toISOString().slice(0, 10)}.csv`, sflCsvText(), "text/csv"); } catch (er) { toast("Couldn't build the short tracker CSV"); } } });
+document.head.insertAdjacentHTML("beforeend", `<style>
+#tab-plan.pbFls > #sflBox{order:2} #tab-plan.pbFls > #sflTrackBox{order:2}
+#tab-plan:not(.pbFls) > #sflBox,#tab-plan:not(.pbFls) > #sflTrackBox{display:none!important}
+#tab-plan.pbFls.sflLess > #sfcBox,#tab-plan.pbFls.sflLess > #flsBox,#tab-plan.pbFls.sflLess > #fltBox,#tab-plan.pbFls.sflLess > #shortBox{display:none!important}
+</style>`);
+// self-check: every listed name by this script's own count — MAP's call, the $500M line from the bars, the cap
+function sflSelf(){
+  const out = []; if (!HIST.nD || !S.has.hist || typeof dssBars !== "function") return out;
+  const q = sflRun(); if (!q) return out;
+  out.push({sym: "Short list", what: "Open only on a Defensive day", ok: q.open === ((mapRegime().v || "") === "Defensive") && (q.open || q.top.length === 0), board: q.open ? "open" : "closed", mine: (mapRegime().v || "") === "Defensive" ? "open" : "closed"});
+  out.push({sym: "Short list", what: "At most 3 names", ok: q.top.length <= SFL.top, board: String(q.top.length), mine: "≤ " + SFL.top});
+  for (const x of q.top) { const b = dssBars(x.o.r.sym); if (!b || b.n < 20) continue; let s = 0, good = true; for (let t = b.n - 20; t < b.n; t++) { const c = b.c[t], v = b.v[t]; if (c !== c || v !== v) { good = false; break; } s += c * v; }
+    if (!good) continue; const mine = s / 20; out.push({sym: x.o.r.sym, what: "Short list: $500M a day", ok: mine >= 500e6 && x.o.x.pass === true, board: (x.dv / 1e6).toFixed(0), mine: (mine / 1e6).toFixed(0)}); }
+  return out;
+}
+if (typeof SC_X !== "undefined") SC_X.push(sflSelf);
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   PLAYBOOK CUT — FIRST PULLBACK, SHAKEOUT RECLAIM, FLOOR BOUNCE OFF THE SCREEN (21 Nov 2026) — DISPLAY ONLY.
+   Eugene, 21 Nov 2026 (chat): "my feel is first pullback/ shakeout reclaims/ floor bounce, we can just remove totally. the
+   board has no reliable way to give me positive expectancy from these playbooks." … "i need more time for chartwork. this
+   building and building is getting overhand, and there's a need to simplify." Then, on the proposal "remove First Pullback,
+   Shakeout Reclaim and Floor Bounce … the feed columns MAP reads would stay; only the screens and MAP lines go":
+   "yes go ahead with the cut".
+   WHAT IT DOES (when the cut is on — the default):
+   - Playbook switch: "2 · First Pullback" is gone (1 · Leader Pullback and S · Former Leader Short stay). A browser that was
+     left on First Pullback opens on Leader Pullback, with its own filters.
+   - Hidden: the First Pullback card + tracker + Undercut watch, the Research card (Shakeout Reclaim / Floor Bounce), their
+     Watchlist cards, Today's two playbook lines, the ticker panel tabs First Pullback / Shakeout / Floor Bounce (a panel left
+     on one of them opens on Entry Check), their Screens (so they also leave the Screens dropdown, "In several screens" and
+     the TradingView-lists screen items), their TradingView-lists sections and presets (so DS Daily no longer carries First
+     Pullback names), their filter presets and the First Pullback filter line, MAP's First Pullback paper lines on screen.
+   - Settings → "Retired playbooks" brings all of it back (Show) — the toggle back to the old view (CLAUDE.md §4) until
+     Eugene retires the code itself.
+   NEVER CHANGES: any number, list, rank or check. Everything is still computed: the Deep Space feed keeps its First
+   Pullback / R1 / OB columns byte for byte (MAP's input — headers are a protected interface), the ETF feed its OB columns,
+   the connector its fields, the MAP import still reads FP / FS / O lines (nothing is skipped or lost), the First Pullback
+   tracker log and the Board log keep recording, snapshots and sync are untouched, the self-check still runs on all three.
+   Leader Pullback, 21 Reclaim, ETF setups, Former Leader Short and the short side are not touched.
+   HOW: registries are trimmed in place while the cut is on and put back exactly when it is off (PB_SW, SCREENS, TVL_PRE,
+   GF_PRESETS); TradingView-lists sections through one guarded call at the end of TVL_SECS (pbCutTvl); three guarded reads of
+   PBCUT.on in place (mppWlGroups: MAP's First Pullback Watchlist group; MSC_X "mfp": its scorecard row — the CSV keeps its
+   rows; the O-line note under the MAP import box carries data-pbcut); the rest is CSS under html.pbcut. Hook points "panel"
+   (leave a hidden tab), "settings". No override.
+   TESTS: window.__DSB_SHOW_RETIRED (set by tools/pw-show-retired.js, which tools/check-lib.sh loads into every test)
+   leaves the cut off unless adrb.pbCut says otherwise, so the older tests keep testing the hidden playbooks' numbers and
+   cards; tools/board-pbcut-test.js and a second smoke run test the board as published (cut on). Same idea as VALF.now.
+   STORAGE NEW: adrb.pbCut (1 = hidden, 0 = shown; absent = hidden). Not on trial — a removal Eugene ruled.
+   ===================================================================== */
+const PBCUT = {key: "adrb.pbCut", on: false, saved: null,
+  sw: new Set(["fp"]), scCat: new Set(["Playbooks 2 · 3", "Playbook 2 · First Pullback"]),
+  tvlSec: new Set(["fp", "fpe", "r1", "r1e", "ob", "obe", "camp"]), tvlPre: new Set(["First Pullback", "Shakeout Reclaim", "Floor Bounce"]),
+  gfPre: new Set(["Playbook 2 · First Pullback", "Playbook 2 · Shakeout Reclaim", "Playbook 3 · Floor Bounce"]), tpt: new Set(["fp", "r1", "ob"])};
+document.head.insertAdjacentHTML("beforeend", `<style>
+html.pbcut #fpWatch,html.pbcut #pbWatch,html.pbcut #pbResBox,html.pbcut #fpTrackBox,html.pbcut .pbline,
+html.pbcut .tp-tabs button[data-tpt="fp"],html.pbcut .tp-tabs button[data-tpt="r1"],html.pbcut .tp-tabs button[data-tpt="ob"],
+html.pbcut .tp-pane[data-p="fp"],html.pbcut .tp-pane[data-p="r1"],html.pbcut .tp-pane[data-p="ob"],html.pbcut .fpcls,
+html.pbcut [data-pbcut]{display:none !important}
+/* Filters → Playbooks: the retired playbooks' lines — one that is switched on stays visible, so no filter ever works unseen */
+html.pbcut .gcrit:not(.on):has(input[data-ck="fpList"]),html.pbcut .gcrit:not(.on):has(input[data-ck="fpLoc"]),html.pbcut .gcrit:not(.on):has(input[data-ck="fpPiv"]),
+html.pbcut .gcrit:not(.on):has(input[data-ck="fpUc"]),html.pbcut .gcrit:not(.on):has(input[data-ck="r1st"]),html.pbcut .gcrit:not(.on):has(input[data-ck="obst"]){display:none !important}
+</style>`);
+function pbCutWanted(){
+  let v = null; try { v = store.get(PBCUT.key, null); } catch (e) {}
+  if (v === 1 || v === "1" || v === true) return true;
+  if (v === 0 || v === "0" || v === false) return false;
+  return !window.__DSB_SHOW_RETIRED;   // tests only (see the header); a browser never has it
+}
+// keep = a predicate; the array is trimmed in place and its full copy kept for putting back
+function pbCutTrim(arr, keep){ const all = arr.slice(); for (let i = arr.length - 1; i >= 0; i--) if (!keep(arr[i])) arr.splice(i, 1); return all; }
+function pbCutObjTrim(obj, drop){ const all = Object.entries(obj); for (const k of Object.keys(obj)) if (drop.has(k)) delete obj[k]; return all; }
+function pbCutObjBack(obj, all){ for (const k of Object.keys(obj)) delete obj[k]; for (const [k, v] of all) obj[k] = v; }
+function pbCutTvl(secs){ return PBCUT.on ? secs.filter(s => !PBCUT.tvlSec.has(s.k)) : secs; }
+function pbCutApply(paint){
+  const want = pbCutWanted(); if (want === PBCUT.on) return;
+  document.documentElement.classList.toggle("pbcut", want);
+  if (want) {
+    PBCUT.saved = {
+      sw: pbCutTrim(PB_SW, x => !PBCUT.sw.has(x[0])),
+      sc: pbCutTrim(SCREENS, sc => !PBCUT.scCat.has(SC_CAT[sc.k])),
+      tvlPre: pbCutObjTrim(TVL_PRE, PBCUT.tvlPre), gfPre: pbCutObjTrim(GF_PRESETS, PBCUT.gfPre)};
+    PBCUT.on = true;
+    // a browser left on First Pullback (switch or panel tab) goes back to Leader Pullback / Entry Check
+    try { if (pbCur() === "fp") pbSet(1); } catch (e) { try { store.set("adrb.pb", 1); } catch (e2) {} }
+    try { if (PBCUT.tpt.has(WSI.tpTab)) { WSI.tpTab = "plan"; store.set("adrb.tpTab", "plan"); } } catch (e) {}
+  } else {
+    const sv = PBCUT.saved; PBCUT.on = false;
+    if (sv) { PB_SW.splice(0, PB_SW.length, ...sv.sw); SCREENS.splice(0, SCREENS.length, ...sv.sc); pbCutObjBack(TVL_PRE, sv.tvlPre); pbCutObjBack(GF_PRESETS, sv.gfPre); }
+    PBCUT.saved = null;
+  }
+  if (paint) { try { if (typeof s61Reset === "function") s61Reset(); if (S.snap) { computeAll(); renderAll(); } else if (typeof renderSettings === "function" && S.ui && S.ui.tab === "settings") renderSettings(); } catch (e) { console.warn("playbook cut", e); } }
+}
+hookOn("panel", "playbookCut", (r, dr) => {
+  if (!PBCUT.on || !dr) return;
+  const on = dr.querySelector(".tp-tabs button.on");
+  if (on && PBCUT.tpt.has(on.dataset.tpt)) { const b = dr.querySelector('.tp-tabs button[data-tpt="plan"]'); if (b) b.click(); }
+});
+hookOn("settings", "playbookCut", () => {
+  const reset = $("sReset"); if (!reset || $("pbCutSel")) return; const box = document.createElement("div");
+  box.innerHTML = `<h4>Retired playbooks</h4>
+    <div class="row"><div>First Pullback, Shakeout Reclaim, Floor Bounce<div class="d">Taken off the screen on 21 Nov 2026 (cards, panel tabs, screens, TradingView lists, filters, MAP's First Pullback lines). Still computed, so the feed columns and the logs are unchanged. Show brings every page back as it was.</div></div>
+    <div><select id="pbCutSel"><option value="1" ${PBCUT.on ? "selected" : ""}>Hidden</option><option value="0" ${PBCUT.on ? "" : "selected"}>Show</option></select></div></div>`;
+  reset.parentElement.before(box);
+  $("pbCutSel").onchange = e => { try { store.set(PBCUT.key, e.target.value === "1" ? 1 : 0); } catch (er) {} pbCutApply(true); toast(PBCUT.on ? "Retired playbooks hidden" : "Retired playbooks shown"); };
+});
+pbCutApply(false);
+</script>
+<script>
+"use strict";
+/* =====================================================================
    BOARD VERSION LABEL (10 Nov 2026) — display only. On a 2-week trial (docs/trials.md).
    Eugene, 10 Nov 2026: "how do i know whether the board is the latest update" → "yes add the version label".
    - BOARD_VER = {date, n, what}: bumped in EVERY change to index.html (tools/board-version-test.js fails when index.html
@@ -23543,7 +23813,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>table.mix td,table.mix th{
    - Never changes any number, list, feed column, storage key or setting. Storage: none. Hooks: "settings"; the chip is
      inserted once at load. No override.
    ===================================================================== */
-const BOARD_VER = {date: "2026-11-19", n: 1, what: "Watchlist: MAP · Index location table (MAP's QQQ / SPY / IWM / SOXX lines)"};
+const BOARD_VER = {date: "2026-11-21", n: 3, what: "Mega-cap exemption $500B + wrapper map; First Pullback / Shakeout Reclaim / Floor Bounce off the screen; Index trend 20 years; Shorts today list (Defensive days, up to 3) + short tracker"};
 const boardVerTxt = () => `v${BOARD_VER.date}.${BOARD_VER.n}`;
 (function verChip(){
   try {
