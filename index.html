@@ -22235,7 +22235,7 @@ function valRulesVer(){
   const v = typeof boardVerTxt === "function" ? boardVerTxt() : "v?", h = valHash(valRulesState());
   return valLock().unlocked && valToday() <= VALF.until ? `${v}·UNLOCKED-${h}` : `${v}·${h}`;
 }
-FEED_EXT.push({h: ["Rules Version"], cells: () => [valRulesVer()]});
+FEED_EXT.push({h: ["Rules Version", "Ready Rank"], prep: () => typeof rdyRankMap === "function" ? rdyRankMap() : null, cells: (o, P) => [valRulesVer(), o && P && P.has(o.sym) ? P.get(o.sym) : ""]});   // 22 Nov 2026: + "Ready Rank" (READY RANK — FEED COLUMN, at the end) — the Ready to trade order for MAP, appended after Rules Version
 // grey out the list-changing controls while frozen
 const VALF_SEL = '[data-s="wPreset"],[data-w],[data-s="normADR"],[data-s="bench"],[data-s="groupBy"],[data-s="minGroup"],#adrfFloor,#adrfMega,[data-lptol],#thBy button,#thMin';
 function valGrey(root){
@@ -23560,6 +23560,26 @@ if (typeof SC_X !== "undefined") SC_X.push(tbkSelf);
 <script>
 "use strict";
 /* =====================================================================
+   READY RANK — FEED COLUMN (22 Nov 2026) — TRACKING ONLY: one column at the very end of the Deep Space feed. No list, rank,
+   check, state, size or existing feed column changes — it exports the order the board already has.
+   Eugene, 22 Nov 2026 (chat), after ruling that MAP stops picking names (Command Reference "RULINGS — 22 Nov 2026" (1):
+   Focus A = the Board's Ready to trade names 1–5 in the Board's own order, Focus B = 6–10): on "add one column at the end
+   of the feed, Ready Rank, so MAP copies the order instead of rebuilding it" — "Ok add that".
+   "Ready Rank" = the name's place (1, 2, 3 …) in the whole-file Ready to trade list exactly as s61Lists(true) orders it
+   (on Defensive days Exceptional first → stage tag → RS turning → RS 1M change → Setup Quality → the old tie-breaks);
+   blank for every other row (On deck, Background, Out, ETFs, rows with no history). The on-screen filters never change it.
+   Older columns stay byte-identical; the column is appended after "Rules Version" (one guarded in-place edit of that
+   FEED_EXT entry in VALIDATION FREEZE + RULES VERSION, which calls rdyRankMap below). Storage: none. No hook, no override.
+   Test: tools/board-ready-rank-test.js.
+   ===================================================================== */
+// the map sym → rank; read by the feed's last entry (one guarded in-place edit of the "Rules Version" FEED_EXT entry in
+// VALIDATION FREEZE + RULES VERSION, so the two travel together and the feed tests that set Rules Version aside set this
+// aside with it)
+function rdyRankMap(){ const m = new Map(); try { if (S.has.hist) s61Lists(true)["A-eligible"].forEach((x, i) => m.set(x.r.sym, i + 1)); } catch (e) { console.warn("feed Ready Rank", e); } return m; }
+</script>
+<script>
+"use strict";
+/* =====================================================================
    BOARD VERSION LABEL (10 Nov 2026) — display only. On a 2-week trial (docs/trials.md).
    Eugene, 10 Nov 2026: "how do i know whether the board is the latest update" → "yes add the version label".
    - BOARD_VER = {date, n, what}: bumped in EVERY change to index.html (tools/board-version-test.js fails when index.html
@@ -23570,7 +23590,7 @@ if (typeof SC_X !== "undefined") SC_X.push(tbkSelf);
    - Never changes any number, list, feed column, storage key or setting. Storage: none. Hooks: "settings"; the chip is
      inserted once at load. No override.
    ===================================================================== */
-const BOARD_VER = {date: "2026-11-22", n: 2, what: "Leader Pullback trigger = a break of the opening range high or a 30-min reversal candle (was the 30-min 21 EMA close); Live mode reads the levels; validation engine E2.0"};
+const BOARD_VER = {date: "2026-11-22", n: 3, what: "Feed: Ready Rank column (the Ready to trade order, for MAP); trigger = a break of the opening range high or a reversal candle"};
 const boardVerTxt = () => `v${BOARD_VER.date}.${BOARD_VER.n}`;
 (function verChip(){
   try {
