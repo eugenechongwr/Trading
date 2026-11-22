@@ -767,7 +767,7 @@ html.ws #drawer.tp{width:min(1320px,96vw);padding:0;overflow:hidden;display:flex
       <div class="card g1"><div class="hd"><h2>On deck</h2><span class="sub">close to the list but blocked by exactly one thing — the blocker is named on the right</span></div><div class="bd"><div class="ondeck" id="ondeck"></div></div></div>
       <div class="card g1" id="shortBox"></div>
       <div class="card rules"><b>Trade rules (Chart &amp; Entry Spec v6.0)</b><ol>
-        <li>Trigger: a 30-min bar closes above the 30-min 21 EMA. Enter at the next 30-min bar's open. Nothing else fires an entry.</li>
+        <li>Trigger (from 23 Nov 2026): from 10:00 ET, price trades above the opening range high (the 09:30–10:00 bar's high) or above a 30-min reversal candle's high, whichever comes first. A break, not a close — a buy stop one tick over the level. Nothing else fires an entry.</li>
         <li>Initial stop is the 30-min pullback low, never wider than half the stock's ADR. Hard stop at fill — no mental stops.</li>
         <li>First third off at 2R, or at T+3 if 2R hasn't come. Stop to breakeven on the rest.</li>
         <li>Runner trails the daily 9 EMA on a closing basis.</li>
@@ -1082,7 +1082,7 @@ const FIELDS = [
   ["s10", "Simple moving average, 10, 1 day", MA("s", 10, "d"), "rec", "'Above a rising 10 SMA' scan"],
   ["s20", "Simple moving average, 20, 1 day", MA("s", 20, "d"), "rec", "Tells whether the 10 SMA is rising (10 above 20)"],
   ["e9_30", "Exponential moving average, 9, 30 minutes", MA("e", 9, "m30"), "rec", "30-min trend"],
-  ["e21_30", "Exponential moving average, 21, 30 minutes", MA("e", 21, "m30"), "rec", "Your trigger line: price vs the 30-min 21 EMA"],
+  ["e21_30", "Exponential moving average, 21, 30 minutes", MA("e", 21, "m30"), "rec", "Context line: price vs the 30-min 21 EMA (the trigger until 20 Nov 2026)"],
   ["s10w", "Simple moving average, 10, 1 week", MA("s", 10, "w"), "rec", "Weekly stage, weekly stretch"],
   ["s30w", "Simple moving average, 30, 1 week", MA("s", 30, "w"), "rec", "Weekly stage (Stage 2 = price > 10W > 30W)"],
   ["hi1d", "High, 1 day", R("high([ ,]+" + TF.d + ")"), "rec", "High of day, close range, new-high-today"],
@@ -1506,6 +1506,7 @@ function computeAll(){
     r.lodU = (mode === "rth" && r.lo1d != null && r.adrD) ? (P - r.lo1d) / r.adrD : null;
     r.vwapU = (mode === "rth" && r.vwap != null && r.adrD) ? (P - r.vwap) / r.adrD : null;
     r.t30 = (mode === "rth" && r.e21_30 != null) ? (P > r.e21_30) : null;  // above 30-min 21 EMA
+    r.t30src = r.t30 == null ? null : "e21"; r.tbk = null; if (typeof tbkRow === "function") tbkRow(r, mode, P);   // 22 Nov 2026: Live mode reads the opening range / reversal break — the trigger from 23 Nov (TRIGGER — OPENING RANGE / REVERSAL BREAK, at the end)
     r.t30U = (mode === "rth" && r.e21_30 != null && r.adrD) ? (P - r.e21_30) / r.adrD : null;
     if (r.hi1w != null && r.lo1w != null && r.hi1w > r.lo1w) r.wcr = (P - r.lo1w) / (r.hi1w - r.lo1w); else r.wcr = null;
     // ---- daily structure
@@ -3211,7 +3212,7 @@ const SCREENS = [
   {k: "gapgo", t: "Gap and go", d: "Gapped at least the gapper threshold and still green from the open (premarket: moving that much with trend intact).", need: [], f: r => S.mode === "pm" ? (r.pmU ?? 0) >= CFG.gapTh && r.trend !== "Lag" : (r.gapU ?? 0) >= CFG.gapTh && (r.openU ?? -1) > 0},
   {k: "gapfade", t: "Gap and fade — avoid", d: "Gapped up the threshold but down 0.3+ ADR from the open.", need: ["cfo1d"], f: r => S.mode === "rth" && (r.gapU ?? 0) >= CFG.gapTh && (r.openU ?? 0) < -0.3},
   {k: "above10", t: "Above a rising 10 SMA", d: "Price above the 10 SMA, 10 SMA above the 20 SMA (rising), within 10% of highs. Survivors on weak days are the strong stocks.", need: ["s10", "s20"], f: r => r.a10 && r.s10rising && (r.offHigh ?? -99) >= -10},
-  {k: "trigger", t: "30-min trigger in play", d: "In the buy zone and trading above the 30-min 21 EMA — check whether the bar has closed above it.", need: ["e21_30", "hist"], f: r => ecsOf(r) === 1 && r.t30 === true},
+  {k: "trigger", t: "30-min trigger in play", d: "In the buy zone and trading above the trigger level — in Live mode the opening range high or a 30-min reversal candle's high (the trigger from 23 Nov 2026: a break of that level from 10:00 ET); from a file only the 30-min 21 EMA can be read, as context.", need: ["hist"], f: r => ecsOf(r) === 1 && r.t30 === true},
   {k: "lod", t: "Actionable now — near the low of day", d: "In the buy zone and no more than 0.6 ADR above today's low (Entry Check's day-low cap).", need: ["lo1d", "hist"], f: r => ecsOf(r) === 1 && r.lodU != null && r.lodU <= CFG.lodCap},
   {k: "vwap", t: "Holding VWAP", d: "Green on the day and above session VWAP.", need: ["vwap"], f: r => (r.vwapU ?? -1) > 0 && (r.dayU ?? 0) > 0},
   {k: "narrow", t: "Quiet day in a good spot", d: "Today's range is half an ADR or less, and the name is in or just under the buy zone.", need: ["hi1d", "lo1d", "hist"], f: r => r.rangeU != null && r.rangeU <= 0.5 && ecsIn(r, 1, 2)},
@@ -3316,7 +3317,7 @@ function openDrawer(sym){
     ${chk((r.extU == null || r.etf) ? null : (r.extU <= CFG.extCap || r.postER), `5 · No more than ${CFG.extCap} ADR above the 50 SMA`, r.etf ? "ETF — ADR doesn't apply, judge the structure" : r.postER && r.extU > CFG.extCap ? "Over the cap but reported in the last 5 days — re-measure from the post-gap structure" : "Extension gate", r.extU == null || r.etf ? "" : sg(r.extU, 1) + " ADR")}
     ${chk(r.lodU == null ? null : r.lodU <= CFG.lodCap, `6 · Entry under ${CFG.lodCap} ADR above the low of day`, r.lodU == null ? `Add "Low, 1 day" to the export to check this · ${CFG.lodCap} ADR = $${r.adrD ? (r.adrD * CFG.lodCap).toFixed(2) : "—"}` : `Low of day ${f2(r.lo1d)}`, r.lodU == null ? "" : f2(r.lodU) + " ADR")}
     ${chk(null, "8 · Stop no wider than half ADR (hard)", `Max stop distance $${r.adrD ? (r.adrD * CFG.stopFrac).toFixed(2) : "—"} (${r.adr ? (r.adr * CFG.stopFrac).toFixed(2) : "—"}%). Compare with the 30-min pullback low.`)}
-    ${chk(r.t30 == null ? null : r.t30, "9 · Trigger: 30-min bar closes above the 30-min 21 EMA", r.t30 == null ? "On the chart (add the 30-min EMA columns to see where price sits)" : `Price is ${r.t30 ? "above" : "below"} the 30-min 21 EMA (${f2(r.e21_30)}) — confirm the bar has closed.`)}
+    ${chk(r.t30 == null ? null : r.t30, "9 · Trigger: a break of the opening range high or a 30-min reversal candle's high, from 10:00 ET", typeof tbkChkTxt === "function" ? tbkChkTxt(r) : "On the chart")}
     <div class="note"><b>SMA gate:</b> ${r.smaStep === 0 ? "above both the 50 and 200 SMA — full grade." : `under ${r.smaStep === 2 ? "both the 50 and 200" : r.a50 === false ? "the 50" : "the 200"} SMA — step the grade down ${r.smaStep}.`}</div>
     ${r.inPlay != null || r.reclaim != null ? `<div class="note"><b>Today:</b> ${r.inPlay ? `in play — volume ${f2(r.ipRv)}x a normal day (at time ${f2(r.ipRat)}x), ${sg(r.ipVs)} ADR vs ${esc(S.ipBench)}${r.thin ? " (below your liquidity filter)" : ""}.` : `not in play (volume ${f2(r.ipRv)}x a normal day, at time ${f2(r.ipRat)}x, ${sg(r.ipVs)} ADR vs ${esc(S.ipBench)}; the bar right now: ${esc(ipRule().vol)}, ${esc(ipRule().str)}).`} ${r.reclaim ? `Reclaimed the daily ${r.reclaimLv.join(" / ")} today (dipped ${f2(r.rcDepth)} ADR under) and holding above VWAP and the 30-min 21 EMA.` : r.reclaimRaw ? `Reclaimed the daily ${r.reclaimAll.join(" / ")} but your reclaim filters leave it out.` : r.reclaimAll && r.reclaimAll.length ? `Back above the daily ${r.reclaimAll.join(" / ")} but not yet above VWAP and the 30-min 21 EMA.` : ""}${r.inPlay && r.chase ? " Already 2+ ADR on the day — in play is not a buy signal; chasing extended names is a repeat mistake." : ""}</div>` : ""}
     ${r.gapper ? `<div class="note"><b>Gapper:</b> the 5-min gapper/pivot trigger is still an experiment — C size (0.1% NLV).${r.chase ? " Already 2+ ADR: don't chase the open." : ""}</div>` : ""}
@@ -4035,7 +4036,7 @@ const CRIT = [
   {k: "up", cat: "Today", l: "Up today", t: r => { const m = S.mode === "pm" ? r.pmPct : r.dayPct; return m == null ? null : m > 0; }},
   {k: "dcr", cat: "Today", l: "Trading in the top {p}% of today's range", type: "num", p: 30, step: 5, t: (r, p) => r.dcr == null ? null : r.dcr >= 1 - p / 100},
   {k: "vwap", cat: "Today", l: "Above VWAP", t: r => r.vwapU == null ? null : r.vwapU > 0},
-  {k: "t30", cat: "Today", l: "Above the 30-min 21 EMA", t: r => r.t30},
+  {k: "t30", cat: "Today", l: "Above the 30-min trigger level (Live: opening range high / reversal candle · file: 30-min 21 EMA)", t: r => r.t30},
   {k: "rvol", cat: "Today", l: "Relative volume {p}× or more", type: "num", p: 1.5, step: 0.1, t: (r, p) => { const v = r.rvat ?? r.rvol; return v == null ? null : v >= p; }},
   {k: "notChase", cat: "Today", l: "Not already up 2+ ADR today", t: r => !r.chase},
   // risk & calendar
@@ -4375,7 +4376,7 @@ function extCompute(){
 function statusOf60(r){
   const zh = zr()[1];
   switch (r.state) {
-    case 1: return r.t30 === true ? {k: "trig", t: "At trigger", c: "go", d: "In the zone and above the 30-min 21 EMA — check the 30-min bar has closed above it"} : {k: "zone", t: "In buy zone", c: "zone", d: "In the zone — wait for the 30-min trigger"};
+    case 1: return r.t30 === true ? {k: "trig", t: "At trigger", c: "go", d: typeof tbkStatD === "function" ? tbkStatD(r) : "In the zone and above the trigger level"} : {k: "zone", t: "In buy zone", c: "zone", d: "In the zone — wait for the 30-min trigger"};
     case 2: { const a = r.zx - zh; return a <= 0.25 ? {k: "close", t: `Close · +${f2(a)}`, c: "close", d: `${f2(a)} ADR above the top of the zone — set an alert there`} : {k: "wait", t: "Wait for pullback", c: "wait", d: `${f2(a)} ADR above the top of the zone`}; }
     case 3: return {k: "above", t: "Above zone", c: "wait", d: "Too far above the zone to buy"};
     case 4: return {k: "ext", t: "Extended", c: "bad", d: `More than ${CFG.extCap} ADR above the 50 SMA`};
@@ -4390,7 +4391,7 @@ function statusOf(r){
   if (!r || r.etf) return statusOf60(r);
   const k = ecsOf(r); if (!k) return {k: "na", t: "—", c: "", d: ECS_NONE};
   const E = ECSK[k], c = {1: "zone", 2: "close", 3: "wait", 4: "", 5: "bad", 6: "bad"}[k];
-  if (k === 1 && r.t30 === true) return {k: "ec1t", t: "In buy zone · over 30m 21", c: "go", d: "In the buy zone and above the 30-min 21 EMA — check on the chart that a 30-min candle has closed above it"};
+  if (k === 1 && r.t30 === true) return {k: "ec1t", t: r.t30src === "brk" ? "In buy zone · over the trigger level" : "In buy zone · over 30m 21", c: "go", d: typeof tbkStatD === "function" ? tbkStatD(r) : "In the buy zone and above the trigger level"};
   return {k: "ec" + k, t: E.name, c, d: E.d};
 }
 const STATUS_ORDER = {trig: 0, zone: 1, close: 2, wait: 3, above: 4, ext: 5, under: 6, u50: 7, broken: 8, na: 9, ec1t: 0, ec1: 1, ec2: 2, ec3: 3, ec4: 4, ec5: 5, ec6: 6};
@@ -8123,7 +8124,7 @@ function s61PanelHTML(r){
     ${[3, 4, 5, 6, 7, 8, 9, 10, 11].map(n => s61RowHTML(s.ck[n])).join("")}
     ${s61LiveHTML(s)}${s61SizeHTML(r, s)}
     <div class="small" style="margin-top:6px">Setup Quality <b>${s.sq}/5</b> · Old pivot level <b>${s.shadow != null ? f2(s.shadow) : "—"}</b> <span class="dim">(reference only)</span> · <label class="tog"><input type="checkbox" data-s61cat="${esc(r.sym)}" ${cat ? "checked" : ""}>verified fresh catalyst</label></div>
-    <div class="small dim">Trigger (on TradingView, Leader Pullback indicator): a 30-min candle closes back above the 30-min 21 EMA (the trigger line), earliest the 10:00 New York close; buy at the next 30-min candle's open. Stop = the day low at the trigger. Exits: ⅓ at 2R (3R if chosen before entry) or the T+3 daily close — a T+3 close below the entry sells the whole position → stop to breakeven → shave 10% at each whole ADR from 7 ADR above the daily 50 SMA → runner out on a daily close under the daily 9 EMA.</div></div>`;
+    <div class="small dim">Trigger (on TradingView, Leader Pullback indicator): from 10:00 New York, price trades above the opening range high (the 09:30–10:00 candle's high) or above a 30-min reversal candle's high, whichever comes first — a break, not a close: a buy stop one tick over the level. Stop = the day low at the trigger. Exits: ⅓ at 2R (3R if chosen before entry) or the T+3 daily close — a T+3 close below the entry sells the whole position → stop to breakeven → shave 10% at each whole ADR from 7 ADR above the daily 50 SMA → runner out on a daily close under the daily 9 EMA.</div></div>`;
 }
 // MAP's call, settable here too (the Market card needs the breadth file); the same stored value as the Market card
 function s61MapSel(z){ return `<select data-s61map title="MAP's Overall Verdict for today — the same setting as on Market"><option value="">— not set —</option>${MAPV.map(v => `<option ${z.regSet && z.reg === v ? "selected" : ""}>${v}</option>`).join("")}</select>`; }
@@ -8299,7 +8300,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
    Spec 6.0 levels. stopCalc is re-pointed at the rule in force: the 0.6-ADR LOD cap, plus room to the first 5/5 swing
    pivot from the typed entry (Spec 6.1 check 10/11, gate from test day 1).
    ===================================================================== */
-const RULES_NOW = `<b>Execution rules since 19 Oct (Entry Check, rules v6.1):</b> no entry before 10:00 ET · trigger = a 30-min close above the 30-min 21 EMA, enter the next 30-min bar · stop = the day low at the trigger, entry no more than 0.6 ADR above it · first third at 2R or the T+3 close (a T+3 close below the entry = sell the whole position).`;
+const RULES_NOW = `<b>Execution rules (Entry Check, rules v6.1; trigger from 23 Nov 2026):</b> no entry before 10:00 ET · trigger = price trading above the opening range high or a 30-min reversal candle's high, whichever comes first (a buy stop one tick over the level; at most 2 entries a name a session) · stop = the day low at the trigger, entry no more than 0.6 ADR above it · first third at 2R or the T+3 close (a T+3 close below the entry = sell the whole position).`;
 stopCalc = function(r){
   const out = $("dStopOut"); if (!out) return;
   const e = parseFloat($("dEntry").value), s = parseFloat($("dStop").value);
@@ -8939,7 +8940,7 @@ function wl61(s){
   const cl = s61Clear(s), er = s.er;
   const erT = er.n == null ? "earnings date unknown" : `earnings in ${er.n} sessions${!er.bmo && er.alt && er.alt.n !== er.n ? ` (${er.alt.n} if before the open)` : ""}`;
   const room = !fin(x.entry) ? "" : x.nh ? "no resistance above (new highs)" : `1st resistance ${money$(x.fr)} ≈ ${x.room.toFixed(1)}R est.`;
-  const now = (s.list === "A-eligible" ? [`trigger: 30-min close over the 30-min 21 EMA, from 10:00 ET`, room, `invalid on a close under the 21 EMA ${money$(x.e21)}`, erT]
+  const now = (s.list === "A-eligible" ? [`trigger: a break of the opening range high or a 30-min reversal candle's high, from 10:00 ET`, room, `invalid on a close under the 21 EMA ${money$(x.e21)}`, erT]
     : cl.length ? [`blocked: ${cl.map(clearTxt).join("; ")}`, room] : [room, erT]).filter(Boolean).join(" · ");
   return {why, now};
 }
@@ -9032,7 +9033,7 @@ function dpLive(e){
     else if (x.loc === "L1") flags.push({t: "in the buy zone", c: "go"});
     else if (x.loc) flags.push({t: ecLoc(x), c: LOC61[x.loc].c});
     if (s.ck[9].ok === false && s.er.n != null) flags.push({t: `earnings in ${s.er.n}`, c: "bad"});
-  } else { const st = statusOf(r); flags.push(st.k === "trig" ? {t: "over the 30-min 21 EMA — not a confirmed trigger", c: "zone"} : {t: st.t, c: st.c}); }
+  } else { const st = statusOf(r); flags.push(st.k === "trig" ? {t: r.t30src === "brk" ? (r.tbk && r.tbk.long ? "broke the trigger level — the entry was the buy stop there" : "over the trigger level") : "over the 30-min 21 EMA — context, not the trigger", c: "zone"} : {t: st.t, c: st.c}); }
   return {px: r.last, chg, flags, loc: s ? s.x.loc : null};
 }
 // timestamps: stock file, stored history, live prices (delayed), MAP call
@@ -9074,7 +9075,7 @@ function dpCardHTML(compact){
     <div class="small" style="margin:4px 0 8px"><b>Plan for ${jnDay(p)}</b> · v${R.n} of ${pl.revs.length} · ${lockTxt} · data to the ${jnDay(R.d0)} close${typeof dpViewHTML === "function" ? dpViewHTML() : ""}${pl.revs.length > 1 || R.ed ? `<details class="tp-fold" style="display:inline-block;margin-left:8px"><summary>revisions</summary><div class="small">${revTxt}</div></details>` : ""}</div>
     ${order.map(k => `<h4 style="margin:8px 0 2px">${esc(DP_L[k])} <span class="small dim">${groups[k].length}</span></h4><div class="tscroll" style="max-height:none"><table class="mini dpt"><thead><tr><th>#</th><th class="l">Ticker</th><th class="l">Why · why now / what could fail (frozen)</th><th>At plan</th><th>Now</th><th class="l">Live status</th></tr></thead><tbody>${groups[k].map(row).join("")}</tbody></table></div>`).join("") || `<div class="empty">The plan is empty — nothing qualified and no MAP lists typed. That's a valid plan.</div>`}
     ${disc}
-    <div class="small dim" style="margin-top:6px">${S.has.hist ? "" : "The board's lists need the price history — until it's loaded only MAP's lists are in the plan. "}Live status uses the data on screen (Massive is ${lvDT()}). "In the zone" is a location, not a trigger: the trigger is a 30-min close over the 30-min 21 EMA, from 10:00 ET, checked on the chart.</div></div>`;
+    <div class="small dim" style="margin-top:6px">${S.has.hist ? "" : "The board's lists need the price history — until it's loaded only MAP's lists are in the plan. "}Live status uses the data on screen (Massive is ${lvDT()}). "In the zone" is a location, not a trigger: the trigger is a break of the opening range high or a 30-min reversal candle's high, from 10:00 ET, on the chart (Live mode shows the levels here).</div></div>`;
 }
 function dpPaint(){ const b = $("dpBox"); if (b) { b.innerHTML = dpCardHTML(); if (typeof lpPaint === "function") try { lpPaint(b); } catch (e) {} /* 4 Nov: stage age badges */ b.querySelectorAll("tbody").forEach(tb => tb.addEventListener("click", e => { const t = e.target.closest("tr[data-sym]"); if (t && S.rowBySym && S.rowBySym.has(t.dataset.sym)) openDrawer(t.dataset.sym); })); } }
 // 31 Oct (structure only): was a renderTab override; now a "tab" hook — same code, same order (BOARD HOOKS, block 1)
@@ -9374,7 +9375,7 @@ function nextAction(r, held){
   if (held) { if (s && fin(s.x.e9)) return s.x.close < s.x.e9 ? `Closed under the daily 9 EMA ${f2(s.x.e9)} — the runner's exit rule` : `Hold — runner out on a daily close under the 9 EMA (${f2(s.x.e9)})`; return "Hold — check the daily 9 EMA (load the price history)"; }
   if (!s) return statusOf(r).d || statusOf(r).t;
   const x = s.x, D = x.D;
-  if (s.list === "A-eligible") return early ? "Wait for 10:00 ET, then a 30-min close over the 30-min 21 EMA" : "On the chart: 30-min close over the 30-min 21 EMA; stop = the day low (≤ 0.6 ADR)";
+  if (s.list === "A-eligible") return early ? "Wait for 10:00 ET, then a break of the opening range high or a 30-min reversal candle's high" : "On the chart: buy stop one tick over the opening range high or a 30-min reversal candle's high; stop = the day low (≤ 0.6 ADR)";
   if (s.list === "OnDeck-L2") return `Just under the buy zone — needs a move over yesterday's daily 9 EMA ${f2(x.e9p)}, then the 30-min trigger`;
   if (s.list === "OnDeck-1blocker") { const c = s61Clear(s).find(c => s.blockers.includes(c.n)); return c ? `Blocked by ${c.n} — clears: ${c.clear}` : "One blocker — see the checks"; }
   if (s.list === "OnDeck-L3") return `Deep under the buy zone — needs a move over yesterday's daily 9 EMA ${f2(x.e9p)}, then the 30-min trigger`;   // 25 Oct: L3 Deep reclaim → On deck (Spec 6.1 check 6 / §2, amended 24 Oct) — see the L3 section at the end
@@ -9711,7 +9712,7 @@ s61PanelHTML = function(r){
     ${chips ? `<div class="s61chips">${chips}</div>` : ""}
     <details class="ecsz" data-ecf="adrb.ecSize" ${store.get("adrb.ecSize", false) ? "open" : ""}><summary>${ecSizeLine(s)}</summary>${s61SizeHTML(r, s)}</details>
     ${work}
-    <div class="small dim" style="margin-top:6px">Trigger (on TradingView, Leader Pullback indicator): a 30-min candle closes back above the 30-min 21 EMA (the trigger line), earliest the 10:00 New York close; buy at the next 30-min candle's open. Stop = the day low at the trigger, no more than 0.6 ADR under the entry.</div>${ecFoot()}</div>`;
+    <div class="small dim" style="margin-top:6px">Trigger (on TradingView, Leader Pullback indicator): from 10:00 New York, price trades above the opening range high (the 09:30–10:00 candle's high) or above a 30-min reversal candle's high, whichever comes first — a break, not a close: a buy stop one tick over the level. Stop = the day low at the trigger, no more than 0.6 ADR under the entry.</div>${ecFoot()}</div>`;
 };
 // the ticker on the panel (the Settings switch re-opens it)
 const _openDrawerEC = openDrawer;
@@ -11153,7 +11154,7 @@ function esCardHTML(){
     R.bench ? "" : `<span class="neg">RSP has no stored bars — RS can't be read, nothing qualifies.</span>`].filter(Boolean).join(" ");
   return hd(`grade C experiment · up to ${ES.cap} · one per group per side · daily close ${esc(R.to || "—")} · never a Focus slot`) + `<div class="bd">
     ${R.picks.length ? `<div class="tscroll" style="max-height:none"><table class="mini est">${head}<tbody>${R.picks.map(pickRow).join("")}</tbody></table></div>` : `<div class="empty" style="padding:4px 0"><b>None</b> — no ETF on the map is Ready or on Reclaim watch with the RS it needs today (${R.rows.length} checked).</div>`}
-    <div class="small" style="margin-top:6px">${nL} long · ${nS} short qualify before the one-per-group cut, ${nW} after it. A short is bought as the inverse fund (its row opens that fund's own chart and the ETF Entry Check: 30-min close over its 30-min 21 EMA from 10:00 ET, stop at its low of day, entry ≤ 0.6 ADR over it) or as puts. Events (a top-10 holding reporting, EIA / CPI / FOMC) aren't checked here — MAP flags them.</div>
+    <div class="small" style="margin-top:6px">${nL} long · ${nS} short qualify before the one-per-group cut, ${nW} after it. A short is bought as the inverse fund (its row opens that fund's own chart and the ETF Entry Check: a break of its opening range high or a 30-min reversal candle's high from 10:00 ET, stop at its low of day, entry ≤ 0.6 ADR over it) or as puts. Events (a top-10 holding reporting, EIA / CPI / FOMC) aren't checked here — MAP flags them.</div>
     ${eLine}
     <div class="small dim" style="margin-top:4px">${notes}</div>
     <details class="tp-fold"><summary>Every fund on the map — why each one is in or out (${R.rows.length})</summary><div class="tscroll" style="max-height:520px"><table class="mini esall">${allHead}<tbody>${sortAll.map(allRow).join("")}</tbody></table></div>
@@ -13117,14 +13118,22 @@ async function mcp(req, env){
 //                     outbound calls and 10 ms CPU per run), so it runs every 3 minutes after 18:30 ET until all are done.
 // Assumptions where Notion is silent are listed in VAL.notes and stamped on every outcome through VAL.engine.
 // =====================================================================================================================
-const VAL = {engine: "E1.0-2026-11-14", win: 10, hold: 5, cap: 0.6, cost: 0.05, first: 600, chunk: 6, warmDays: 14, histDays: 120,
+// 22 Nov 2026 — engine E2.0: from the session VAL.breakFrom the Leader Pullback trigger is a BREAK (price trades above the
+// opening range high or a 30-min reversal candle's high — Eugene, 22 Nov 2026; docs/trigger-break-2026-11-22.md). Sessions
+// before it keep the 30-min 21 EMA fresh cross exactly as E1.0 scored it, so an episode that triggered before the switch
+// scores the same when it is re-scored. R.trigger.rule says which rule fired ("ema21" | "break").
+const VAL = {engine: "E2.0-2026-11-22", breakFrom: "2026-11-23", win: 10, hold: 5, cap: 0.6, cost: 0.05, first: 600, chunk: 6, warmDays: 14, histDays: 120,
+  tick: 0.01, pbMinLC: 2, pbExpire: 13, revFrac: 0.5,
   start: "18:30", lastSess: "2026-12-14",
-  notes: ["Regular-session 30-min bars only (09:30-16:00 ET, 13:00 on half-days); the 30-min 21 EMA runs across days, warmed up on 14 calendar days of bars before the first session",
-    "Fresh cross = a 30-min close above the 30-min 21 EMA after the previous 30-min close at or below it (Spec 6.1 §3, 25 Oct); first valid bar = the 09:30-10:00 bar",
-    "Stop = the day's low through the trigger bar; entry = the next 30-min bar's open in the same session (a trigger on the last bar of the day has no entry and is passed over)",
-    "Cap = entry minus that low <= 0.6 x ADR$ (ADR% 20 x close at the snapshot); a trigger that fails the cap is skipped and the episode keeps watching for a later fresh cross",
-    "On deck: the trigger counts only at or after the first 30-min close above the prior day's daily 9 EMA that session (the reclaim)",
-    "Episode = ticker + set (A eligible / N near-miss) + first listed session; 10 sessions to trigger counting the first listed session; ends untriggered if a later saved snapshot no longer lists it in that set",
+  notes: ["Regular-session 30-min bars only (09:30-16:00 ET, 13:00 on half-days), warmed up on 14 calendar days of bars before the first session",
+    "TWO TRIGGER RULES, by session: before 2026-11-23 the 30-min 21 EMA fresh cross (engine E1.0, unchanged); from 2026-11-23 the break rule (Eugene, 22 Nov 2026). Every trigger carries its rule (trigger_rule: ema21 | break); never pool the two",
+    "Rule ema21 (sessions before 2026-11-23): a 30-min close above the 30-min 21 EMA after the previous 30-min close at or below it (the EMA runs across days); first valid bar = the 09:30-10:00 bar; entry = the next 30-min bar's open in the same session (a trigger on the last bar of the day has no entry and is passed over); stop = the day's low through the trigger bar",
+    "Rule break (sessions from 2026-11-23): in a 30-min bar that STARTS at or after 10:00 ET, price trades above a level while the previous 30-min bar closed at or below it. Levels: the opening range high (the 09:30-10:00 bar's high) and the high of a reversal candle, valid for the next 30-min bar only. Both in one bar = the lower level. Entry = the higher of level + $0.01 and the bar's open (buy stop; a bar that opens above the level fills at its open)",
+    "Reversal candle (the Leader Pullback indicator's T1, 30-min bars, run across days): a pullback starts on the 2nd consecutive lower close and ends 13 bars after its last new low or once a reversal candle's high has been traded through; while it is on, a bar that closes above the previous bar's high and in the top half of its own range is a reversal candle. Its high is a level for the next bar only; an unbroken one lapses and a later candle in the same pullback can qualify",
+    "Rule break, stop and the trigger bar: stop = the lower of the day's low through the PREVIOUS bar and the trigger bar's open. 30-min bars can't show the order inside a bar, so worst case: if the trigger bar's own low is at or under that stop the trade is stopped on the trigger bar (-1R before cost); MAE counts the trigger bar's whole low",
+    "Cap = entry minus the stop <= 0.6 x ADR$ (ADR% 20 x close at the snapshot); a trigger that fails the cap is skipped and the episode keeps watching for a later trigger",
+    "On deck: rule ema21 - the trigger counts only at or after the first 30-min close above the prior day's daily 9 EMA that session (the reclaim); rule break - the reclaim must be a completed 30-min close BEFORE the trigger bar",
+    "Episode = ticker + set (A eligible / N near-miss) + first listed session; 10 sessions to trigger counting the first listed session; ends untriggered if a later saved snapshot no longer lists it in that set. The first trigger is the episode's only entry (a second entry the same session is outside the test)",
     "Primary R: stop (a gap below it fills at the open), the close of the 5th session after entry (entry session = 0), or the Exit By close, whichever first; same bar stop + target = stop; 0.05R cost",
     "Ladder R: Spec 6.1 §6 copy — a third off at 2R or at the T+3 close (all out there if below entry), breakeven on the rest, 10% shaves at 7, 8, 9 ... ADR above the daily 50 SMA, runner out on a daily close below the daily 9 EMA, everything out at the Exit By close; 0.05R cost",
     "MFE / MAE R: highest high / lowest low from entry to the primary exit, in R; time to 1R / 2R in sessions + the bar's close time"]};
@@ -13191,14 +13200,23 @@ function vParseAlert(msg, name){
     if ((x = m.match(/^([A-Z0-9.\\-]+) — First Pullback (READY|BUY|STOPPED|TRIGGER)/i))) { out.kind = "FP_" + x[2].toUpperCase(); out.p.sym = x[1]; const at = m.match(/\\(at the ([^)]+)\\)/); if (at) out.p.at = at[1]; }
     return out;
   }
-  if (/^Leader Pullback/i.test(nm) || /30m LONG|LONG trade/.test(m)) {
+  if (/^Leader Pullback/i.test(nm) || /30m LONG|LONG trade|21 RECLAIM/.test(m)) {
     out.playbook = "leader-pullback";
-    if ((x = m.match(/^([A-Z0-9.\\-]+) 30m LONG GET READY .*?trigger line \\(([\\d.,]+)\\).*?stop = day low ([\\d.,]+) \\(([\\d.]+) ADR\\),\\s*([\\d.]+)R room/))) {
-      out.kind = "GET_READY"; out.p = {sym: x[1], trigger: vNum(x[2]), stop: vNum(x[3]), adrOffLow: vNum(x[4]), room: vNum(x[5])};
-    } else if ((x = m.match(/^([A-Z0-9.\\-]+) 30m LONG BUY .*?next open ≈ ([\\d.,]+), stop = day low ([\\d.,]+), 2R ([\\d.,]+), ([\\d.]+) ADR off the low, ([\\d.]+)R room/))) {
-      out.kind = "BUY"; out.p = {sym: x[1], entry: vNum(x[2]), stop: vNum(x[3]), t2r: vNum(x[4]), adrOffLow: vNum(x[5]), room: vNum(x[6])};
+    // room is "5.9R room" or, with nothing overhead, "no resistance"; the first-third target is "2R" or "3R"
+    const ROOM = "(?:([\\\\d.]+)R room|no resistance)";
+    if ((x = m.match(new RegExp("^([A-Z0-9.\\\\-]+) 30m LONG GET READY .*?trigger line \\\\(([\\\\d.,]+)\\\\).*?stop = day low ([\\\\d.,]+) \\\\(([\\\\d.]+) ADR\\\\),\\\\s*" + ROOM)))) {
+      out.kind = "GET_READY"; out.p = {sym: x[1], trigger: vNum(x[2]), stop: vNum(x[3]), adrOffLow: vNum(x[4]), room: x[5] == null ? null : vNum(x[5])};
+    } else if ((x = m.match(new RegExp("^([A-Z0-9.\\\\-]+) 30m LONG BUY .*?(?:next open ≈|buy stop) ([\\\\d.,]+?), stop = day low ([\\\\d.,]+?), \\\\dR ([\\\\d.,]+?), ([\\\\d.]+) ADR off the low, " + ROOM)))) {
+      out.kind = "BUY"; out.p = {sym: x[1], entry: vNum(x[2]), stop: vNum(x[3]), t2r: vNum(x[4]), adrOffLow: vNum(x[5]), room: x[6] == null ? null : vNum(x[6])};
+      const kd = m.match(/traded over the (opening range high|reversal candle high)/); if (kd) out.p.kind = kd[1] === "opening range high" ? "orh" : "rev";   // 22 Nov 2026: the break trigger
+    } else if ((x = m.match(/^([A-Z0-9.\\-]+) 30m LONG SKIPPED \\(([^)]*)\\)/))) {
+      out.kind = "SKIPPED"; out.p = {sym: x[1], why: x[2]};
+    } else if ((x = m.match(/^([A-Z0-9.\\-]+) 30m 21 RECLAIM (BUY|RE-ENTRY) .*?traded over ([\\d.,]+?) \\(([^)]*)\\), stop = day low ([\\d.,]+?),/))) {
+      out.playbook = "21-reclaim"; out.kind = x[2] === "BUY" ? "R21_BUY" : "R21_REENTRY"; out.p = {sym: x[1], level: vNum(x[3]), route: x[4], stop: vNum(x[5])};
     } else if ((x = m.match(/^([A-Z0-9.\\-]+) LONG trade: STOPPED.*?entry ([\\d.,]+)/))) {
       out.kind = "STOPPED"; out.p = {sym: x[1], entry: vNum(x[2])};
+    } else if ((x = m.match(/^([A-Z0-9.\\-]+) LONG trade: (SELL ALL|SELL ⅓|TRIM) .*?entry ([\\d.,]+)/))) {
+      out.kind = x[2] === "SELL ALL" ? "SELL_ALL" : x[2] === "TRIM" ? "TRIM" : "SELL_THIRD"; out.p = {sym: x[1], entry: vNum(x[3])};
     }
     return out;
   }
@@ -13257,6 +13275,20 @@ function vScore(ep, B30, BD, to){
   const all = [...bySess.keys()].sort().flatMap(d => bySess.get(d)); const k21 = 2 / 22; let e = NaN, n = 0, sum = 0;
   all.forEach((b, i) => { b.i = i; });
   for (const b of all) { if (n < 21) { sum += b.c; n++; e = n === 21 ? sum / 21 : NaN; b.ema = e; continue; } e = e + k21 * (b.c - e); b.ema = e; }
+  // 22 Nov 2026 — reversal candles (the Leader Pullback indicator's T1 on 30-min bars, longs; its closed-bar state machine
+  // with the default "Lower closes" pullback, run over every regular-session bar in order): b.revLvl = the level that is
+  // live DURING bar b (the previous bar was a reversal candle; its high). Traded through → used, the pullback ends.
+  { let lc = 0, pq = false, pbOn = false, pbLow = NaN, pbLowI = -1, used = false, lvl = NaN, lvlI = -1;
+    for (let i = 0; i < all.length; i++) { const b = all[i], p = i > 0 ? all[i - 1] : null;
+      if (isFinite(lvl) && i === lvlI + 1) { b.revLvl = lvl; if (b.h > lvl) { used = true; lvl = NaN; } }
+      lc = p && b.c < p.c ? lc + 1 : 0; const q = lc >= VAL.pbMinLC, edge = q && !pq; pq = q;
+      if (isFinite(lvl) && i > lvlI) lvl = NaN;                        // not broken on the next bar → lapses
+      if (edge) { let k0 = 0, lo = Infinity; for (let k = 0; k <= VAL.pbMinLC && i - k >= 0; k++) lo = Math.min(lo, all[i - k].l);
+        for (let k = 0; k <= VAL.pbMinLC && i - k >= 0; k++) if (all[i - k].l <= lo) { k0 = k; break; }
+        pbOn = true; pbLow = lo; pbLowI = i - k0; used = false; lvl = NaN; }
+      else if (pbOn) { if (b.l < pbLow) { pbLow = b.l; pbLowI = i; } if (i - pbLowI > VAL.pbExpire || used) { pbOn = false; lvl = NaN; } }
+      if (pbOn && !used && !isFinite(lvl) && p && b.c > p.h && b.c >= b.h - VAL.revFrac * (b.h - b.l)) { lvl = b.h; lvlI = i; }
+    } }
   // the daily 9 EMA rolled forward from the latest snapshot value with the daily closes after its data-to date
   const e9Prior = (sess, sn) => { let v = sn.e9; if (!isFinite(v)) return NaN; let x = sn.dataTo; const tgt = vPrev(sess); while (x < tgt) { x = vNext(x); const i = dIdx.get(x); if (i == null) return NaN; v = v + 0.2 * (BD[i].c - v); } return v; };
   const snapFor = sess => { let best = null; for (const s of Object.keys(ep.snaps || {}).sort()) if (s <= sess) best = s; return best ? ep.snaps[best] : null; };
@@ -13268,7 +13300,21 @@ function vScore(ep, B30, BD, to){
     if (!bars.length) { R.status = "done"; R.exit = "Missing data"; R.missing = sess; R.triggered = null; return R; }
     const sn = snapFor(sess) || {}; const deck = /^OnDeck/.test(sn.list || ""), lvl = deck ? e9Prior(sess, sn) : NaN;
     let reclaimed = !deck, lod = Infinity;
-    for (let i = 0; i < bars.length && !trig; i++) {
+    const brk = sess >= VAL.breakFrom, orh = bars[0].cm === 600 ? bars[0].h : NaN;
+    for (let i = 0; brk && i < bars.length && !trig; i++) {           // rule "break" (from VAL.breakFrom)
+      const b = bars[i], pb = b.i > 0 ? all[b.i - 1] : null, lodP = lod, recP = reclaimed;
+      lod = Math.min(lod, b.l); if (deck && !reclaimed && isFinite(lvl) && b.c > lvl) reclaimed = true;
+      if (b.cm - 30 < VAL.first || !pb || !recP) continue;
+      const hitO = isFinite(orh) && pb.c <= orh && b.h > orh, hitR = isFinite(b.revLvl) && pb.c <= b.revLvl && b.h > b.revLvl;
+      if (!hitO && !hitR) continue;
+      const level = hitO && hitR ? Math.min(orh, b.revLvl) : hitO ? orh : b.revLvl, kind = hitO && hitR && orh === b.revLvl ? "both" : hitO && (!hitR || orh < b.revLvl) ? "orh" : "rev";
+      const entry = Math.max(level + VAL.tick, b.o), stop = Math.min(lodP, b.o), D = sn.D, risk = entry - stop, offLow = isFinite(D) && D > 0 ? risk / D : NaN;
+      if (!(risk > 0)) { caps.push({sess, cm: b.cm, why: "entry at or below the day low"}); continue; }
+      if (!(offLow <= VAL.cap + 1e-9)) { caps.push({sess, cm: b.cm, why: \`entry \${vf(offLow)} ADR above the low > \${VAL.cap}\`, offLow: vf(offLow)}); continue; }
+      trig = {sess, k, cm: b.cm, barT: b.t, entry, entryT: b.t, stop, risk, offLow, D, list: sn.list, exitBy: sn.exitBy || null, gapOpen: null, reclaimLvl: deck ? vf(lvl) : null, rule: "break", level, kind};
+      const pc = BD[(dIdx.get(sess) ?? 0) - 1]; trig.gapOpen = pc && isFinite(D) ? vf((bars[0].o - pc.c) / D) : null;
+    }
+    for (let i = 0; !brk && i < bars.length && !trig; i++) {          // rule "ema21" (sessions before VAL.breakFrom — E1.0, unchanged)
       const b = bars[i]; lod = Math.min(lod, b.l);
       if (deck && !reclaimed && isFinite(lvl) && b.c > lvl) reclaimed = true;
       const pb = b.i > 0 ? all[b.i - 1] : null;
@@ -13277,14 +13323,14 @@ function vScore(ep, B30, BD, to){
       const D = sn.D, risk = nb.o - lod, offLow = isFinite(D) && D > 0 ? risk / D : NaN;
       if (!(risk > 0)) { caps.push({sess, cm: b.cm, why: "next open at or below the day low"}); continue; }
       if (!(offLow <= VAL.cap + 1e-9)) { caps.push({sess, cm: b.cm, why: \`entry \${vf(offLow)} ADR above the low > \${VAL.cap}\`, offLow: vf(offLow)}); continue; }
-      trig = {sess, k, cm: b.cm, barT: b.t, entry: nb.o, entryT: nb.t, stop: lod, risk, offLow, D, list: sn.list, exitBy: sn.exitBy || null, gapOpen: null, reclaimLvl: deck ? vf(lvl) : null};
+      trig = {sess, k, cm: b.cm, barT: b.t, entry: nb.o, entryT: nb.t, stop: lod, risk, offLow, D, list: sn.list, exitBy: sn.exitBy || null, gapOpen: null, reclaimLvl: deck ? vf(lvl) : null, rule: "ema21", level: null, kind: null};
       const pc = BD[(dIdx.get(sess) ?? 0) - 1]; trig.gapOpen = pc && isFinite(D) ? vf((bars[0].o - pc.c) / D) : null;
     }
     if (!trig) { k++; sess = vNext(sess); }
   }
   R.capSkips = caps;
   if (!trig) { if (k >= VAL.win) { R.status = "done"; R.exit = "Untriggered (10 sessions)"; R.r = 0; R.triggered = false; } return R; }
-  R.triggered = true; R.trigger = {session: trig.sess, sessionNo: trig.k + 1, barClose: trig.cm, entry: vf(trig.entry), stop: vf(trig.stop), risk: vf(trig.risk), offLowADR: vf(trig.offLow), gapOpenADR: trig.gapOpen, list: trig.list, reclaimLevel: trig.reclaimLvl, by11: trig.cm <= 660};
+  R.triggered = true; R.trigger = {session: trig.sess, sessionNo: trig.k + 1, barClose: trig.cm, entry: vf(trig.entry), stop: vf(trig.stop), risk: vf(trig.risk), offLowADR: vf(trig.offLow), gapOpenADR: trig.gapOpen, list: trig.list, reclaimLevel: trig.reclaimLvl, by11: trig.cm <= 660, rule: trig.rule, level: trig.level == null ? null : vf(trig.level), kind: trig.kind};
   // ---- primary exit, MFE / MAE, time to 1R / 2R, alt exits
   const E = trig.entry, Rk = trig.risk, stop = trig.stop, cost = VAL.cost, rOf = p => (p - E) / Rk;
   const t5 = (() => { let x = trig.sess; for (let i = 0; i < VAL.hold; i++) x = vNext(x); return x; })();
@@ -13433,14 +13479,16 @@ async function vAllEpisodes(db){
 const vEtMs = (d, m) => { for (const off of ["-05:00", "-04:00"]) { const t = Date.parse(\`\${d}T\${String(Math.floor(m / 60)).padStart(2, "0")}:\${String(m % 60).padStart(2, "0")}:00\${off}\`); const e = vET(t); if (e.d === d && e.m === m) return t; } return NaN; };
 const V_COLS = ["episode", "ticker", "set", "near_miss_gate", "first_listed", "list_at_trigger", "status", "exit", "primary_r", "ladder_r", "alt_half_1_5r", "alt_all_2r", "mfe_r", "mae_r",
   "triggered", "trigger_session", "trigger_session_no", "trigger_bar_close_et", "trigger_by_1100", "entry", "stop", "risk", "entry_off_low_adr", "gap_open_adr", "gap_through_stop",
-  "time_1r_sessions", "time_2r_sessions", "exit_session", "missing_data", "group", "online_at_trigger", "alert_vs_engine", "alert_time", "get_ready_time", "fill_time", "fill_price", "fill_lag_min", "slippage_r", "skip_reason", "rules_version", "engine"];
+  "time_1r_sessions", "time_2r_sessions", "exit_session", "missing_data", "group", "online_at_trigger", "alert_vs_engine", "alert_time", "get_ready_time", "fill_time", "fill_price", "fill_lag_min", "slippage_r", "skip_reason", "rules_version", "engine",
+  "trigger_rule", "trigger_level", "trigger_kind"];   // 22 Nov 2026 (E2.0), appended; an E1.0 outcome has no rule stored = ema21
 function vRow(e){
   const R = e.res || {}, T = R.trigger || {}, J = e.join || {}, sn = e.snaps ? e.snaps[Object.keys(e.snaps).sort()[0]] : {};
   const hm = m => m == null ? "" : \`\${String(Math.floor(m / 60)).padStart(2, "0")}:\${String(m % 60).padStart(2, "0")}\`;
   return [e.id, e.sym, e.set, e.gate || "", e.first, T.list || "", R.status || "not scored", R.exit || "", R.r ?? "", R.ladder && R.ladder.r != null ? R.ladder.r : "", R.altHalf15 ?? "", R.altAll2 ?? "", R.mfeR ?? "", R.maeR ?? "",
     R.triggered == null ? "" : R.triggered ? "Y" : "N", T.session || "", T.sessionNo || "", hm(T.barClose), T.session ? (T.by11 ? "Y" : "N") : "", T.entry ?? "", T.stop ?? "", T.risk ?? "", T.offLowADR ?? "", T.gapOpenADR ?? "", R.gapThroughStop ? "Y" : "",
     R.time1R ? R.time1R.sessionNo : "", R.time2R ? R.time2R.sessionNo : "", R.exitSession || "", R.missing || "", J.group || "", J.online == null ? "" : J.online ? "Y" : "N", J.alert || "", J.alertTime || "", J.getReadyTime || "",
-    J.fill ? J.fill.time : "", J.fill ? J.fill.price : "", J.fillLagMin ?? "", J.slipR ?? "", J.skipReason || "", sn && sn.rulesVer || "", R.engine || ""];
+    J.fill ? J.fill.time : "", J.fill ? J.fill.price : "", J.fillLagMin ?? "", J.slipR ?? "", J.skipReason || "", sn && sn.rulesVer || "", R.engine || "",
+    T.session ? T.rule || "ema21" : "", T.level ?? "", T.kind || ""];
 }
 const vCsv = rows => rows.map(r => r.map(v => { const s = String(v ?? ""); return /[",\\n]/.test(s) ? \`"\${s.replace(/"/g, '""')}"\` : s; }).join(",")).join("\\n");
 
@@ -18437,7 +18485,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
    ===================================================================== */
 const FLS = {mapN: 63, leadN: 63, leadPct: 30, s50N: 50, s50Slope: 5, weakN: 3, stopMax: 1.5, roomMin: 2.0, top: 3};
 const FLS_CK = {1: "Market gate", 2: "Former leader", 3: "Broken", 4: "Weak group", 5: "Bounce into resistance", 6: "Not extended", 7: "Stop", 8: "Room", 9: "Earnings", 10: "Liquidity"};
-const FLS_NEXT = "On TradingView: 30-min close below the 30-min 21 EMA after a close at or above it, from 10:00 ET; stop above the bounce high";
+const FLS_NEXT = "On TradingView (Leader Pullback indicator, short side — from 23 Nov 2026): from 10:00 ET a break below the opening range low or a 30-min reversal candle's low; stop = the high of day at the trigger, entry no more than 0.6 ADR under it. This card's own paper green still uses the old 30-min 21 EMA close. Listing check — stop above the bounce high";   // 22 Nov 2026: Eugene, "Shorts should do the exact opposite of the longs" (TRIGGER — OPENING RANGE / REVERSAL BREAK)
 const FLSX = {key: null, run: null};
 // 7 Nov 2026 rebuild — early failed retest (handover §1 defaults: 5-session lookback, ±0.25 ADR band, 1–3 bar window)
 const FLSE = {look: 5, tol: 0.25, win: 3, firstClose: 600, barMin: 30, stopMax: 1.5, roomMin: 2.0, top: 3};
@@ -19467,12 +19515,14 @@ document.head.insertAdjacentHTML("beforeend", `<style>
    ===================================================================== */
 // sections DS Daily leaves off, and the items it ticks beyond their defaults
 const DSD_OFF = new Set(["r1", "r1e", "ob", "obe", "camp"]);
-const DSD_ON = new Set(["fpM", "fpR", "fpD", "fpN", "fpW", "shFL", "shFLe", "shMP", "sheMP", "sheFLe"]);
+const DSD_ON = new Set(["fpM", "fpR", "fpD", "fpN", "fpW", "shFL", "shFLe", "shMP", "sheMP"]);   // 22 Nov 2026: "sheFLe" out with its item (trial answered "No, remove it")
 function dsdOn(secK, it){ if (DSD_OFF.has(secK)) return 0; return DSD_ON.has(it.k) || it.def ? 1 : 0; }
 // the early route's ETF watch (the card's "ETFs — early route, tracked separately" fold)
+// 22 Nov 2026 — REMOVED on its 2-week trial (docs/trials.md; Eugene, 22 Nov 2026: "No, remove it"): the item "Short · Former
+// leader, early retest · ETFs" (sheFLe). Nothing else read it (not a feed, the MAP import, the Board log or a snapshot); a
+// saved tick for it in adrb.tvlSel is simply ignored. The card's own early-route ETF fold is unchanged. Display only.
 function dsdFlsEtfItems(H){
-  return [{k: "sheFLe", n: "Short · Former leader, early retest · ETFs", def: 0, need: H, f: () => { const R = typeof flsRun === "function" ? flsRun() : null; if (!R) return null;
-    return R.early.etf.map((o, i) => tvlE(o.r.sym, `Short · Former leader, early retest · ETF #${i + 1} · ${FLSE.look}-day resistance ${frP(o.e.d.R)} · test band ${frP(o.e.d.lo)}–${frP(o.e.d.hi)}`, o.iv && o.iv.sig ? "Green" : o.iv && o.iv.state === "testing" ? "Testing" : "Watch")); }}];
+  return [];
 }
 </script>
 <script>
@@ -21601,7 +21651,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>#fltBox tr[data-sym]{curso
    Test: tools/board-trigger-shadow-test.js.
    ===================================================================== */
 const TSD = {first: 600, keep: 90, key: "adrb.tsdLog", lists: [["A-eligible", "Ready"], ["OnDeck-L2", "On deck"], ["OnDeck-1blocker", "On deck"]]};
-const TSD_ARM = {a: "21 EMA cross (live rule)", c: "VWAP reclaim (from the open)", d: "30-min candle pivot"};
+const TSD_ARM = {a: "21 EMA cross (the rule until 20 Nov)", c: "VWAP reclaim (from the open)", d: "30-min candle pivot"};
 // PURE. bars = [{t, o, h, l, c, v, vw?}] (any order; other days / outside 09:30–16:00 ignored); H = {e21, lastC} (the 30-min
 // EMA before the session) or null; o = {date, asOf}. Returns {a, c, d} each null or {i, t, cm, entry, stop, risk, out, r, fillT}.
 function tsdArms(bars, H, o){
@@ -21656,7 +21706,7 @@ function tsdTally(L){
 const tsdCell = g => !g ? `<span class="dim">—</span>` : g.wait ? `${hhmm(g.cm)} <span class="small dim">fill next bar</span>` : `${hhmm(g.cm)} <span class="small">in ${p2(g.entry)} · stop ${p2(g.stop)} · ${g.out === "2R" ? `<b class="pos">+2R</b>` : g.out === "stop" ? `<b class="neg">stop</b>` : g.out === "open" ? `${fin(g.r) ? (g.r >= 0 ? "+" : "") + g.r.toFixed(2) + "R" : "—"} open` : esc(g.out)}</span>`;
 function tsdCardHTML(){
   const L = tsdLoad(), T = tsdTally(L), nS = Object.keys(L.d).length, today = tsdToday();
-  const hd = `<div class="hd"><h2>Trigger shadow log</h2><span class="sub">tracking only · the live trigger stays the 30-min 21 EMA cross (frozen) · pivot + VWAP logged beside it</span><span class="spacer"></span><button class="btn sm" id="tsdCsv" title="Every logged session and name, all three triggers">Download CSV</button></div>`;
+  const hd = `<div class="hd"><h2>Trigger shadow log</h2><span class="sub">tracking only · the live trigger from 23 Nov 2026 is the break of the opening range high or a reversal candle — the 21 EMA cross logged here was the rule until then · pivot + VWAP logged beside it</span><span class="spacer"></span><button class="btn sm" id="tsdCsv" title="Every logged session and name, all three triggers">Download CSV</button></div>`;
   const tl = `<div class="small" style="margin-bottom:6px">Logged in this browser: ${nS} session${nS === 1 ? "" : "s"} · ${["a", "c", "d"].map(k => { const x = T[k], av = mean(x.r); return `<b>${esc(TSD_ARM[k])}</b> ${x.n} (${x.win} +2R · ${x.stop} stop · ${x.open} open${av != null ? ` · avg ${av >= 0 ? "+" : ""}${av.toFixed(2)}R` : ""})`; }).join(" · ")}. Before costs, same-session only.</div>`;
   let body;
   if (!today) body = `<div class="empty" style="padding:4px 0">Needs Live mode in the regular session (30-min bars). The log keeps what was recorded on earlier sessions.</div>`;
@@ -23390,6 +23440,126 @@ pbCutApply(false);
 <script>
 "use strict";
 /* =====================================================================
+   TRIGGER — OPENING RANGE / REVERSAL BREAK (22 Nov 2026) — TRADING LOGIC (which level is the Leader Pullback trigger; the
+   "At trigger" read in Live mode) + wording. No list, check, rank, level, stop, size, feed column or log changes.
+   Eugene, 22 Nov 2026 (chat): "yes to both, go ahead. Redo the leader pullback indicator as well so that it matches this
+   switch." · the same day, correcting the close-confirmed draft: "i want the trigger to effectively reflect what the
+   previous indicator was doing, which is 30min candle reversal or 30min opening range high. i enter on the break of that
+   30min candle which ever comes first. its a break. i dont want to wait for confirmation close of 2nd candle. waiting till
+   1030 is too late. so effectively its a buy stop order." · reversal candle: "A" (the old indicator's) · shorts: "Shorts
+   should do the exact opposite of the longs. just flip it." · "full mirror" · switch session "monday" (23 Nov 2026).
+   Notion: Unified Spec 6.1 "22 Nov 2026" callout; Command Reference "RULINGS — 22 Nov 2026"; Short · Former leader, lower
+   high "22 Nov 2026". Repo note with the evidence: docs/trigger-break-2026-11-22.md.
+   THE RULE (as written there; regular-session 30-min bars, New York time):
+   - Opening range high = the high of the 09:30–10:00 bar.
+   - Reversal candle (the old indicator's T1): in a pullback (on from the bar making the 2nd consecutive lower close; off
+     13 bars after its last new low, or once a reversal candle's high has been traded through) a bar that closes above the
+     previous bar's high and in the top half of its range. Its high is a level for the NEXT bar only.
+   - Trigger = price trades above a level during a bar that starts at or after 10:00 ET while the previous bar closed at or
+     below that level; both levels in one bar = the lower. Entry = a buy stop one tick over the level (a bar opening above
+     it fills at its open). Stop = the low of day at the trigger; entry no more than 0.6 ADR above it. At most 2 entries a
+     name a session (the indicator's setting). On deck names still need yesterday's daily 9 EMA reclaimed first.
+   - Shorts are the exact mirror (opening range low / a reversal candle's low; stop = the high of day at the trigger).
+   This is Eugene's ruling, not a proven edge: in the 5-year corrected test the opening-range buy-stop entry lost 0.176R a
+   trade after costs, the close-confirmed one 0.139R, the 21 EMA cross 0.254R; this combination and every short version
+   are untested (docs/trigger-confirmation-corrected-2026-10-25.md).
+   ON THE BOARD:
+   - The trigger itself fires on TradingView (Leader Pullback indicator, rebuilt the same day). The board reads where price
+     sits against the level: r.t30 ("trading above the trigger level").
+   - Live mode, regular session (tbkRow, one guarded call where r.t30 is set in computeAll): tbkCalc (PURE) on this
+     session's COMPLETED 30-min bars (Massive, LV.today — labelled by the plan setting, never "live" when delayed) gives the
+     opening range high / low, the reversal level in force for the bar now forming, and the first break on completed bars
+     (level, kind, entry, stop — the same convention as the validation engine E2.0: entry = the higher of level + 1 tick
+     and the bar's open, stop = the lower of the day's low through the previous bar and that bar's open). r.t30 = last
+     price above the lowest level in force; r.t30src = "brk"; r.tbk = {long, short} (each tbkCalc's result). The reversal
+     candle is read from TODAY's bars only (the indicator and the validation engine run streaks across sessions), so a
+     pullback that began yesterday can be missing here — the chart decides.
+   - No Live data (files only, tests): r.t30 keeps the file's read against the 30-min 21 EMA, r.t30src = "e21", and the
+     words say it is context, not the trigger. So no number moves on a file.
+   - Wording changed in place: the trigger sentences on the Entry Check cards, the plan line, the "what next" text, the
+     execution-rules line, check row 9, the "30-min trigger in play" screen, the filter line, the guide, the ETF line, the
+     trigger shadow log's subtitle and arm label (it still logs the 21 EMA cross / VWAP / candle pivot — kept to the
+     60-session review, Eugene 22 Nov: "Keep, relabel"), and the Former Leader Short "Next" line (FLS_NEXT).
+   - SHORT SIDE, NOT YET REBUILT: the Former Leader Short card's own paper "green" for the Daily route (flsIntraday) still
+     fires on the old 30-min 21 EMA close; the "Next" line says so. The Shorts today tracker is daily-bar and unchanged.
+   - Validation: SY_WORKER carries engine E2.0 (tools/sync-worker/worker.js) — sessions from 23 Nov 2026 score this trigger.
+   Self-check: tbkSelf in SC_X (fixed bar sets with hand-worked answers, long and mirrored). Storage: none. No hook, no
+   override. Test: tools/board-trigger-break-test.js.
+   ===================================================================== */
+const TBK = {first: 600, barMs: 30 * 60000, tick: 0.01, pbMinLC: 2, pbExpire: 13, revFrac: 0.5, cap: 0.6};
+// PURE. bars = one session's regular-session 30-min bars [{t (open, ms), o, h, l, c}]; asOf = data time (a bar is complete
+// when t + 30 min ≤ asOf); dir = 1 long, −1 short (the mirror: prices negated, high and low swapped).
+// → null until the 09:30 bar is complete; else {or (opening range high; low for shorts), rev (the reversal level in force
+// for the bar after the last completed one, or null), brk (first break on completed bars: {level, kind "or"|"rev"|"both",
+// t (that bar's open), entry, stop}), n (completed bars)}. Prices are returned in real (un-negated) terms.
+function tbkCalc(bars, asOf, dir){
+  dir = dir === -1 ? -1 : 1;
+  const B = (bars || []).filter(q => q && fin(q.t) && fin(q.o) && fin(q.h) && fin(q.l) && fin(q.c) && q.t + TBK.barMs <= asOf).sort((a, b) => a.t - b.t)
+    .map(q => dir === 1 ? {t: q.t, o: q.o, h: q.h, l: q.l, c: q.c} : {t: q.t, o: -q.o, h: -q.l, l: -q.h, c: -q.c});
+  if (!B.length || etMin(B[0].t) !== 570) return null;
+  const or = B[0].h; let lod = Infinity, brk = null, lc = 0, pq = false, pbOn = false, pbLow = NaN, pbLowI = -1, used = false, lvl = NaN, lvlI = -1;
+  for (let i = 0; i < B.length; i++) { const b = B[i], pb = i > 0 ? B[i - 1] : null, live = fin(lvl) && i === lvlI + 1 ? lvl : NaN, lodP = lod;
+    if (fin(live) && b.h > live) { used = true; lvl = NaN; }
+    if (!brk && pb && etMin(b.t) >= TBK.first) {
+      const hitO = pb.c <= or && b.h > or, hitR = fin(live) && pb.c <= live && b.h > live;
+      if (hitO || hitR) { const level = hitO && hitR ? Math.min(or, live) : hitO ? or : live, entry = Math.max(level + TBK.tick, b.o), stop = Math.min(lodP, b.o);
+        if (entry - stop > 0) brk = {level, kind: hitO && hitR && or === live ? "both" : hitO && (!hitR || or < live) ? "or" : "rev", t: b.t, entry, stop}; } }
+    lod = Math.min(lod, b.l);
+    lc = pb && b.c < pb.c ? lc + 1 : 0; const q = lc >= TBK.pbMinLC, edge = q && !pq; pq = q;
+    if (fin(lvl) && i > lvlI) lvl = NaN;
+    if (edge) { let k0 = 0, lo = Infinity; for (let k = 0; k <= TBK.pbMinLC && i - k >= 0; k++) lo = Math.min(lo, B[i - k].l);
+      for (let k = 0; k <= TBK.pbMinLC && i - k >= 0; k++) if (B[i - k].l <= lo) { k0 = k; break; }
+      pbOn = true; pbLow = lo; pbLowI = i - k0; used = false; lvl = NaN; }
+    else if (pbOn) { if (b.l < pbLow) { pbLow = b.l; pbLowI = i; } if (i - pbLowI > TBK.pbExpire || used) { pbOn = false; lvl = NaN; } }
+    if (pbOn && !used && !fin(lvl) && pb && b.c > pb.h && b.c >= b.h - TBK.revFrac * (b.h - b.l)) { lvl = b.h; lvlI = i; }
+  }
+  const rev = fin(lvl) && lvlI === B.length - 1 ? lvl : null, R = v => v == null ? null : dir * v;
+  return {or: R(or), rev: R(rev), brk: brk ? {level: R(brk.level), kind: brk.kind, t: brk.t, entry: R(brk.entry), stop: R(brk.stop)} : null, n: B.length};
+}
+function tbkOf(sym){
+  if (typeof LV === "undefined" || !LV.cfg || !LV.cfg.on || !LV.frame || LV.frame.phase !== "rth" || !LV.frame.dataMs) return null;
+  const F = LV.frame, T = LV.today && LV.today.get(sym); if (!T || T.d !== F.date || !T.bars) return null;
+  try { const long = tbkCalc(T.bars, F.dataMs, 1); return long ? {long, short: tbkCalc(T.bars, F.dataMs, -1)} : null; } catch (e) { return null; }
+}
+function tbkRow(r, mode, P){
+  if (mode !== "rth" || !r || !fin(P)) return;
+  const q = tbkOf(r.sym); if (!q) return;
+  const L = q.long, lv = fin(L.rev) ? Math.min(L.or, L.rev) : L.or;
+  r.tbk = q; r.t30 = P > lv; r.t30src = "brk";
+}
+const tbkHM = ms => { const m = etMin(ms); return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`; };
+function tbkLvTxt(L){ return `opening range high ${f2(L.or)}${fin(L.rev) ? ` · reversal candle high ${f2(L.rev)} (this candle only)` : ""}`; }
+function tbkBrkTxt(L){ return L.brk ? `broke ${L.brk.kind === "rev" ? "the reversal candle's high" : L.brk.kind === "both" ? "the opening range high (also the reversal candle)" : "the opening range high"} ${f2(L.brk.level)} in the ${tbkHM(L.brk.t)} ET candle — buy stop ${f2(L.brk.entry)}, stop ${f2(L.brk.stop)}` : "no break on a completed 30-min candle yet"; }
+function tbkStatD(r){
+  if (r && r.t30src === "brk" && r.tbk) return `In the buy zone and above the trigger level (${tbkLvTxt(r.tbk.long)}) — ${tbkBrkTxt(r.tbk.long)}. The entry is the buy stop at the level; further up is a chase`;
+  return "In the buy zone and above the 30-min 21 EMA (from the file — context only). The trigger is a break of the opening range high or a 30-min reversal candle's high: on the chart, or here in Live mode";
+}
+function tbkChkTxt(r){
+  if (r && r.t30src === "brk" && r.tbk) return `Price is ${r.t30 ? "above" : "at or below"} the trigger level — ${tbkLvTxt(r.tbk.long)}; ${tbkBrkTxt(r.tbk.long)}. Completed 30-min candles, Massive ${typeof lvDT === "function" ? lvDT() : ""}; reversal candles from today's candles only.`;
+  if (r && r.t30 != null) return `From the file: price is ${r.t30 ? "above" : "below"} the 30-min 21 EMA (${f2(r.e21_30)}) — context only. The trigger is a break of the opening range high or a 30-min reversal candle's high from 10:00 ET: on the chart, or here in Live mode.`;
+  return "On the chart (Live mode shows the opening range high here from 10:00 ET)";
+}
+// self-check: fixed bar sets with hand-worked answers (long, and the same set mirrored for the short)
+function tbkSelf(){
+  const t0 = Date.UTC(2026, 10, 23, 14, 30), mk = a => a.map((q, i) => ({t: t0 + i * TBK.barMs, o: q[0], h: q[1], l: q[2], c: q[3]})), asOf = t0 + 20 * TBK.barMs, out = [];
+  if (etMin(t0) !== 570) return out;
+  const A = mk([[100, 101, 99, 100.5], [100.5, 101.4, 100.2, 101.2], [101.2, 102, 101, 101.8]]);            // 10:00 candle trades over 101 → entry 101.01, stop 99
+  const a = tbkCalc(A, asOf, 1), okA = !!a && a.or === 101 && !!a.brk && a.brk.kind === "or" && Math.abs(a.brk.entry - 101.01) < 1e-9 && a.brk.stop === 99;
+  out.push({sym: "Trigger", what: "Opening range high break (fixed case)", ok: okA, board: a && a.brk ? `${a.brk.entry} / ${a.brk.stop}` : "none", mine: "101.01 / 99"});
+  const M = A.map(q => ({t: q.t, o: -q.o, h: -q.l, l: -q.h, c: -q.c})), m = tbkCalc(M, asOf, -1), okM = !!m && m.or === -101 && !!m.brk && Math.abs(m.brk.entry + 101.01) < 1e-9 && m.brk.stop === -99;
+  out.push({sym: "Trigger", what: "Short mirror of the same case", ok: okM, board: m && m.brk ? `${m.brk.entry} / ${m.brk.stop}` : "none", mine: "-101.01 / -99"});
+  // 09:30 high 105; two lower closes (10:00, 10:30) = pullback; 11:00 closes over the 10:30 high (103.3) in its top half =
+  // reversal candle, high 103.6; 11:30 trades over 103.6 → entry 103.61, stop = the day low through 11:00 (101)
+  const B = mk([[104, 105, 103.5, 104.5], [104.5, 104.6, 103, 103.2], [103.2, 103.3, 101, 101.5], [101.5, 103.6, 101.4, 103.5], [103.5, 104, 103.3, 103.9]]);
+  const b = tbkCalc(B, asOf, 1), okB = !!b && b.or === 105 && !!b.brk && b.brk.kind === "rev" && b.brk.level === 103.6 && Math.abs(b.brk.entry - 103.61) < 1e-9 && b.brk.stop === 101;
+  out.push({sym: "Trigger", what: "Reversal candle break (fixed case)", ok: okB, board: b && b.brk ? `${b.brk.kind} ${b.brk.entry} / ${b.brk.stop}` : "none", mine: "rev 103.61 / 101"});
+  return out;
+}
+if (typeof SC_X !== "undefined") SC_X.push(tbkSelf);
+</script>
+<script>
+"use strict";
+/* =====================================================================
    BOARD VERSION LABEL (10 Nov 2026) — display only. On a 2-week trial (docs/trials.md).
    Eugene, 10 Nov 2026: "how do i know whether the board is the latest update" → "yes add the version label".
    - BOARD_VER = {date, n, what}: bumped in EVERY change to index.html (tools/board-version-test.js fails when index.html
@@ -23400,7 +23570,7 @@ pbCutApply(false);
    - Never changes any number, list, feed column, storage key or setting. Storage: none. Hooks: "settings"; the chip is
      inserted once at load. No override.
    ===================================================================== */
-const BOARD_VER = {date: "2026-11-21", n: 3, what: "Mega-cap exemption $500B + wrapper map; First Pullback / Shakeout Reclaim / Floor Bounce off the screen; Index trend 20 years; Shorts today list (Defensive days, up to 3) + short tracker"};
+const BOARD_VER = {date: "2026-11-22", n: 2, what: "Leader Pullback trigger = a break of the opening range high or a 30-min reversal candle (was the 30-min 21 EMA close); Live mode reads the levels; validation engine E2.0"};
 const boardVerTxt = () => `v${BOARD_VER.date}.${BOARD_VER.n}`;
 (function verChip(){
   try {
