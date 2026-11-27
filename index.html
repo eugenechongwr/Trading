@@ -23580,6 +23580,128 @@ function rdyRankMap(){ const m = new Map(); try { if (S.has.hist) s61Lists(true)
 <script>
 "use strict";
 /* =====================================================================
+   ENTRY TYPE READ — PULLBACK OR STRENGTH (26 Nov 2026) — DISPLAY / TRACKING ONLY. On a 2-week trial (docs/trials.md).
+   Eugene, 26 Nov 2026 (chat), on the Entry Check's buy zone against his 30-min break entries: "I feel I'm being too much
+   strength/ confirmation." · on the proposal to add a read instead of widening the zone: "Try the live pullback and
+   strength read plus sector strip."
+   WHY: check 6 (the buy zone) is judged on the daily CLOSE; the entry is a buy stop off TODAY's low. A name that never dips
+   and breaks its opening range high is a strength entry; one that comes back to its daily 9 / 21 EMA first is a pullback
+   entry. The Entry Check treats both the same. This read tells them apart — nothing more.
+   THE READ (pstCalc, PURE): levels = the PRIOR session's daily 9 and 21 EMA and ADR $ (the Entry Check's own numbers via
+   r21Lv — the same fixed levels 21 Reclaim uses); band top = the higher of the two.
+     · Pullback entry = today's low came to within PST.tol (0.25) ADR of the band top, or lower. Depth: "9" (reached the
+       9 EMA), "21" (reached the 21 EMA), "u21" (traded under the 21 EMA).
+     · Strength entry = today's low stayed more than 0.25 ADR above the band top.
+     · Also shown: the low and the trigger level (Live mode: the level broken, else the lowest level in force — tbkCalc) in
+       ADR from the band top.
+   0.25 ADR is a DEFAULT, not a ruling (the same tolerance as 21 Reclaim's "tagged the 21"). Not a Notion rule, not a check,
+   not a gate, not a rank key.
+   ON SCREEN: a line in the ticker panel under the Entry Check (whenever today's low is known in the regular session), and
+   in Live mode a small "PB" / "STR" badge after the ticker on the Entry Check lists, Daily Plan, Watchlist and Focus rows.
+   NEVER CHANGES: any row value, zone, location, list, check, rank, size, stop, feed column, Board log, snapshot. Storage:
+   none. Hooks: "panel", "tab", "watchPage". No override. Test: tools/board-entry-type-test.js.
+   ===================================================================== */
+const PST = {tol: 0.25};
+// PURE. q = {lo (today's low), level (trigger level or null), e9, e21 (prior session's daily EMAs), D (ADR $)}
+// → null when an input is missing; else {top, loTop, lo9, lo21, lvTop (null without a level), depth "none"|"9"|"21"|"u21",
+//   type "pullback"|"strength"}. Distances in ADR; positive = above the line.
+function pstCalc(q){
+  if (!q || !fin(q.lo) || !fin(q.e9) || !fin(q.e21) || !(q.D > 0)) return null;
+  const top = Math.max(q.e9, q.e21), loTop = (q.lo - top) / q.D, lo9 = (q.lo - q.e9) / q.D, lo21 = (q.lo - q.e21) / q.D;
+  const type = loTop <= PST.tol ? "pullback" : "strength";
+  const depth = type === "strength" ? "none" : q.lo < q.e21 ? "u21" : lo21 <= PST.tol ? "21" : "9";
+  return {top, loTop, lo9, lo21, lvTop: fin(q.level) ? (q.level - top) / q.D : null, depth, type};
+}
+function pstOf(r){
+  if (!r || r.etf || !S.snap || !S.has.hist || typeof r21Lv !== "function") return null;
+  const live = typeof LV !== "undefined" && LV.cfg && LV.cfg.on && LV.frame && LV.frame.phase === "rth";
+  if (!live && S.mode !== "rth") return null;
+  if (!fin(r.lo1d)) return null;
+  let ts = null; try { ts = todaySource(); } catch (e) { ts = null; }
+  let v = null; try { v = r21Lv(r, live ? LV.frame.date : ts ? ts.date : null); } catch (e) { v = null; } if (!v) return null;
+  const L = r.tbk && r.tbk.long ? r.tbk.long : null, level = L ? (L.brk ? L.brk.level : fin(L.rev) ? Math.min(L.or, L.rev) : L.or) : null;
+  const o = pstCalc({lo: r.lo1d, level, e9: v.e9, e21: v.e21, D: v.D}); if (!o) return null;
+  return {...o, live, lo: r.lo1d, level, broke: !!(L && L.brk), e9: v.e9, e21: v.e21};
+}
+const PST_DEPTH = {none: "held above the daily 9 / 21 EMA", "9": "came back to the daily 9 EMA", "21": "came back to the daily 21 EMA", u21: "traded under the daily 21 EMA"};
+function pstTxt(o){
+  const a = v => `${Math.abs(v).toFixed(2)} ADR ${v >= 0 ? "above" : "below"}`;
+  return `${o.type === "pullback" ? "Pullback entry" : "Strength entry"} — today's low ${f2(o.lo)} ${PST_DEPTH[o.depth]} (${a(o.loTop)} the top of the 9 / 21 band; 9 EMA ${f2(o.e9)}, 21 EMA ${f2(o.e21)}, yesterday's values)`
+    + (o.lvTop != null ? ` · ${o.broke ? "trigger level broken" : "trigger level"} ${f2(o.level)} = ${a(o.lvTop)} the band` : "")
+    + `. Pullback = the low within ${PST.tol} ADR of the band or lower (a default, not a rule). Information only — no check, list or size changes.`;
+}
+const pstBadge = o => `<span class="pstb ${o.type === "pullback" ? "pstpb" : "pststr"}" title="${esc(pstTxt(o))}">${o.type === "pullback" ? "PB" + (o.depth === "9" ? "" : o.depth === "21" ? " 21" : " <21") : "STR"}</span>`;
+function pstPanelHTML(r){
+  const o = pstOf(r); if (!o) return "";
+  const a = v => `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(2)} ADR`;
+  return `<div class="pstpl small"><div>${pstBadge(o)} <b>${o.type === "pullback" ? "Pullback entry" : "Strength entry"}</b> <span class="dim">· today's low ${PST_DEPTH[o.depth]}</span></div>`
+    + `<div class="pstpg"><span>Today's low</span><span><b>${f2(o.lo)}</b> · ${a(o.loTop)} vs the band top · ${a(o.lo9)} vs the 9 EMA · ${a(o.lo21)} vs the 21 EMA</span>`
+    + (o.lvTop != null ? `<span>Trigger level</span><span><b>${f2(o.level)}</b>${o.broke ? " (broken)" : ""} · ${a(o.lvTop)} vs the band top</span>` : `<span>Trigger level</span><span class="dim">Live mode, from 10:00 ET</span>`)
+    + `</div><div class="dim" style="margin-top:3px">Daily 9 / 21 EMA as of yesterday's close. Information only — the Entry Check, lists and size don't use it.</div></div>`;
+}
+hookOn("panel", "entryType", (r, dr) => {
+  if (!r || !dr) return; const box = dr.querySelector(".s61p"); if (!box || box.querySelector(".pstpl")) return;
+  let h = ""; try { h = pstPanelHTML(r); } catch (e) { console.warn("entry type panel", e); } if (h) box.insertAdjacentHTML("beforeend", h);
+});
+// Live mode only: the badge after the ticker on the list rows (a file never shows it, so no table changes without Live data)
+function pstBadges(){
+  if (!S.snap || !(typeof LV !== "undefined" && LV.cfg && LV.cfg.on && LV.frame && LV.frame.phase === "rth")) return;
+  for (const id of ["s61Box", "dpBox", "watchBody", "focusBox"]) { const root = $(id); if (!root) continue;
+    root.querySelectorAll("tr[data-sym] td.sym").forEach(td => { if (td.querySelector(".pstb")) return;
+      const r = S.rowBySym && S.rowBySym.get(td.closest("tr").dataset.sym); let o = null; try { o = pstOf(r); } catch (e) { o = null; }
+      if (o) td.insertAdjacentHTML("beforeend", " " + pstBadge(o)); }); }
+}
+hookOn("tab", "entryTypeBadge", pstBadges);
+hookOn("watchPage", "entryTypeBadge", pstBadges);
+document.head.insertAdjacentHTML("beforeend", `<style>.pstb{display:inline-block;font-size:10px;line-height:1.35;padding:0 5px;border-radius:8px;font-weight:700;white-space:nowrap;vertical-align:1px;border:1px solid;background:transparent;cursor:help} .pstpb{color:#1baf7a;border-color:#1baf7a} .pststr{color:#eda100;border-color:#eda100} .pstpl{margin-top:8px;padding:6px 8px;border:1px solid var(--line-strong);border-radius:6px} .pstpg{display:grid;grid-template-columns:max-content 1fr;gap:2px 10px;margin-top:4px} .pstpg > span:nth-child(odd){color:var(--muted, #8a8f98)}</style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   SECTOR STAGES STRIP (26 Nov 2026) — DISPLAY ONLY. On a 2-week trial (docs/trials.md).
+   Eugene, 26 Nov 2026 (chat), on a sector table that shows each sector ETF's stage: "The sector read on stages is
+   interesting" · "Try the live pullback and strength read plus sector strip."
+   - One card on the Market page, right before "Stage analysis by sector / industry" (that card counts the STOCKS in each
+     stage; this one reads the 11 sector ETFs themselves): one row per sector ETF (the "Sectors" list in ETF_GROUPS) —
+     the board's own stage (stageOf, the same label as the Stage column), the board's RS, today's change, and a flag when
+     the close is under the lowest low ("20-day low") or over the highest high ("20-day high") of the prior 20 sessions
+     (secFlag, PURE; a plain range break — not a Darvas box). Best stage first, then RS.
+   - A sector ETF missing from the ETF file shows "not in your ETF file"; without the price history the stage and the flag
+     are blank. A click opens the ticker panel.
+   - NEVER CHANGES: MAP's call, the tape read, any row value, list, rank, size or feed column. Not a Notion rule. Storage:
+     none. Hook: "tab" (sectorStrip). No override. Test: tools/board-entry-type-test.js (second half).
+   ===================================================================== */
+const SEC_N = 20, SEC_SYMS = ((ETF_GROUPS.find(g => g[0] === "Sectors") || [0, []])[1]).slice();
+// PURE. closes / highs / lows oldest first → "lo" | "hi" | null (null also when there are fewer than n + 1 bars)
+function secFlag(c, h, l, n = SEC_N){
+  const t = c ? c.length - 1 : -1; if (t < n || !fin(c[t])) return null;
+  let lo = Infinity, hi = -Infinity; for (let k = t - n; k < t; k++) { if (!fin(l[k]) || !fin(h[k])) return null; lo = Math.min(lo, l[k]); hi = Math.max(hi, h[k]); }
+  return c[t] < lo ? "lo" : c[t] > hi ? "hi" : null;
+}
+function secRows(){
+  const out = SEC_SYMS.map(sym => { const r = S.rowBySym && S.rowBySym.get(sym); let st = null, flag = null;
+    if (r && S.has.hist) { try { st = stageOf(r); } catch (e) { st = null; }
+      try { const b = dssBars(sym); if (b && b.n) flag = secFlag(Array.from(b.c).slice(0, b.n), Array.from(b.h).slice(0, b.n), Array.from(b.l).slice(0, b.n)); } catch (e) { flag = null; } }
+    return {sym, name: typeof IT_NAME !== "undefined" && IT_NAME[sym] || sym, r, st, flag}; });
+  const ord = x => { const k = x.st ? WS_ORDER.indexOf(x.st.lab) : -1; return k < 0 ? 99 : k; };
+  return out.sort((a, z) => ord(a) - ord(z) || ((z.r && fin(z.r.rs) ? z.r.rs : -1) - (a.r && fin(a.r.rs) ? a.r.rs : -1)) || (a.sym < z.sym ? -1 : 1));
+}
+function secPaint(){
+  const box = $("secStrip"); if (!box || !S.snap) return;
+  const R = secRows(), main = k => R.filter(x => x.st && WS_MAIN[x.st.lab] === k).length, nLo = R.filter(x => x.flag === "lo").length, nHi = R.filter(x => x.flag === "hi").length;
+  const sum = S.has.hist ? `<b>${main("2")}</b> of ${R.length} advancing (Stage 2) · <b>${main("4")}</b> declining (Stage 4) · <b>${main("3")}</b> topping · <b>${main("1")}</b> basing${nLo ? ` · <b class="neg">${nLo}</b> at a 20-day low` : ""}${nHi ? ` · <b class="pos">${nHi}</b> at a 20-day high` : ""}` : "Needs the price history for the stages (Screens → Load price history).";
+  const tr = x => { const r = x.r;
+    return `<tr${r ? ` data-sym="${esc(x.sym)}"` : ""}><td class="l">${esc(x.name)}</td><td class="l sym">${esc(x.sym)}</td><td>${r && S.has.hist ? stagePill(r) : `<span class="dim">—</span>`}</td><td>${r && fin(r.rs) ? rsBadge(r.rs, "The board's RS for this ETF") : `<span class="dim">—</span>`}</td><td>${r && fin(r.todayRaw) ? `<span class="${cls(r.todayRaw)}">${pc(r.todayRaw)}</span>` : `<span class="dim">—</span>`}</td><td class="l">${!r ? `<span class="dim">not in your ETF file</span>` : x.flag === "lo" ? `<span class="neg" style="font-weight:650" title="The close is under the lowest low of the prior ${SEC_N} sessions">${SEC_N}-day low</span>` : x.flag === "hi" ? `<span class="pos" style="font-weight:650" title="The close is over the highest high of the prior ${SEC_N} sessions">${SEC_N}-day high</span>` : ""}</td></tr>`; };
+  box.innerHTML = `<div class="hd"><h2>Sector stages</h2><span class="sub">The 11 sector ETFs themselves: stage, strength, and whether each is breaking its ${SEC_N}-day range. Context only — MAP makes the market call</span></div><div class="bd"><div class="small" style="margin-bottom:6px">${sum}</div><div class="tscroll"><table class="mini sect"><thead><tr><th class="l">Sector</th><th class="l">ETF</th><th title="The board's Weinstein-style stage for the ETF (the Stage column)">Stage</th><th>RS</th><th>Chg %</th><th class="l" title="Close vs the range of the prior ${SEC_N} sessions">Range break</th></tr></thead><tbody>${R.map(tr).join("")}</tbody></table></div></div>`;
+  box.onclick = e => { const t = e.target.closest("tr[data-sym]"); if (t) openDrawer(t.dataset.sym); };
+}
+if ($("saBox") && !$("secStrip")) $("saBox").insertAdjacentHTML("beforebegin", `<div class="card g1" id="secStrip"></div>`);
+hookOn("tab", "sectorStrip", t => { if (t === "market" && S.snap) secPaint(); });
+document.head.insertAdjacentHTML("beforeend", `<style>#secStrip tr[data-sym]{cursor:pointer} table.sect td{white-space:nowrap}</style>`);
+</script>
+<script>
+"use strict";
+/* =====================================================================
    BOARD VERSION LABEL (10 Nov 2026) — display only. On a 2-week trial (docs/trials.md).
    Eugene, 10 Nov 2026: "how do i know whether the board is the latest update" → "yes add the version label".
    - BOARD_VER = {date, n, what}: bumped in EVERY change to index.html (tools/board-version-test.js fails when index.html
@@ -23590,7 +23712,7 @@ function rdyRankMap(){ const m = new Map(); try { if (S.has.hist) s61Lists(true)
    - Never changes any number, list, feed column, storage key or setting. Storage: none. Hooks: "settings"; the chip is
      inserted once at load. No override.
    ===================================================================== */
-const BOARD_VER = {date: "2026-11-22", n: 3, what: "Feed: Ready Rank column (the Ready to trade order, for MAP); trigger = a break of the opening range high or a reversal candle"};
+const BOARD_VER = {date: "2026-11-26", n: 2, what: "Market page: Sector stages card (the 11 sector ETFs: stage, RS, 20-day range break); entry type read (pullback or strength)"};
 const boardVerTxt = () => `v${BOARD_VER.date}.${BOARD_VER.n}`;
 (function verChip(){
   try {
